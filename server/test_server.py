@@ -231,7 +231,7 @@ def test_all_private_endpoints_require_token(api, method, path, body):
     assert client.request(method, path, json=body).status_code == 401
 
 
-@pytest.mark.parametrize("account,athlete_count", [("admin", 3), ("coach", 2), ("coach2", 1)])
+@pytest.mark.parametrize("account,athlete_count", [("admin", 7), ("coach", 6), ("coach2", 1)])
 def test_roster_club_scope_and_aggregates(api, auth, account, athlete_count):
     client, path = api
     headers = auth(account)
@@ -304,7 +304,7 @@ def test_duplicate_email_unknown_club_and_safe_sql(api, auth):
     name = "<img src=x onerror=alert(1)>'); DROP TABLE users; --"
     response = client.post("/api/users", json=new_user(name=name), headers=headers)
     assert response.status_code == 201 and response.json()["name"] == name
-    assert len(client.get("/api/athletes", headers=headers).json()) == 4
+    assert len(client.get("/api/athletes", headers=headers).json()) == 8
 
 
 @pytest.mark.parametrize("body", [
@@ -352,14 +352,14 @@ def test_staff_cannot_upload_or_delete_athlete_data(api, auth, account):
     assert client.delete("/api/me/data", headers=headers).status_code == 403
 
 
-@pytest.mark.parametrize("account,count", [("admin", 30), ("coach", 20), ("coach2", 10), ("athlete1", 10)])
+@pytest.mark.parametrize("account,count", [("admin", 70), ("coach", 60), ("coach2", 10), ("athlete1", 10)])
 def test_unfiltered_history_obeys_scope(api, auth, account, count):
     client, path = api
     response = client.get("/api/jumps", headers=auth(account))
     assert response.status_code == 200
     jumps = response.json()
     assert len(jumps) == count
-    allowed = {user_id(path, "athlete1"), user_id(path, "athlete2")} if account == "coach" else None
+    allowed = {user_id(path, "athlete" + str(i)) for i in (1, 2, 4, 5, 6, 7)} if account == "coach" else None
     if allowed:
         assert {jump["athlete_id"] for jump in jumps} == allowed
     if account == "athlete1":
@@ -543,7 +543,7 @@ def test_lists_apply_default_maximum_limit_and_offset_in_sql(api, auth, monkeypa
     assert default.status_code == first.status_code == following.status_code == small.status_code == 200
     assert len(default.json()) == 100
     assert len(first.json()) == 500
-    assert len(following.json()) == (21 if endpoint == "/api/jumps" else 3)
+    assert len(following.json()) == (61 if endpoint == "/api/jumps" else 7)
     assert default.json() == first.json()[:100]
     assert small.json() == first.json()[1:3]
     assert not {row["id"] for row in first.json()} & {row["id"] for row in following.json()}
@@ -581,7 +581,7 @@ def test_numeric_ranges_reject_outside_and_accept_bounds(api, auth, field, low, 
     for value in (low, high):
         assert client.post("/api/jumps", json={**METRICS, field: value}, headers=headers).status_code == 201
     with main.database(path) as db:
-        assert db.execute("SELECT COUNT(*) FROM jumps").fetchone()[0] == 32
+        assert db.execute("SELECT COUNT(*) FROM jumps").fetchone()[0] == 72
 
 
 @pytest.mark.parametrize("changes", [
@@ -637,6 +637,10 @@ def test_dashboard_is_public_static_and_uses_safe_dom(api):
     assert response.headers["content-type"].startswith("text/html")
     assert response.headers["cache-control"] == "no-store"
     html = response.text
+    assert 'src="/static/dashboard.js"' in html
+    script = client.get("/static/dashboard.js")
+    assert script.status_code == 200
+    html += script.text
     for expected in ("/api/auth/login", "/api/athletes", "/api/jumps?athlete_id=", "knee_ankle_ratio", "knee_flexion_peak_l", "knee_flexion_peak_r", "textContent"):
         assert expected in html
     assert "innerHTML" not in html
@@ -665,8 +669,8 @@ def test_seed_command_is_idempotent_and_environment_selects_database(monkeypatch
             assert "Synthetic demo data" in result.stdout
         with main.database(path) as db:
             assert db.execute("SELECT COUNT(*) FROM clubs").fetchone()[0] == 2
-            assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 6
-            assert db.execute("SELECT COUNT(*) FROM jumps").fetchone()[0] == 30
+            assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 10
+            assert db.execute("SELECT COUNT(*) FROM jumps").fetchone()[0] == 70
             for row in db.execute("SELECT metrics FROM jumps"):
                 main.Jump.model_validate_json(row[0])
         with TestClient(main.create_app()) as client:

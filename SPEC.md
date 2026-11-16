@@ -71,32 +71,100 @@ Leave room for Worker A to add `:app`.
 Dependencies: `fastapi`, `uvicorn`, `pytest`, `httpx` (for the test client). Nothing else:
 `sqlite3`, `hashlib.scrypt` and `secrets` from the standard library cover storage, password hashing and tokens.
 
-Roles: `admin` (everything), `coach` (own club), `athlete` (own data). Every user belongs to one club.
+Roles: `admin` (all clubs), `coach` (own club), `athlete` (own data). Every user belongs to one club.
+The Android login, current-user, upload, history and delete contracts remain unchanged except for the
+required consent gate on uploads. Login and `/api/me` still expose only `id`, `name`, `role`, `club_id`.
 
 | Method and path | Who | Does |
 |---|---|---|
 | `POST /api/auth/login` `{email, password}` | anyone | returns `{token, user: {id, name, role, club_id}}`; opaque random token, stored hashed, expires after 30 days |
-| `POST /api/auth/logout` | logged in | revokes the token |
+| `POST /api/auth/logout` | logged in | revokes the current token |
 | `GET /api/me` | logged in | current user |
-| `POST /api/users` `{email, name, password, role}` | admin, coach | admin creates any role in any club (`club_id` in body); coach creates athletes in their own club only |
-| `GET /api/athletes` | coach, admin | athletes of the coach's club (admin: all), each with jump count and last jump date |
-| `POST /api/jumps` (section 1 JSON) | athlete | stores a jump for the caller; returns `{id, created_at}` |
-| `GET /api/jumps?athlete_id=` | all | athlete: own only (parameter ignored or must match); coach: athletes of own club; admin: any. Newest first |
-| `DELETE /api/me/data` | athlete | deletes all the caller's jumps |
-| `GET /` | anyone | coach dashboard: one static HTML file with plain JavaScript: login, athlete list, per-athlete history table and a simple trend of `knee_ankle_ratio` and peak flexion |
+| `POST /api/users` `{email, name, password, role, club_id?}` | admin, coach | admin creates any role in any club; coach creates athletes in their own club only; password length 8–1024 |
+| `GET /api/users?limit=100&offset=0` | admin, coach | admin sees all; coach sees own club; public identity, email, active state and consent only |
+| `PATCH /api/users/{id}` `{active: bool}` | admin, coach | deactivate or reactivate; coach manages only own athletes; nobody can deactivate themselves |
+| `POST /api/users/{id}/password` `{password}` | admin, coach | reset using creation password rules; coach manages only own athletes; revokes all target tokens; returns 204 |
+| `PATCH /api/users/{id}/consent` `{consent_recorded: bool, consent_by: string}` | admin, coach | record or withdraw an athlete's consent; coach manages only own athletes; records server UTC `consent_at`; returns the three consent fields |
+| `GET /api/clubs`, `POST /api/clubs` `{name}` | admin | list clubs or create a uniquely named club |
+| `GET /api/athletes?limit=100&offset=0` | coach, admin | own club (admin: all); identity, jump count, last date, active state, consent fields and `changes` for the three headline metrics |
+| `POST /api/jumps` (section 1 JSON) | athlete | requires recorded consent, otherwise 403 with a clear message; stores a jump for the caller; returns `{id, created_at}` |
+| `GET /api/jumps?athlete_id=&limit=100&offset=0` | all | athlete: own only; coach: athletes of own club; admin: any. Newest first, ID descending for tied dates |
+| `GET /api/athletes/{id}/summary` | same scope as jumps | counts, first/last jump dates, baseline completeness and all numeric metric summaries |
+| `GET /api/me/export` | athlete | JSON attachment with own public profile, email, active state, consent, all jumps and export time; no passwords or tokens |
+| `GET /api/athletes/{id}/export.csv` | admin, coach of club | CSV attachment with all athlete jumps, metric fields and athlete name; oldest first; cells protected against spreadsheet formulas |
+| `DELETE /api/me/data` | athlete | deletes all the caller's jumps, retaining account and consent; returns 204 |
+| `GET /api/audit?limit=100&offset=0` | admin | audit entries newest first: `id`, `at`, `actor_id`, `action`, `target`, `detail` (JSON object) |
+| `GET /` | anyone | Bulgarian/English role-aware dashboard; plain HTML, local CSS/JavaScript and SVG charts |
+| `GET /docs`, `GET /openapi.json` | anyone | FastAPI Swagger UI and versioned API description |
 
-Security requirements: bearer token in the `Authorization` header; parameterised SQL only; strict
-request validation with the ranges of section 1 and unknown fields rejected; object-level access checks
-on every read (a coach must get 403 or 404 for another club's athlete); login rate limit (5 failures per
-email per 15 minutes); constant-time credential checks; no stack traces in responses; the dashboard must
-build DOM with `textContent`, never `innerHTML` with server data.
+Summary response: `{athlete_id, jump_count, first_jump_at, last_jump_at, baseline_complete, metrics}`.
+`metrics` contains each numeric field from section 1 plus `knee_flexion_peak_mean` (the mean of left and
+right peak flexion for each jump). Each contains `baseline`, `latest`, `last_three_median`,
+`change_absolute`, `change_percent`, `baseline_count`, `recent_count`. Baseline is the median of the
+first three chronological jumps; recent is the median of the last three, ordered by timestamp then ID.
+Changes compare recent median to baseline: `recent - baseline` and `(recent - baseline) / baseline * 100`.
+Fewer than three jumps use available jumps and `baseline_complete: false`; null measurements are omitted
+within each three-jump window. Missing values and percentages against a zero baseline are null.
+The latest value can be null. No jumps produce null values and dates and count zero. Summaries combine
+test types; compare jumps under similar filming conditions. Roster `changes` holds these metric objects
+for `knee_ankle_ratio`, `knee_flexion_peak_mean`, `flexion_asymmetry_pct`, so the team needs one request.
 
-`python -m server.seed` creates synthetic data only: club "Demo Club", `admin@demo.test`,
-`coach@demo.test`, `athlete1@demo.test`, `athlete2@demo.test` (password `demo1234` each), plus a
-second club with one coach and one athlete for access tests, and about ten plausible jumps per athlete.
+Startup performs an idempotent migration, retaining existing clubs, users, password hashes, tokens and
+jumps. New columns: `active` defaults true; `consent_recorded` defaults false; `consent_by` and `consent_at`
+default null. Existing athletes require a real consent record before new uploads. Deactivation denies
+login and token access, revokes all target tokens and retains history. Reactivation requires a new login.
+Password resets also revoke all target tokens. Consent withdrawal stops new uploads while retaining read,
+export and delete access. `consent_by` is required, nonblank, at most 100 characters, including withdrawal.
 
-Tests (pytest): login success and failure, rate limit, every role boundary above, validation rejects
-out-of-range and unknown fields, delete-my-data removes only the caller's rows.
+Audit table: `audit(id, at, actor_id, action, target, detail)`. Actions: `login_success`, `login_failure`
+(including rate-limited attempts), `user_created`, `consent_changed`, `user_deactivated`, `user_activated`,
+`password_reset`, `json_export`, `csv_export`, `data_deleted`, `club_created`. Failed login actors are null;
+the target is the submitted normalized email. Other targets are string IDs. Passwords and tokens are never
+included. Mutations, exports and their audit entries commit before a success response.
+
+Security: bearer token in `Authorization`; parameterized SQL; strict validation and unknown-field rejection;
+object checks on every read and management operation; login limit of 5 failures per email per 15 minutes;
+constant-time credential checks; no stack traces or submitted secrets in errors; 16 KiB body limit.
+Paginated lists accept limits 1–500 and nonnegative offsets. Exports and summaries include all jumps.
+CSV quotes text cells starting with formula characters (`=`, `+`, `-`, `@`), including hidden whitespace
+prefixes, and leading tab/newline controls with an apostrophe; CSV quoting handles delimiters and newlines.
+Responses include `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`
+and CSP. Dashboard CSP allows only same-origin scripts/styles/connections, disallows framing, objects,
+inline scripts and inline styles. Swagger `/docs` alone allows its standard jsDelivr assets and the exact
+SHA-256 hash of its fixed inline bootstrap, without `unsafe-inline`. Swagger assets need internet access;
+the dashboard makes no external requests. Existing `/redoc` remains available with its CDN script and
+its required inline-style and Google Fonts exceptions; `/docs/oauth2-redirect` uses an exact script hash. Tokens remain in page memory and disappear on reload.
+
+Dashboard: Bulgarian default, English switch, all translated text in one dictionary. Coaches see a sortable
+team table with numeric changes and direction arrows, consent controls, athlete creation and own-club user
+management. Athlete pages show four SVG charts (ratio, both peak flexions, asymmetry, height), dashed
+baselines, exact summary values and the full history with warnings and CSV export for staff. Admins also
+manage clubs and all users and browse the audit log. Athletes see their own charts/history, JSON export
+and a two-step delete action. Redraws preserve sort focus, move focus into editors or new view headings,
+and restore the initiating control after cancellation. Left/right chart series also differ by line pattern
+and marker shape, with translated legend cues. A short explanation emphasizes phone-camera estimates and change against
+personal baselines. DOM uses `textContent`; no data is rendered through HTML strings. Responsive layout
+becomes one column below 700 px, focus is visible and tables scroll in their containers.
+
+`python -m server.seed` creates synthetic data only, idempotently: "Demo Club" with `admin@demo.test`,
+`coach@demo.test`, six athletes (`athlete1`, `athlete2`, `athlete4`–`athlete7` at `demo.test`); a second club
+with `coach2@demo.test` and `athlete3@demo.test`. Password is `demo1234` for all demo accounts. Every demo
+athlete is explicitly consented and has ten plausible jumps over six weeks. One athlete improves, another
+becomes more asymmetric; occasional visibility warnings demonstrate the history UI. Existing accounts
+and their real consent are not overwritten by a second seed run.
+
+Tests: original endpoint behavior, roles, validation, transactions and rate limiting, plus migrations,
+consent gate and withdrawal, baseline math/empty/null/zero cases, exports and CSV formula escaping,
+club/user administration, deactivation, resets, audit contents and pagination, security headers and OpenAPI.
+The optional host-browser check is `server/check_dashboard.py`, run with existing Playwright/Chrome
+and `JUMPSCAN_DASH_URL` pointing to a temporary localhost server; it is not a server dependency.
+All original 131 test cases are retained. Existing tests adjusted for the expanded seed are
+`test_roster_club_scope_and_aggregates`, `test_duplicate_email_unknown_club_and_safe_sql`,
+`test_unfiltered_history_obeys_scope`, `test_lists_apply_default_maximum_limit_and_offset_in_sql`,
+`test_numeric_ranges_reject_outside_and_accept_bounds`, and
+`test_seed_command_is_idempotent_and_environment_selects_database`.
+`test_dashboard_is_public_static_and_uses_safe_dom` now reads the external JavaScript.
+Other existing behavior assertions remain unchanged. Validation: `server/.venv/bin/python -m pytest server -q`.
 
 Run: `uvicorn server.main:app`. Database path from `JUMPSCAN_DB`, default `server/jumpscan.db`.
 
