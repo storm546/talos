@@ -1,0 +1,17 @@
+# Server only. TLS is terminated by a reverse proxy on the host, so the
+# container port is published on loopback and never on a public interface.
+services:
+  jumpscan:
+    build: .
+    image: jumpscan-server:latest
+    container_name: jumpscan
+    restart: unless-stopped
+    environment:
+      JUMPSCAN_DB: /data/jumpscan.db
+    volumes:
+      - jumpscan-data:/data
+    ports:
+      - "127.0.0.1:8160:8000"
+
+volumes:
+  jumpscan-data:
