@@ -129,3 +129,32 @@ Open:
 - Twente check: the video archive holds jump videos for nine subjects (Subj04 to Subj12) and Zenodo 7422031 has reference data for all nine; only four were used so far. Started on the kit: extraction of the remaining jump videos (done), download of the reference files for Subj08 to Subj12 (`/work/jumpscan-data/twente-more.sh`, log `twente-more.log`, ends with ALL-DONE), pose extraction for the five missing videos (`twente-pose-more.sh`).
 - Scheduled for 01:37 on 2026-11-17, when the Codex quota returns (`logs/run-night2.sh`): `logs/task-twente9.txt` (nine-subject validation, report to `logs/twente9/REPORT.md`, no commits) and `logs/task-appcheck.txt` (emulator check of the merged app, may commit under `app/` on `stage`). Reports land in `logs/out-twente9.txt` and `logs/out-appcheck.txt`. Their results are unreviewed until someone checks them; `main` is not touched.
 - Once the nine jump videos are confirmed extracted, the 17.8 GB `Videos_anonymized.rar` holds nothing further for jumps and can be deleted on the owner's word.
+
+## Reliability plan, 2026-11-16 night
+
+Goal: the app should either give a number that can be trusted or say clearly that the clip must be re-filmed. Measured starting point: front view finds 28 of 40 lab jumps (side 20 of 40), side landing is about three frames late, knee flexion is 10 to 16 degrees RMSE.
+
+Where the errors come from (measured, `core/VALIDATION.md` and `logs/twente/REPORT.md`):
+1. The pose is lost during the flight (all of Subj06, 10 of the 12 front misses): body partly out of frame, motion blur.
+2. No still stance before take-off (Subj07): the floor reference is never established.
+3. Pose lag at landing in the side view (60 to 114 ms late).
+4. 25 to 33 fps video: one frame is 30 to 40 ms, about 5 cm of jump height.
+5. MediaPipe compresses knee angles (slope 0.64 to 0.74 on world landmarks).
+
+Tried tonight and rejected: taking the flight edges from a gravity (parabola) fit of the hip trajectory alone. At 33 fps the hip signal is too noisy (about 1 cm) and the fit degenerates; errors were 140 to 190 ms. The parabola stays useful only as a plausibility check (the leg length it implies was 0.72 to 0.74 m on clean jumps).
+
+Work packages, in order of expected gain per effort:
+
+- R1. Keep the pose through the flight. Re-run pose extraction on the failing Twente videos with (a) a padded frame, (b) lower detection and tracking thresholds, (c) re-detection on every frame instead of tracking. Then benchmark RTMPose-m and RTMPose-l (CPU, ONNX) on the same videos, both with their own detector and cropped from the MediaPipe box. RTMPose-x already gave 4.8 degrees against 10.3 from the side. Success: Subj06 front flights tracked; decision whether an on-device RTMPose (ONNX Runtime Mobile) replaces or assists MediaPipe.
+- R2. Floor reference from either side of the jump. Accept a still stance after the landing when none exists before take-off. Guarded by the existing Twente and webcam regression tests (no rise in false alarms).
+- R3. Capture guard in the app before filming: whole body in frame with a margin, phone level (accelerometer), distance, light, and 60 or 120 fps recording when the phone offers it. After filming: a quality gate that refuses to report instead of reporting a doubtful number, with the reason and a re-film hint.
+- R4. Confirm step. The app proposes the take-off and landing frames and the user can step frame by frame and correct them (the published My Jump method; its error at 240 fps is 1.8 ms). The stored result records whether the edges were automatic or confirmed.
+- R5. Three-jump protocol. One session is three jumps; the app reports the median and the spread and flags an outlier jump. Report repeatability the way sport science does: within-athlete coefficient of variation, ICC, standard error of measurement and minimal detectable change, computed on the nine Twente subjects (9 to 11 repeated jumps each) for our numbers and for the reference.
+- R6. Sub-frame edges: interpolate the threshold crossing between frames instead of taking the first frame beyond it; report flight time with its uncertainty (plus or minus one frame interval at the clip's frame rate).
+- R7. Side view: measure the knee angle in the image plane (10.4 against 14.4 degrees), already supported by the data; landing lag re-examined after R1.
+- R8. More data. (a) Nine Twente subjects (running). (b) Slow-motion jump videos from YouTube (120 or 240 fps, front or side, whole body): label on the full frame rate, then decimate to 30 and 60 fps to measure what frame rate costs; videos with a force-plate or My Jump readout on screen give a second weak label. Links and labels are kept, the videos are not redistributed. (c) The owner's own session filmed at 240 fps is its own reference in the same way.
+- R9. Documents: replace single accuracy figures with a table "detected / refused / wrong" per view, and state the repeatability numbers from R5.
+
+Not planned: any calibration fitted on the lab subjects, medical wording, sending video to a server without an explicit opt-in.
+
+Order: R1 experiments and R8(b) collection run on the kit tonight; R2, R6 and R7 go to a core worker once R1 is known; R3 and R4 go to an app worker; R5 analysis follows the nine-subject report; R9 last.
