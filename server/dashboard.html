@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JumpScan · Coach dashboard</title>
+<style>
+:root { color-scheme: light dark; --paper:#f5f5ef; --panel:#fff; --ink:#1c2924; --muted:#526159; --line:#c8d0ca; --accent:#146746; --right:#9c4c1c; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.5 "Helvetica Neue", Helvetica, sans-serif; }
+main { max-width:1200px; margin:auto; padding:24px; }
+header { border-top:6px solid var(--accent); padding:24px 0; }
+h1 { font-size:clamp(2rem, 5vw, 3.5rem); letter-spacing:-.04em; line-height:1.1; margin:8px 0; }
+h2 { font-size:1.25rem; margin:0 0 16px; }
+p { max-width:65ch; }
+.eyebrow { font-size:.85rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+.muted, small { color:var(--muted); }
+section, aside { padding:24px; background:var(--panel); border:1px solid var(--line); }
+#login-panel { max-width:440px; }
+label { display:block; margin-bottom:16px; }
+input, button { font:inherit; min-height:44px; border:1px solid var(--line); border-radius:3px; padding:8px 12px; }
+input { display:block; width:100%; margin-top:6px; background:var(--paper); color:var(--ink); }
+button { cursor:pointer; background:var(--accent); color:#fff; }
+button:disabled { opacity:.6; cursor:wait; }
+button:focus-visible, input:focus-visible { outline:3px solid var(--right); outline-offset:3px; }
+#session { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.layout { display:grid; gap:16px; }
+#athletes { list-style:none; padding:0; margin:0; }
+#athletes li + li { border-top:1px solid var(--line); }
+#athletes button { width:100%; border:0; background:transparent; color:var(--ink); text-align:left; padding:12px 0; }
+#athletes button[aria-pressed="true"] { color:var(--accent); font-weight:bold; }
+#athletes small { display:block; font-weight:normal; }
+.charts { display:grid; gap:24px; margin:24px 0; }
+figure { margin:0; }
+figcaption { font-weight:bold; }
+svg { display:block; width:100%; height:auto; border-bottom:1px solid var(--line); }
+.ratio, .left { color:var(--accent); }
+.right { color:var(--right); }
+.table-scroll { overflow:auto; }
+table { border-collapse:collapse; width:100%; font-size:.9rem; font-variant-numeric:tabular-nums; }
+caption { text-align:left; font-weight:bold; margin-bottom:12px; }
+th, td { white-space:nowrap; text-align:right; padding:10px; border-bottom:1px solid var(--line); }
+th:first-child, td:first-child { text-align:left; }
+#message { min-height:24px; }
+[hidden] { display:none !important; }
+@media (min-width:800px) { main { padding:40px; } .layout { grid-template-columns:240px minmax(0, 1fr); } .charts { grid-template-columns:1fr 1fr; } }
+@media (prefers-color-scheme:dark) { :root { --paper:#17201c; --panel:#202c25; --ink:#e7ede8; --muted:#b4c5b9; --line:#4d6054; --accent:#66c99d; --right:#ffb47e; } button { color:#14271c; } }
+:root[data-theme="dark"] { --paper:#17201c; --panel:#202c25; --ink:#e7ede8; --muted:#b4c5b9; --line:#4d6054; --accent:#66c99d; --right:#ffb47e; }
+:root[data-theme="dark"] button { color:#14271c; }
+@media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="eyebrow">JumpScan / Coach dashboard</span>
+    <h1>Landing mechanics</h1>
+    <p class="muted">Track each athlete’s jump history. These are numbers to discuss with a coach.</p>
+  </header>
+  <p id="message" role="status" aria-live="polite"></p>
+  <section id="login-panel" aria-labelledby="login-title">
+    <h2 id="login-title">Sign in</h2>
+    <form id="login-form">
+      <label>Email<input id="email" type="email" required autocomplete="username" maxlength="254"></label>
+      <label>Password<input id="password" type="password" required autocomplete="current-password" maxlength="1024"></label>
+      <button id="sign-in" type="submit">Sign in</button>
+    </form>
+  </section>
+  <div id="workspace" hidden>
+    <div id="session"><span id="identity"></span><button id="logout" type="button">Sign out</button></div>
+    <div class="layout">
+      <aside aria-labelledby="athletes-title"><h2 id="athletes-title">Athletes</h2><ul id="athletes"></ul></aside>
+      <section aria-labelledby="history-title">
+        <h2 id="history-title">Choose an athlete</h2>
+        <p id="history-note" class="muted">Select a name to view their jumps and trends.</p>
+        <div id="history" hidden>
+          <div class="charts">
+            <figure><figcaption>Knee / ankle ratio</figcaption><svg id="ratio-chart" viewBox="0 0 400 160" role="img" aria-label="Knee to ankle ratio over time"></svg></figure>
+            <figure><figcaption>Peak knee flexion (°)</figcaption><svg id="flexion-chart" viewBox="0 0 400 160" role="img" aria-label="Left and right peak knee flexion over time"></svg><small><span class="left">Left: solid</span> · <span class="right">Right: dashed</span></small></figure>
+          </div>
+          <p class="muted">Trends run oldest to newest. Exact values appear below.</p>
+          <div class="table-scroll" tabindex="0" role="region" aria-label="Jump history table">
+            <table><caption>Jump history · newest first</caption><thead><tr id="columns"></tr></thead><tbody id="rows"></tbody></table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+<script>
+'use strict';
+const element = id => document.getElementById(id);
+let token = null;
+let selection = 0;
+const columns = [
+  ['created_at', 'Date'], ['test', 'Test'], ['fps', 'FPS'], ['flight_time_ms', 'Flight (ms)'],
+  ['jump_height_cm', 'Height (cm)'], ['knee_flexion_contact_l', 'Contact L (°)'],
+  ['knee_flexion_contact_r', 'Contact R (°)'], ['knee_flexion_peak_l', 'Peak L (°)'],
+  ['knee_flexion_peak_r', 'Peak R (°)'], ['fppa_peak_l', 'FPPA L (°)'], ['fppa_peak_r', 'FPPA R (°)'],
+  ['knee_ankle_ratio', 'Knee / ankle'], ['flexion_asymmetry_pct', 'Asymmetry (%)'],
+  ['quality', 'Visibility'], ['warnings', 'Warnings']
+];
+for (const [, label] of columns) {
+  const cell = document.createElement('th');
+  cell.scope = 'col'; cell.textContent = label;
+  element('columns').append(cell);
+}
+function signedOut() {
+  token = null; selection++;
+  element('workspace').hidden = true;
+  element('login-panel').hidden = false;
+  element('athletes').replaceChildren(); element('rows').replaceChildren();
+  element('ratio-chart').replaceChildren(); element('flexion-chart').replaceChildren();
+  element('history').hidden = true;
+  element('history-title').textContent = 'Choose an athlete';
+  element('history-note').textContent = 'Select a name to view their jumps and trends.';
+  element('password').value = '';
+}
+async function api(path, options = {}) {
+  const headers = {'Content-Type':'application/json'};
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const response = await fetch(path, {...options, headers, cache:'no-store'});
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    if (response.status === 401 && token) signedOut();
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'Request failed. Check your entries and try again.');
+  }
+  return response.status === 204 ? null : response.json();
+}
+function chart(id, jumps, fields, maximum) {
+  const svg = element(id);
+  const ns = 'http://www.w3.org/2000/svg';
+  svg.replaceChildren();
+  for (const [value, y] of [[maximum, 18], [0, 130]]) {
+    const label = document.createElementNS(ns, 'text');
+    label.setAttribute('x', '2'); label.setAttribute('y', String(y));
+    label.setAttribute('fill', 'currentColor'); label.setAttribute('font-size', '12');
+    label.textContent = String(value); svg.append(label);
+  }
+  fields.forEach((field, index) => {
+    const color = index ? 'var(--right)' : 'var(--accent)';
+    const points = jumps.map((jump, i) => [40 + (jumps.length > 1 ? i / (jumps.length - 1) : .5) * 348, 130 - jump[field] / maximum * 112]);
+    const line = document.createElementNS(ns, 'polyline');
+    line.setAttribute('points', points.map(point => point.join(',')).join(' '));
+    line.setAttribute('fill', 'none'); line.setAttribute('stroke', color); line.setAttribute('stroke-width', '2');
+    if (index) line.setAttribute('stroke-dasharray', '5 4');
+    svg.append(line);
+    for (const [x, y] of points) {
+      const dot = document.createElementNS(ns, 'circle');
+      dot.setAttribute('cx', String(x)); dot.setAttribute('cy', String(y));
+      dot.setAttribute('r', '3'); dot.setAttribute('fill', color); svg.append(dot);
+    }
+  });
+}
+async function showHistory(athlete, button) {
+  const request = ++selection;
+  element('message').textContent = '';
+  element('history').hidden = true;
+  element('history-title').textContent = athlete.name;
+  element('history-note').textContent = 'Loading jumps…';
+  for (const item of element('athletes').querySelectorAll('button')) item.setAttribute('aria-pressed', String(item === button));
+  try {
+    const jumps = await api('/api/jumps?athlete_id=' + encodeURIComponent(athlete.id));
+    if (request !== selection) return;
+    element('history-note').textContent = jumps.length ? jumps.length + ' jumps recorded' : 'No jumps recorded yet.';
+    element('rows').replaceChildren();
+    for (const jump of jumps) {
+      const row = document.createElement('tr');
+      for (const [key] of columns) {
+        const cell = document.createElement('td');
+        const value = jump[key];
+        cell.textContent = value === null ? '—' : key === 'created_at' ? new Date(value).toLocaleString() :
+          Array.isArray(value) ? value.join(', ') || 'None' : typeof value === 'number' ? String(Math.round(value * 100) / 100) : String(value);
+        row.append(cell);
+      }
+      element('rows').append(row);
+    }
+    const chronological = [...jumps].reverse();
+    chart('ratio-chart', chronological, ['knee_ankle_ratio'], 5);
+    chart('flexion-chart', chronological, ['knee_flexion_peak_l', 'knee_flexion_peak_r'], 180);
+    element('history').hidden = !jumps.length;
+  } catch (error) {
+    if (request === selection) { element('history-note').textContent = 'Could not load jumps.'; element('message').textContent = error.message; }
+  }
+}
+element('login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  element('sign-in').disabled = true;
+  element('message').textContent = 'Signing in…';
+  try {
+    const result = await api('/api/auth/login', {method:'POST', body:JSON.stringify({email:element('email').value, password:element('password').value})});
+    token = result.token;
+    element('password').value = '';
+    if (!['admin', 'coach'].includes(result.user.role)) {
+      await api('/api/auth/logout', {method:'POST'});
+      signedOut(); throw new Error('This dashboard is for coaches and admins. Use the app for your own history.');
+    }
+    const athletes = await api('/api/athletes');
+    element('identity').textContent = result.user.name + ' · ' + result.user.role;
+    element('athletes').replaceChildren();
+    for (const athlete of athletes) {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button'; button.textContent = athlete.name; button.setAttribute('aria-pressed', 'false');
+      const detail = document.createElement('small');
+      detail.textContent = athlete.jump_count + ' jumps · ' + (athlete.last_jump_at ? new Date(athlete.last_jump_at).toLocaleDateString() : 'No jumps yet');
+      button.append(detail); button.addEventListener('click', () => showHistory(athlete, button));
+      item.append(button); element('athletes').append(item);
+    }
+    element('message').textContent = athletes.length ? '' : 'No athletes in this club yet.';
+    element('login-panel').hidden = true; element('workspace').hidden = false;
+  } catch (error) { signedOut(); element('message').textContent = error.message; }
+  finally { element('sign-in').disabled = false; }
+});
+element('logout').addEventListener('click', async () => {
+  element('logout').disabled = true;
+  try { await api('/api/auth/logout', {method:'POST'}); signedOut(); element('message').textContent = 'Signed out.'; }
+  catch (error) { element('message').textContent = error.message; }
+  finally { element('logout').disabled = false; }
+});
+</script>
+</body>
+</html>

@@ -23,11 +23,11 @@ No model training: MediaPipe Pose Landmarker is pretrained, and the kit's GPU is
 - [x] Repo `/root/jumpscan`, PLAN.md, SPEC.md
 
 ### Phase 1: parallel
-- [ ] S: REST API with auth, roles, jumps, delete-my-data, input validation, seed data, pytest green
-- [ ] S: coach dashboard page served by the API
+- [x] S: REST API with auth, roles, jumps, delete-my-data, input validation, seed data, pytest green
+- [x] S: coach dashboard page served by the API
 - [x] C: Gradle scaffold builds on the kit
 - [x] C: metrics core with synthetic-landmark unit tests green on the kit
-- [ ] Orchestrator: review both diffs, rerun both test commands, commit
+- [x] Orchestrator: review both diffs, rerun both test commands, commit
 
 ### Phase 2: app
 - [ ] A: Android app: login, pick or record video, on-device pose, metrics screen, upload, history
