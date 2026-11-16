@@ -158,3 +158,5 @@ Work packages, in order of expected gain per effort:
 Not planned: any calibration fitted on the lab subjects, medical wording, sending video to a server without an explicit opt-in.
 
 Order: R1 experiments and R8(b) collection run on the kit tonight; R2, R6 and R7 go to a core worker once R1 is known; R3 and R4 go to an app worker; R5 analysis follows the nine-subject report; R9 last.
+
+First R1 result (details in `logs/r1/REPORT.md`, one video only): on Twente Subj06 front, where the app's MediaPipe setup keeps the legs in 13 of 132 flight frames and no MediaPipe setting got beyond 48, RTMPose-m with a person detector keeps 130 and tracks all ten flights. RTMPose gives 2D points only, so the likely design is a hybrid: RTMPose for tracking, feet, flight timing and the side-view angle; MediaPipe world landmarks for the front-view knee flexion. Next: the same comparison on all nine subjects through the project analyzer, single-thread speed, and model size for ONNX Runtime on Android (`logs/task-rtm.txt`). The YouTube benchmark brief is `logs/task-ytdata.txt`. Both are queued behind the two night workers (`logs/run-night3.sh`).
