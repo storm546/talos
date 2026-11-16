@@ -62,6 +62,8 @@ class RealVideoTest {
             // Each edge is only known to one frame, so allow two frame intervals plus the 1 ms timestamp rounding.
             assertEquals(contactMs - lastGroundMs, metrics.flightTimeMs!!, 2000.0 / metrics.fps + 1.0, name)
             assertTrue("no_flight_detected" !in metrics.warnings, name)
+            val reviewedFlightMs = mapOf("jump1" to 280.0, "jump2" to 360.0, "jump3" to 360.0)
+            assertEquals(reviewedFlightMs.getValue(name), metrics.flightTimeMs!!, 0.0, name)
             assertRanges(metrics)
             inRange(metrics.flightTimeMs!!, 0.0, 1500.0)
             inRange(metrics.jumpHeightCm!!, 0.0, 150.0)
@@ -74,11 +76,11 @@ class RealVideoTest {
 
     private fun assertRanges(metrics: JumpMetrics) {
         inRange(metrics.fps, 10.0, 480.0)
-        listOf(metrics.kneeFlexionContactL, metrics.kneeFlexionContactR,
-            metrics.kneeFlexionPeakL, metrics.kneeFlexionPeakR).forEach { inRange(it, 0.0, 180.0) }
-        listOf(metrics.fppaPeakL, metrics.fppaPeakR).forEach { inRange(it, -90.0, 90.0) }
-        inRange(metrics.kneeAnkleRatio, 0.0, 5.0)
-        inRange(metrics.flexionAsymmetryPct, 0.0, 100.0)
+        listOf(metrics.kneeFlexionContactL!!, metrics.kneeFlexionContactR!!,
+            metrics.kneeFlexionPeakL!!, metrics.kneeFlexionPeakR!!).forEach { inRange(it, 0.0, 180.0) }
+        listOf(metrics.fppaPeakL!!, metrics.fppaPeakR!!).forEach { inRange(it, -90.0, 90.0) }
+        inRange(metrics.kneeAnkleRatio!!, 0.0, 5.0)
+        inRange(metrics.flexionAsymmetryPct!!, 0.0, 100.0)
         inRange(metrics.quality, 0.0, 1.0)
     }
 }

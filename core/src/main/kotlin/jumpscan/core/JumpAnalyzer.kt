@@ -21,11 +21,12 @@ object JumpAnalyzer {
     private const val LOW_FPS = 24.0
     private const val LOW_QUALITY = 0.7
     private const val G = 9.81
-    private val LEG_LANDMARKS = 23..28           // hips, knees and ankles define the measured joints
     private val LEFT = Leg(hip = 23, knee = 25, ankle = 27)
     private val RIGHT = Leg(hip = 24, knee = 26, ankle = 28)
 
     private class Leg(val hip: Int, val knee: Int, val ankle: Int)
+
+    enum class View { AUTO, FRONT, SIDE }
 
     /**
      * Landmark positions of one frame. Image poses have x already multiplied by the aspect ratio and z = 0
@@ -38,13 +39,13 @@ object JumpAnalyzer {
      * same unit, so x is multiplied by [aspect] before any distance or angle is computed.
      * This is the only place the square-pixel assumption is handled.
      */
-    fun analyze(frames: List<Frame>, test: String, aspect: Float = 9f / 16f): JumpMetrics =
-        analyzeWithLanding(frames, test, aspect).metrics
+    fun analyze(frames: List<Frame>, test: String, aspect: Float = 9f / 16f, view: View = View.AUTO): JumpMetrics =
+        analyzeWithLanding(frames, test, aspect, view).metrics
 
     internal data class Analysis(val metrics: JumpMetrics, val contactMs: Long?, val flightCount: Int,
         val flightTimeMinMs: Long? = null, val flightTimeMaxMs: Long? = null)
 
-    internal fun analyzeWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f): Analysis {
+    internal fun analyzeWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f, view: View = View.AUTO): Analysis {
         require(test == "drop_jump" || test == "cmj") { "test must be drop_jump or cmj" }
         require(aspect > 0f) { "aspect must be positive" }
         require(frames.all { it.landmarks.size == LANDMARKS && it.worldLandmarks.size == LANDMARKS }) {
@@ -52,12 +53,20 @@ object JumpAnalyzer {
         }
         require(frames.zipWithNext().all { (a, b) -> b.tMs > a.tMs }) { "frame times must increase" }
 
-        fun angleUsable(f: Frame) = LEG_LANDMARKS.all { f.landmarks[it].visibility >= MIN_VISIBILITY }
+        val sideView = view == View.SIDE || (view == View.AUTO && isSideView(frames, aspect))
+        // Profile views overlap the legs; the leg with more complete joint-and-foot observations is measured.
+        val legs = if (sideView) listOf(listOf(LEFT, RIGHT).maxBy { leg -> frames.count { f ->
+            listOf(leg.hip, leg.knee, leg.ankle).all { f.landmarks[it].visibility >= MIN_VISIBILITY } &&
+                listOf(leg.ankle + 2, leg.ankle + 4).any { f.landmarks[it].visibility >= MIN_VISIBILITY }
+        } }) else listOf(LEFT, RIGHT)
+        val joints = legs.flatMap { listOf(it.hip, it.knee) }
+        val measuredLandmarks = legs.flatMap { listOf(it.hip, it.knee, it.ankle) }
+        fun angleUsable(f: Frame) = measuredLandmarks.all { f.landmarks[it].visibility >= MIN_VISIBILITY }
         require(frames.count(::angleUsable) >= MIN_USABLE_FRAMES) { "need at least $MIN_USABLE_FRAMES angle frames" }
         // Contact needs observed foot points; hidden knees must not erase a visible contact.
         val usable = frames.filter { f ->
-            listOf(29, 31).any { f.landmarks[it].visibility >= MIN_VISIBILITY } &&
-                listOf(30, 32).any { f.landmarks[it].visibility >= MIN_VISIBILITY }
+            legs.all { leg -> listOf(leg.ankle + 2, leg.ankle + 4).any {
+                f.landmarks[it].visibility >= MIN_VISIBILITY } }
         }
         require(usable.size >= MIN_USABLE_FRAMES) { "need at least $MIN_USABLE_FRAMES contact frames, got ${usable.size}" }
         val n = usable.size
@@ -70,15 +79,16 @@ object JumpAnalyzer {
         val rejected = BooleanArray(n)
 
         // Each foot has its own ground height: perspective can put planted feet at different image y values.
-        val footL = poses.mapIndexed { index, p -> listOf(27, 29, 31)
+        fun foot(leg: Leg) = poses.mapIndexed { index, p -> listOf(leg.ankle, leg.ankle + 2, leg.ankle + 4)
             .filter { usable[index].landmarks[it].visibility >= MIN_VISIBILITY }.maxOf { p.y[it] } }
-        val footR = poses.mapIndexed { index, p -> listOf(28, 30, 32)
-            .filter { usable[index].landmarks[it].visibility >= MIN_VISIBILITY }.maxOf { p.y[it] } }
-        val hipY = poses.mapIndexed { i, p -> if (listOf(23, 24).all {
-            usable[i].landmarks[it].visibility >= MIN_VISIBILITY }) (p.y[23] + p.y[24]) / 2 else Double.NaN }
-        val legLength = poses.mapIndexed { i, p -> if (listOf(23, 24, 27, 28).all {
-            usable[i].landmarks[it].visibility >= MIN_VISIBILITY })
-            (dist(p, LEFT.hip, LEFT.ankle) + dist(p, RIGHT.hip, RIGHT.ankle)) / 2 else Double.NaN }
+        val footL = foot(legs.first())
+        val footR = if (legs.size == 1) footL else foot(RIGHT)
+        val hipY = poses.mapIndexed { i, p -> if (legs.all {
+            usable[i].landmarks[it.hip].visibility >= MIN_VISIBILITY }) legs.map { p.y[it.hip] }.average() else Double.NaN }
+        val legLength = poses.mapIndexed { i, p -> if (legs.all {
+            usable[i].landmarks[it.hip].visibility >= MIN_VISIBILITY &&
+                usable[i].landmarks[it.ankle].visibility >= MIN_VISIBILITY })
+            legs.map { dist(p, it.hip, it.ankle) }.average() else Double.NaN }
         // A gap greater than 1.5 median frame intervals means contact or flight may have been missed.
         val medianStepMs = median(frames.zipWithNext { a, b -> (b.tMs - a.tMs).toDouble() })
 
@@ -90,13 +100,12 @@ object JumpAnalyzer {
             val window = start..end
             if (window.any { !hipY[it].isFinite() || !legLength[it].isFinite() }) return@mapNotNull null
             val leg = median(window.map { legLength[it] })
-            if (window.any { angleUsable(usable[it]) && !upright(rawPoses[it], leg) }) return@mapNotNull null
-            // Stable means hips and each foot vary by no more than the 2.5%-of-leg flight threshold.
-            if (listOf(hipY, footL, footR).any { signal ->
+            // Planted feet establish ground over 250 ms even while the hips move through a countermovement.
+            if (listOf(footL, footR).any { signal ->
                     window.maxOf { signal[it] } - window.minOf { signal[it] } > AIRBORNE_FRACTION * leg
                 }) return@mapNotNull null
             Standing(end, median(window.map { footL[it] }), median(window.map { footR[it] }),
-                median(window.map { hipY[it] }), leg, (23..26).map { joint ->
+                median(window.map { hipY[it] }), leg, joints.map { joint ->
                     median(window.filter { angleUsable(usable[it]) }.map { dist(rawPoses[it], joint, joint + 2) }
                         .ifEmpty { listOf(leg / 2) })
                 })
@@ -116,11 +125,11 @@ object JumpAnalyzer {
                 abs(it.left - latest.left) <= AIRBORNE_FRACTION * latest.leg &&
                 abs(it.right - latest.right) <= AIRBORNE_FRACTION * latest.leg
             }.minByOrNull { it.hip }
-                // Only a genuinely observed clip start may use future ground for a plain drop landing.
-                ?: if (i == 0 && t[0] == frames.first().tMs && angleUsable(usable[0])) Standing(0,
+                // Only an explicitly requested drop landing may start airborne; CMJ needs observed ground before take-off.
+                ?: if (test == "drop_jump" && i == 0 && t[0] == frames.first().tMs && angleUsable(usable[0])) Standing(0,
                     footL.sorted()[((n - 1) * 0.9).toInt()], footR.sorted()[((n - 1) * 0.9).toInt()],
                     hipY[0], median(legLength.filter { it.isFinite() }),
-                    (23..26).map { joint -> median(rawPoses.indices.filter { angleUsable(usable[it]) }
+                    joints.map { joint -> median(rawPoses.indices.filter { angleUsable(usable[it]) }
                         .map { dist(rawPoses[it], joint, joint + 2) }) }) else null
             if (reference == null) { i++; continue }
             // Both feet must clear their own standing levels by 2.5% of the local hip-to-ankle length.
@@ -130,9 +139,9 @@ object JumpAnalyzer {
             fun plausible(index: Int): Boolean {
                 if (!angleUsable(usable[index])) return true // Missing knees cannot disprove observed feet.
                 val p = rawPoses[index]
-                if (!upright(p, reference.leg)) return false
+                if (!upright(p, reference.leg, legs)) return false
                 // Projection may shorten a bent limb; it cannot double its standing segment length at fixed distance.
-                return (23..26).all { dist(p, it, it + 2) <= 2 * reference.segments[it - 23] }
+                return joints.indices.all { dist(p, joints[it], joints[it] + 2) <= 2 * reference.segments[it] }
             }
             val observed = mutableListOf<Int>()
             var j = i
@@ -191,9 +200,10 @@ object JumpAnalyzer {
         val contactTime = if (landing != null) t[contact] else metricFrames.first().tMs
         val window = metricFrames.indices.filter { metricFrames[it].tMs in contactTime..(contactTime + WINDOW_MS) }
         require(window.isNotEmpty()) { "no usable angles in landing window" }
-        // Knee flexion from the 3D world landmarks: the knee bends towards a frontal camera, so the image plane cannot see it.
-        val flexL = window.map { deviation(world[it], LEFT) }
-        val flexR = window.map { deviation(world[it], RIGHT) }
+        // Profile flexion lies in the image plane; frontal flexion needs the estimated world depth.
+        val kneePoses = if (sideView) metricPoses else world
+        val flexL = window.map { deviation(kneePoses[it], legs.first()) }
+        val flexR = if (legs.size == 1) flexL else window.map { deviation(kneePoses[it], RIGHT) }
         val peakL = flexL.indices.maxBy { flexL[it] }
         val peakR = flexR.indices.maxBy { flexR[it] }
         val peakBoth = flexL.indices.maxBy { flexL[it] + flexR[it] }
@@ -210,7 +220,7 @@ object JumpAnalyzer {
 
         // Quality: mean visibility of hips, knees, ankles over all input frames of the window, skipped ones included.
         val windowFrames = frames.filter { it.tMs in contactTime..(contactTime + WINDOW_MS) }
-        val quality = windowFrames.flatMap { f -> (23..28).map { f.landmarks[it].visibility.toDouble() } }.average()
+        val quality = windowFrames.flatMap { f -> measuredLandmarks.map { f.landmarks[it].visibility.toDouble() } }.average()
 
         val fps = (frames.size - 1) * 1000.0 / (frames.last().tMs - frames.first().tMs)
         val warnings = buildList {
@@ -218,6 +228,7 @@ object JumpAnalyzer {
             if (quality < LOW_QUALITY) add("low_visibility")
             if (landing == null) add("no_flight_detected")
             if (uncertainTiming) add("uncertain_timing")
+            if (legs.size == 1) add("single_leg_view")
         }
 
         val metrics = JumpMetrics(
@@ -225,18 +236,32 @@ object JumpAnalyzer {
             fps = fps,
             flightTimeMs = flightMs,
             jumpHeightCm = heightCm,
-            kneeFlexionContactL = flexL[0],
-            kneeFlexionContactR = flexR[0],
-            kneeFlexionPeakL = peakFlexL,
-            kneeFlexionPeakR = peakFlexR,
-            fppaPeakL = fppa(metricPoses[window[peakL]], LEFT),
-            fppaPeakR = fppa(metricPoses[window[peakR]], RIGHT),
-            kneeAnkleRatio = ratio,
-            flexionAsymmetryPct = asymmetry,
+            kneeFlexionContactL = if (LEFT in legs) flexL[0] else null,
+            kneeFlexionContactR = if (RIGHT in legs) flexR[0] else null,
+            kneeFlexionPeakL = if (LEFT in legs) peakFlexL else null,
+            kneeFlexionPeakR = if (RIGHT in legs) peakFlexR else null,
+            fppaPeakL = if (sideView) null else fppa(metricPoses[window[peakL]], LEFT),
+            fppaPeakR = if (sideView) null else fppa(metricPoses[window[peakR]], RIGHT),
+            kneeAnkleRatio = if (sideView) null else ratio,
+            flexionAsymmetryPct = if (legs.size == 1) null else asymmetry,
             quality = quality,
             warnings = warnings,
         )
         return Analysis(metrics, landing?.let { t[it.contact] }, candidates.size, flightMin, flightMax)
+    }
+
+    private fun isSideView(frames: List<Frame>, aspect: Float): Boolean {
+        val widths = frames.mapNotNull { f ->
+            val p = f.landmarks
+            if (listOf(11, 12, 23, 24).any { p[it].visibility < MIN_VISIBILITY }) return@mapNotNull null
+            fun distance(a: Int, b: Int) = hypot((p[a].x - p[b].x) * aspect.toDouble(), (p[a].y - p[b].y).toDouble())
+            val torso = hypot((p[11].x + p[12].x - p[23].x - p[24].x) * aspect / 2.0,
+                (p[11].y + p[12].y - p[23].y - p[24].y) / 2.0)
+            if (torso <= 0) null else distance(11, 12) / torso to distance(23, 24) / torso
+        }
+        if (widths.size < MIN_USABLE_FRAMES) return false
+        // Near profile foreshortens shoulders below half the torso and hips below roughly a third; require both.
+        return median(widths.map { it.first }) < 0.5 && median(widths.map { it.second }) < 0.35
     }
 
     /** Median of three neighbouring frames per coordinate: removes jitter spikes, keeps landing edges sharp. */
@@ -248,7 +273,7 @@ object JumpAnalyzer {
     }
 
     // Allow 10% of leg length for projection/noise; hips further below knees are not an upright stance or jump.
-    private fun upright(p: Pose, legLength: Double) = listOf(LEFT, RIGHT).all {
+    private fun upright(p: Pose, legLength: Double, legs: List<Leg>) = legs.all {
         p.y[it.hip] - p.y[it.knee] <= 0.1 * legLength
     }
 
