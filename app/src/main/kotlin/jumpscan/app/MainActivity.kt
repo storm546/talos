@@ -85,7 +85,7 @@ class MainActivity : Activity() {
         } ?: return false
         if (uri.scheme !in listOf("content", "file")) {
             home(getString(R.string.local_video))
-        } else startAnalysis(uri)
+        } else startAnalysis(uri, if (BuildConfig.DEBUG) intent.getStringExtra("analysis_mode").orEmpty() else "full")
         return true
     }
 
@@ -264,12 +264,12 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun startAnalysis(uri: Uri) {
+    private fun startAnalysis(uri: Uri, mode: String = "full") {
         analysis = null
         uploadedId = null
         queuedId = null
         val expectedGeneration = generation + 1
-        work(getString(R.string.analysing), { analyzeVideo(this, uri, test) { value ->
+        work(getString(R.string.analysing), { analyzeVideo(this, uri, test, mode) { value ->
             runOnUiThread {
                 if (screen == "busy" && !isDestroyed && generation == expectedGeneration) {
                     progress?.isIndeterminate = false
@@ -305,7 +305,8 @@ class MainActivity : Activity() {
             })
         }
         page.addView(legend)
-        metricRows(JSONObject(current.metrics.toJson()))
+        if (current.previewUnclear) text(getString(R.string.preview_unclear), 14, Color.rgb(133, 80, 12))
+        metricRows(JSONObject(current.metrics.toJson()), showNoWarnings = !current.previewUnclear)
         if (uploadedId == null && queuedId == null) button(if (token().isEmpty()) getString(R.string.sign_in_upload) else getString(R.string.upload)) {
             if (token().isEmpty()) login() else {
                 val savedToken = token()
@@ -384,7 +385,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun metricRows(json: JSONObject) {
+    private fun metricRows(json: JSONObject, showNoWarnings: Boolean = true) {
         val groups = listOf(
             Triple(R.string.group_jump, R.string.explain_jump, listOf("flight_time_ms", "jump_height_cm", "fps")),
             Triple(R.string.group_knees, R.string.explain_knees, listOf("knee_flexion_contact_l", "knee_flexion_contact_r", "knee_flexion_peak_l", "knee_flexion_peak_r", "fppa_peak_l", "fppa_peak_r")),
@@ -413,7 +414,7 @@ class MainActivity : Activity() {
         }
         }
         val warnings = json.optJSONArray("warnings") ?: JSONArray()
-        if (warnings.length() == 0) text(getString(R.string.no_warnings), 14, green)
+        if (warnings.length() == 0) { if (showNoWarnings) text(getString(R.string.no_warnings), 14, green) }
         else for (i in 0 until warnings.length()) text(when (warnings.getString(i)) {
             "low_fps" -> getString(R.string.low_fps)
             "uncertain_timing" -> getString(R.string.uncertain_timing)

@@ -12,13 +12,25 @@ import kotlin.math.sqrt
 internal const val LEFT_COLOR = 0xFF168BFF.toInt()
 internal const val RIGHT_COLOR = 0xFFFFB13B.toInt()
 
+private const val PREVIEW_VISIBILITY = 0.8f
+
+private fun clearLeg(frame: Frame, side: Int) = listOf(23, 25, 27).all {
+    frame.landmarks[it + side].visibility >= PREVIEW_VISIBILITY
+}
+
+internal fun unclearPreview(frame: Frame) = (23..32).any {
+    frame.landmarks[it].visibility < PREVIEW_VISIBILITY
+}
+
 /** Missing joints stay missing. This bitmap exists only in memory and is never part of an upload. */
 internal fun landingPreview(raw: Bitmap, frame: Frame): Bitmap {
     val bitmap = raw.copy(Bitmap.Config.ARGB_8888, true)
     val canvas = Canvas(bitmap)
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND }
     val width = maxOf(2f, bitmap.width / 180f)
-    fun visible(index: Int) = frame.landmarks[index].visibility >= 0.5f
+    // Contact can be blurred. Do not draw an uncertain leg as a floating chain of bones.
+    fun visible(index: Int) = frame.landmarks[index].visibility >= PREVIEW_VISIBILITY &&
+        (index in 23..24 || clearLeg(frame, (index - 23) % 2))
     fun x(index: Int) = frame.landmarks[index].x * bitmap.width
     fun y(index: Int) = frame.landmarks[index].y * bitmap.height
     for ((side, color) in listOf(0 to LEFT_COLOR, 1 to RIGHT_COLOR)) {

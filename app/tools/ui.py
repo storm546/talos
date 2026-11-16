@@ -14,6 +14,7 @@ def remote(args, binary=False):
     return subprocess.check_output(['ssh', 'android-build-kit', command], text=not binary, timeout=30)
 
 def nodes():
+    remote(['shell', 'rm', '-f', '/sdcard/window.xml'])
     remote(['shell', 'uiautomator', 'dump', '/sdcard/window.xml'])
     return list(ET.fromstring(remote(['shell', 'cat', '/sdcard/window.xml'])).iter('node'))
 

@@ -125,4 +125,5 @@
     <string name="pending_save_failed">Could not save this result. Keep this screen open and try sending again.</string>
     <string name="pending_unreadable">A saved result could not be read. It is still on this device.</string>
     <string name="pending_remove_failed">A result was sent but its local copy could not be removed. Do not retry until storage is available.</string>
+    <string name="preview_unclear">Unclear joints are hidden in this frame. Keep your whole body visible and use good light.</string>
 </resources>

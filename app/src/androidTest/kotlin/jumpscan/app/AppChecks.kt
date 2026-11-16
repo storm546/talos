@@ -78,6 +78,8 @@ class AppChecks : Instrumentation() {
         val frames = List(15) { frame.copy(tMs = it * 40L) }
         check(CoreLanding(frames, "cmj", 1f).contactMs == null)
         check(peakFlexionFrame(frames) in frames)
+        check(!unclearPreview(frame) && unclearPreview(hidden))
+        check(hiddenPreview.getPixel(40, 70) == Color.WHITE) { "An unclear leg must not leave floating ankle markers" }
         raw.recycle(); preview.recycle(); hiddenPreview.recycle()
     }
 }
