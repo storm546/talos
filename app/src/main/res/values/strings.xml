@@ -91,7 +91,7 @@
     <string name="signout_error">Could not sign out: %1$s</string>
     <string name="progress">%1$d%% · Video stays on this device</string>
     <string name="uploaded">Uploaded · jump #%1$d</string>
-    <string name="history_summary">%1$d jumps · newest first</string>
+    <string name="history_summary">Jumps: %1$d · newest first</string>
     <string name="history_item">#%1$d · %2$s</string>
     <string name="history_numbers">%1$s\nPeak flexion L / R: %2$s° / %3$s°\nKnee / ankle separation: %4$s</string>
     <string name="view_jump">View numbers for jump #%1$d</string>
@@ -116,4 +116,13 @@
     <string name="guide_still">Stand still for one second before and after the jump.</string>
     <string name="guide_light">Film in good light, with the light in front of you.</string>
     <string name="continue_video">Continue to video</string>
+    <string name="pending_count">Pending results: %1$d</string>
+    <string name="send_pending">Send pending</string>
+    <string name="sending_pending">Sending pending…</string>
+    <string name="pending_sign_in">Sign in with the same athlete account and server to send saved results.</string>
+    <string name="saved_pending">Saved on this device. Sending will retry on next app start, or tap Send pending.</string>
+    <string name="pending_sent">Pending results sent.</string>
+    <string name="pending_save_failed">Could not save this result. Keep this screen open and try sending again.</string>
+    <string name="pending_unreadable">A saved result could not be read. It is still on this device.</string>
+    <string name="pending_remove_failed">A result was sent but its local copy could not be removed. Do not retry until storage is available.</string>
 </resources>

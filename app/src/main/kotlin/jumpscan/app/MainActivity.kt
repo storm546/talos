@@ -27,6 +27,10 @@ class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("account", MODE_PRIVATE) }
     private var analysis: Analysis? = null
     private var uploadedId: Long? = null
+    private var queuedId: String? = null
+    private var queueSending = false
+    private val pendingRoot by lazy { java.io.File(filesDir, "pending") }
+    private fun pending() = PendingUploads(pendingRoot, base(), prefs.getLong("user_id", 0))
     private var test = "cmj"
     private lateinit var page: LinearLayout
     private var screen = "login"
@@ -52,16 +56,17 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val retained = lastNonConfigurationInstance as? RetainedResult
-        if (retained != null) { analysis = retained.analysis; uploadedId = retained.uploadedId; test = retained.test }
+        if (retained != null) { analysis = retained.analysis; uploadedId = retained.uploadedId; test = retained.test; queuedId = retained.queuedId }
         if (analysis != null) result() else if (!openVideo(intent)) {
             if (token().isEmpty()) login() else home()
         }
+        sendPending(automatic = true)
     }
 
-    private data class RetainedResult(val analysis: Analysis?, val uploadedId: Long?, val test: String)
+    private data class RetainedResult(val analysis: Analysis?, val uploadedId: Long?, val test: String, val queuedId: String?)
 
     @Deprecated("Uses the platform non-configuration state API")
-    override fun onRetainNonConfigurationInstance(): Any = RetainedResult(analysis, uploadedId, test)
+    override fun onRetainNonConfigurationInstance(): Any = RetainedResult(analysis, uploadedId, test, queuedId)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -180,6 +185,7 @@ class MainActivity : Activity() {
                 prefs.edit().putString("server", address).putString("token", newToken)
                     .putString("name", name).putLong("user_id", id).apply()
                 if (analysis != null) result() else home()
+                sendPending(automatic = true)
             }, { login(it) })
         }
         button(getString(R.string.continue_offline)) { if (analysis != null) result() else home() }
@@ -211,6 +217,7 @@ class MainActivity : Activity() {
             filmingGuide { launchVideo(pick.setType("video/*"), 11) }
         }
         text(getString(R.string.analysis_hint), 14)
+        pendingControls()
         if (analysis != null) button(getString(R.string.last_result)) { result() }
         if (token().isNotEmpty()) {
             text(getString(R.string.signed_in, prefs.getString("name", "")), 14)
@@ -260,6 +267,7 @@ class MainActivity : Activity() {
     private fun startAnalysis(uri: Uri) {
         analysis = null
         uploadedId = null
+        queuedId = null
         val expectedGeneration = generation + 1
         work(getString(R.string.analysing), { analyzeVideo(this, uri, test) { value ->
             runOnUiThread {
@@ -298,18 +306,82 @@ class MainActivity : Activity() {
         }
         page.addView(legend)
         metricRows(JSONObject(current.metrics.toJson()))
-        if (uploadedId == null) button(if (token().isEmpty()) getString(R.string.sign_in_upload) else getString(R.string.upload)) {
+        if (uploadedId == null && queuedId == null) button(if (token().isEmpty()) getString(R.string.sign_in_upload) else getString(R.string.upload)) {
             if (token().isEmpty()) login() else {
                 val savedToken = token()
                 val savedBase = base()
+                val queue = pending()
                 work(getString(R.string.uploading), {
-                    JSONObject(api(savedBase, "/api/jumps", "POST", savedToken, JSONObject(current.metrics.toJson()))).getLong("id")
-                }, { uploadedId = it; result() }, { result(); text(it, 15, Color.rgb(157, 45, 36)) })
+                    synchronized(uploadLock) {
+                        if (Thread.currentThread().isInterrupted) throw InterruptedException()
+                        try {
+                            val id = JSONObject(api(savedBase, "/api/jumps", "POST", savedToken,
+                                JSONObject(current.metrics.toJson()))).getLong("id")
+                            id to null
+                        } catch (e: IOException) {
+                            if (e is ApiError || e is AppError || Thread.currentThread().isInterrupted) throw e
+                            try { null to queue.enqueue(current.metrics) }
+                            catch (_: IOException) { throw AppError(R.string.pending_save_failed) }
+                        }
+                    }
+                }, { (id, pendingId) -> uploadedId = id; queuedId = pendingId; result() },
+                    { result(); text(it, 15, Color.rgb(157, 45, 36)) })
             }
-        } else text(getString(R.string.uploaded, uploadedId), 16, green)
+        }
+        if (uploadedId != null) text(getString(R.string.uploaded, uploadedId), 16, green)
+        if (queuedId != null) text(getString(R.string.saved_pending), 16, green)
+        pendingControls()
         if (token().isNotEmpty()) button(getString(R.string.history)) { history() }
         button(getString(R.string.home)) { home() }
         text(getString(R.string.no_video_upload), 13)
+    }
+
+    private fun pendingControls() {
+        val count = if (token().isNotEmpty()) pending().count() else
+            pendingRoot.walkTopDown().count { it.isFile && it.name.endsWith(".json") }
+        text(getString(R.string.pending_count, count), 14)
+        if (count > 0) {
+            if (token().isEmpty()) text(getString(R.string.pending_sign_in), 14)
+            else button(getString(if (queueSending) R.string.sending_pending else R.string.send_pending)) {
+                sendPending(automatic = false)
+            }.isEnabled = !queueSending
+        }
+    }
+
+    private fun sendPending(automatic: Boolean) {
+        if (queueSending || token().isEmpty() || pending().count() == 0) return
+        val savedToken = token()
+        val savedBase = base()
+        val savedOwner = prefs.getLong("user_id", 0)
+        val queue = pending()
+        queueSending = true
+        if (screen == "result") result() else if (screen == "home") home()
+        executor.submit {
+            var error: Exception? = null
+            val sent = linkedMapOf<String, Long>()
+            try {
+                synchronized(uploadLock) {
+                    queue.send(sent) { metrics ->
+                        JSONObject(api(savedBase, "/api/jumps", "POST", savedToken, metrics)).getLong("id")
+                    }
+                }
+            } catch (e: Exception) { error = e }
+            runOnUiThread {
+                queueSending = false
+                if (!isDestroyed && token() == savedToken && base() == savedBase && prefs.getLong("user_id", 0) == savedOwner) {
+                    queuedId?.let { id -> sent[id]?.let { uploadedId = it; queuedId = null } }
+                    if (error is ApiError && (error as ApiError).status == 401) {
+                        prefs.edit().remove("token").apply()
+                        if (screen != "busy") login(getString(R.string.session_expired))
+                    } else {
+                        if (screen == "result") result() else if (screen == "home") home()
+                        if (error != null && error !is InterruptedException) {
+                            Toast.makeText(this, errorMessage(error!!), Toast.LENGTH_LONG).show()
+                        } else if (!automatic) Toast.makeText(this, getString(R.string.pending_sent), Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
     }
 
     private fun metricRows(json: JSONObject) {

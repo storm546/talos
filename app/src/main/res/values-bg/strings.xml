@@ -91,7 +91,7 @@
     <string name="signout_error">Неуспешен изход: %1$s</string>
     <string name="progress">%1$d%% · Видеото остава на устройството</string>
     <string name="uploaded">Изпратен скок №%1$d</string>
-    <string name="history_summary">%1$d скока · най-новите първо</string>
+    <string name="history_summary">Скокове: %1$d · най-новите първо</string>
     <string name="history_item">№%1$d · %2$s</string>
     <string name="history_numbers">%1$s\nМаксимално сгъване ляво / дясно: %2$s° / %3$s°\nРазстояние колене / глезени: %4$s</string>
     <string name="view_jump">Резултати за скок №%1$d</string>
@@ -116,4 +116,13 @@
     <string name="guide_still">Стойте неподвижно по една секунда преди и след скока.</string>
     <string name="guide_light">Снимайте на добре осветено място, със светлината пред вас.</string>
     <string name="continue_video">Продължи към видеото</string>
+    <string name="pending_count">Чакащи резултати: %1$d</string>
+    <string name="send_pending">Изпрати чакащите резултати</string>
+    <string name="sending_pending">Изпращане на чакащите резултати…</string>
+    <string name="pending_sign_in">Влезте със същия профил на спортист и същия сървър, за да изпратите запазените резултати.</string>
+    <string name="saved_pending">Резултатът е запазен на устройството. Изпращането ще се повтори при следващо отваряне на приложението или чрез „Изпрати чакащите резултати“.</string>
+    <string name="pending_sent">Чакащите резултати са изпратени.</string>
+    <string name="pending_save_failed">Резултатът не може да бъде запазен. Оставете този екран отворен и опитайте да изпратите отново.</string>
+    <string name="pending_unreadable">Запазен резултат не може да бъде прочетен. Той остава на устройството.</string>
+    <string name="pending_remove_failed">Резултатът е изпратен, но локалното копие не може да бъде изтрито. Не изпращайте отново, докато не освободите място.</string>
 </resources>
