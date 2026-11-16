@@ -1,6 +1,7 @@
 """Create synthetic demo accounts and ten jumps per athlete, once per database."""
 
 from datetime import datetime, timedelta, timezone
+import random
 import secrets
 
 from .main import Jump, database, database_path, init_db, password_hash
@@ -35,16 +36,18 @@ def seed(path=None):
                 if role != "athlete":
                     continue
                 variant = int(account[-1])
+                noise = random.Random(variant).gauss  # same demo data on every run, but not a ruler-straight line
                 for index in range(10):
-                    left = 62 + variant * 2 + index * (1.3 if variant == 1 else .4)
-                    right = left + (1 + index * 1.2 if variant == 2 else 2 + (index % 3 - 1) * .6)
-                    flight_ms = 340 + variant * 8 + index * (7 if variant == 1 else 2)
+                    left = 62 + variant * 2 + index * (1.3 if variant == 1 else .4) + noise(0, 2.5)
+                    right = left + (1 + index * 1.2 if variant == 2 else 2 + noise(0, 1.5))
+                    frames = round((340 + variant * 8 + index * (7 if variant == 1 else 2) + noise(0, 12)) * .06)
+                    flight_ms = frames * 1000 / 60  # flight time comes in whole 60 fps frames
                     metrics = Jump(
                         test="cmj" if index % 2 else "drop_jump", fps=60, flight_time_ms=flight_ms,
                         jump_height_cm=9.80665 * (flight_ms / 1000) ** 2 / 8 * 100,
-                        knee_flexion_contact_l=20 + index / 2, knee_flexion_contact_r=22 + index / 2,
-                        knee_flexion_peak_l=left, knee_flexion_peak_r=right, fppa_peak_l=5, fppa_peak_r=6,
-                        knee_ankle_ratio=.81 + variant * .02 + index * (.018 if variant == 1 else .003),
+                        knee_flexion_contact_l=20 + index / 2 + noise(0, 2), knee_flexion_contact_r=22 + index / 2 + noise(0, 2),
+                        knee_flexion_peak_l=left, knee_flexion_peak_r=right, fppa_peak_l=5 + noise(0, 2), fppa_peak_r=6 + noise(0, 2),
+                        knee_ankle_ratio=.81 + variant * .02 + index * (.018 if variant == 1 else .003) + noise(0, .02),
                         flexion_asymmetry_pct=abs(left - right) / max(left, right) * 100,
                         quality=.78 if index == 6 else .95, warnings=["low_visibility"] if index == 6 else [],
                     )
