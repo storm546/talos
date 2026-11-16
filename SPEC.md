@@ -51,6 +51,9 @@ object JumpAnalyzer { fun analyze(frames: List<Frame>, test: String): JumpMetric
 - Airborne: both feet above ground level by a threshold scaled to body size (hip-to-ankle length).
   Smooth the signal first; pose data is jittery.
 - Analysed landing: the last airborne-to-ground transition. Initial contact is its first ground frame.
+- A CMJ requires an observed take-off after an observed ground reference. A clip starting above a
+  future floor reference cannot supply a CMJ. An explicitly selected `drop_jump` may start airborne;
+  its initial drop landing has `jump_height_cm: null` because its take-off was not observed.
 - Knee flexion: 180 minus the 3D hip-knee-ankle angle from the world landmarks. Seen from the front
   the knee bends towards the camera, so the image plane alone cannot show it. Single-camera depth is
   an estimate; the number is for comparing an athlete with themselves over time.

@@ -116,8 +116,8 @@ object JumpAnalyzer {
                 abs(it.left - latest.left) <= AIRBORNE_FRACTION * latest.leg &&
                 abs(it.right - latest.right) <= AIRBORNE_FRACTION * latest.leg
             }.minByOrNull { it.hip }
-                // Only a genuinely observed clip start may use future ground for a plain drop landing.
-                ?: if (i == 0 && t[0] == frames.first().tMs && angleUsable(usable[0])) Standing(0,
+                // Only an explicitly requested drop landing may start airborne; CMJ needs observed ground before take-off.
+                ?: if (test == "drop_jump" && i == 0 && t[0] == frames.first().tMs && angleUsable(usable[0])) Standing(0,
                     footL.sorted()[((n - 1) * 0.9).toInt()], footR.sorted()[((n - 1) * 0.9).toInt()],
                     hipY[0], median(legLength.filter { it.isFinite() }),
                     (23..26).map { joint -> median(rawPoses.indices.filter { angleUsable(usable[it]) }

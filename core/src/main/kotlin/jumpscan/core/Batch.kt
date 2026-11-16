@@ -29,7 +29,7 @@ fun readLandmarkCsv(reader: BufferedReader): Pair<Float, List<Frame>> {
 
 private class Scored(
     val cls: String, val clip: String, val frames: Int, val durationMs: Long,
-    val metrics: JumpMetrics?, val error: String?,
+    val metrics: JumpMetrics?, val error: String?, val contactMs: Long? = null,
 ) {
     val detected = metrics != null && metrics.flightTimeMs != null && "no_flight_detected" !in metrics.warnings
 }
@@ -43,7 +43,8 @@ private fun score(file: File): Scored {
         }
         frames = parsed.size
         durationMs = parsed.last().tMs - parsed.first().tMs
-        Scored(file.parentFile.name, file.name, frames, durationMs, JumpAnalyzer.analyze(parsed, "cmj", aspect), null)
+        val analysis = JumpAnalyzer.analyzeWithLanding(parsed, "cmj", aspect)
+        Scored(file.parentFile.name, file.name, frames, durationMs, analysis.metrics, null, analysis.contactMs)
     } catch (e: Exception) {
         Scored(file.parentFile.name, file.name, frames, durationMs, null, e.message ?: e.javaClass.simpleName)
     }
@@ -66,7 +67,7 @@ fun runBatch(inDir: File, outFile: File): String {
         .sortedBy { it.path }.map(::score).toList()
     val header = "class,clip,frames,duration_ms,status,error,flight_time_ms,jump_height_cm," +
         "knee_flexion_contact_l,knee_flexion_contact_r,knee_flexion_peak_l,knee_flexion_peak_r," +
-        "fppa_peak_l,fppa_peak_r,knee_ankle_ratio,flexion_asymmetry_pct,quality,fps,warnings,flight_detected"
+        "fppa_peak_l,fppa_peak_r,knee_ankle_ratio,flexion_asymmetry_pct,quality,fps,warnings,flight_detected,contact_ms"
     outFile.absoluteFile.parentFile?.mkdirs()
     outFile.bufferedWriter().use { w ->
         w.write(header + "\n")
@@ -77,7 +78,7 @@ fun runBatch(inDir: File, outFile: File): String {
                 num(m?.flightTimeMs), num(m?.jumpHeightCm), num(m?.kneeFlexionContactL), num(m?.kneeFlexionContactR),
                 num(m?.kneeFlexionPeakL), num(m?.kneeFlexionPeakR), num(m?.fppaPeakL), num(m?.fppaPeakR),
                 num(m?.kneeAnkleRatio), num(m?.flexionAsymmetryPct), num(m?.quality), num(m?.fps),
-                clean(m?.warnings?.joinToString("|") ?: ""), r.detected.toString())
+                clean(m?.warnings?.joinToString("|") ?: ""), r.detected.toString(), r.contactMs?.toString() ?: "")
             w.write(fields.joinToString(",") + "\n")
         }
     }

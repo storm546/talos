@@ -181,6 +181,16 @@ class JumpAnalyzerTest {
     }
 
     @Test
+    fun clipStartingAboveFutureGroundDoesNotInventTakeoff() {
+        // A gradual image drift can look like a landing when the floor is estimated from future frames.
+        val frames = clip(30, 1.5, { t -> maxOf(0.0, 0.03 * (1 - t)) })
+        assertNull(JumpAnalyzer.analyze(frames, "cmj").flightTimeMs)
+        val drop = JumpAnalyzer.analyze(frames, "drop_jump")
+        assertNotNull(drop.flightTimeMs)
+        assertNull(drop.jumpHeightCm)
+    }
+
+    @Test
     fun dropJumpUsesReboundAndDropLandingHasNoHeight() {
         // Start on a 0.15 high box, step off (feet reach the ground at 0.6 s), rebound 0.9 s to 1.3 s.
         val box: (Double) -> Double = { t -> if (t < 0.4) 0.15 else if (t < 0.6) 0.15 * (0.6 - t) / 0.2 else 0.0 }
