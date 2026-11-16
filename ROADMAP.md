@@ -28,11 +28,12 @@ The strongest single asset is the validation: most school projects cannot say ho
 
 ## Honest state of accuracy (2026-11-16)
 
-- Flight time: about half a frame (17 ms) off the force plate when the pose is clean; unreliable when the
-  pose drops out or the flight is under about 300 ms. 65 % of lab jumps detected from the front.
-- Knee flexion: follows the reference curve (correlation 0.91–0.95) but about 15 degrees RMSE and peaks
-  10–12 degrees low. Good for comparing a person with themselves, not an absolute angle.
-- Side view is not supported yet (the rules need both legs visible).
+- Flight time: about one frame off the force plate when the jump is found. Found from the front in 28 of
+  40 lab jumps with no spurious results, from the side in 20 of 40 (timing about three frames off).
+- Knee flexion from the front: follows the reference curve (correlation about 0.9) but about 16 degrees
+  RMSE and peaks 12 degrees low. From the side, the image-plane angle gives about 10 degrees RMSE.
+- A server-side model (RTMPose-x) reaches about 5 degrees from the side; it does not help from the front.
+- On 1000 public webcam clips: a flight is found in 45 to 60 percent of jump clips; false alarms 3 to 7 percent.
 
 These numbers decide the wording of the product: "change against your own baseline", never "risk".
 

@@ -92,3 +92,27 @@ Open:
 - [ ] Knee-angle accuracy against reference data (Twente dataset on the kit has knee flexion and forces for 4 subjects)
 - [ ] Negative and positive detection rate on the Kaggle clips (600 jump, 400 non-jump) on the kit
 - [ ] Decide on the 17.8 GB Twente source archive: extract the rest, then delete
+
+## State on 2026-11-16, 23:00 (end of the staging night)
+
+`main`, `stage` and `detector` all sit at or below commit `4a5bec2`; `main` and `stage` are identical. Nothing is pushed or deployed.
+
+Verified by the orchestrator:
+- Server: 251 tests pass. Consent, baseline and change summary, CSV export, administration, audit log, Bulgarian and English dashboard with trend charts (screenshots in `logs/dash/`).
+- Core after the detector merge: 37 tests pass on the kit with no skips. Webcam benchmark rerun: flights found in 121, 89 and 107 of 200 jump clips (in place, left, right); false alarms 13 of 200 (looking down) and 6 of 200 (still pose), down from 36 and 42.
+- App: debug APK builds on the kit against the merged core (one bridge call in `CoreLanding.java` had to be updated).
+
+Reported by workers, not rerun by the orchestrator:
+- Twente force-plate benchmark: front 28 of 40 right jump with no spurious results (was 21 with 5 spurious), side 20 of 40 (was 4). Side timing error is about 97 ms (three frames), and 12 front jumps are still missed. Details in `core/VALIDATION.md`.
+- App v2 on the emulator: Bulgarian and English, landing-frame skeleton, filming guide, offline upload queue (`app/VALIDATION.md`, screenshots in `logs/app2/`). The app was not rerun on the emulator after the detector merge.
+- Two-pass faster analysis failed its accuracy check and stays off; decoding takes 86 to 91 percent of the time.
+- GPU benchmark (`logs/gpu-bench/REPORT.md`): from the side, RTMPose-x on a server gives 4.8 degrees RMSE against 10.3 for the phone; from the front nothing beats the phone (16.5).
+
+Open:
+- `docs/validacia.md`, `docs/dokumentacia.md` and the README still quote the detector numbers from before the merge (21 of 40 front, 4 of 40 side) and do not mention the GPU benchmark.
+- The Docker image and the CI workflow were written but not confirmed to build or run.
+- The demo seed data is perfectly linear and looks artificial.
+- `app/src/debug/assets/pose_landmarker_lite.task` (5.8 MB) serves only the rejected speed experiment and can be removed with it.
+- Decision for the owner: an opt-in server-side "precise mode" for side-view video. It contradicts "the video never leaves the phone" unless it is explicit.
+- The owner's list in `ROADMAP.md` section G is unchanged, as is the question about the 17.8 GB Twente archive on the kit.
+- Codex is out of quota until 2026-11-17 01:34.
