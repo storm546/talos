@@ -59,3 +59,22 @@ slow-motion clips, stronger scrypt cost.
 Next step: film two or three real jumps, export the landmarks with the debug build
 (CSV in the app's external files folder), add them as fixtures with hand-labelled take-off and landing
 frames, and tune the detector against them.
+
+## State on 2026-11-16, evening (Codex limit reached mid-task)
+
+Real jump clips from the owner arrived (three countermovement jumps, 25 fps, filmed from the floor).
+Hand labels exist; the clips and their landmark fixtures are private and not in git.
+
+Done and committed: real frame timestamps, portrait video, local standing reference, per-foot ground level,
+bridging of short tracking dropouts inside a flight, an `uncertain_timing` warning, a filter for implausible poses.
+Tests: server 131 pass; core 26 synthetic and the squat fixture pass; the private-clip test passes on one clip
+and fails on two ("expected 1 flight"). The app with these last changes has not been rebuilt or run in the emulator.
+
+Unfinished, in order:
+- [ ] Pose coverage table: lite vs full vs heavy model, lower confidence thresholds, larger frames
+      (models were downloaded to /work/jumpscan-run/private/models on the kit; no result recorded)
+- [ ] Private-clip acceptance for the two failing clips, or a documented limit
+- [ ] Rebuild, emulator rerun of the three clips, screenshots; remove the private videos from the emulator storage
+- [ ] Dataset job: write INDEX.csv and logs/data-inventory.md with licences for /work/jumpscan-data (21 GB on the kit),
+      resume or delete kaggle-gesture-jumps/dataset.zip.part, prune rejected candidates
+- [ ] Re-film with the phone at knee height, whole body in frame, 60 or 120 fps

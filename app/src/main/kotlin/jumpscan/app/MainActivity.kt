@@ -295,6 +295,7 @@ class MainActivity : Activity() {
         if (warnings.length() == 0) text("Warnings: none", 14, green)
         else for (i in 0 until warnings.length()) text(when (warnings.getString(i)) {
             "low_fps" -> "Low frame rate: timing may be less precise."
+            "uncertain_timing" -> "Tracking lost near take-off or landing: flight time uses the nearest observed frames."
             "low_visibility" -> "Low visibility: keep hips, knees and feet in view."
             "no_flight_detected" -> "No flight detected. Numbers use the start of the clip."
             else -> "Analysis warning: ${warnings.getString(i)}"

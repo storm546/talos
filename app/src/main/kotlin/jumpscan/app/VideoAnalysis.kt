@@ -21,6 +21,15 @@ import kotlin.math.roundToInt
 internal data class Analysis(val metrics: JumpMetrics, val truncated: Boolean)
 
 internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (Int) -> Unit): Analysis {
+    val started = android.os.SystemClock.elapsedRealtime()
+    val trial = if (BuildConfig.DEBUG) java.io.File(context.getExternalFilesDir(null), "trial.txt")
+        .takeIf { it.exists() }?.readText()?.trim()?.split(",") else null
+    val longSide = trial?.getOrNull(2)?.toInt() ?: 720
+    val confidence = trial?.getOrNull(1)?.toFloat() ?: 0.5f
+    val model = trial?.getOrNull(0)?.takeIf { it != "lite" }?.let {
+        val bytes = java.io.File(context.getExternalFilesDir(null), "$it.task").readBytes()
+        java.nio.ByteBuffer.allocateDirect(bytes.size).put(bytes).apply { rewind() }
+    }
     val retriever = MediaMetadataRetriever()
     try {
         retriever.setDataSource(context, uri)
@@ -36,7 +45,7 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
         val displayWidth = if (rotated) height else width
         val displayHeight = if (rotated) width else height
         val aspect = displayWidth.toFloat() / displayHeight
-        val scale = minOf(1.0, 720.0 / max(displayWidth, displayHeight))
+        val scale = minOf(1.0, longSide.toDouble() / max(displayWidth, displayHeight))
         val targetWidth = max(1, (displayWidth * scale).roundToInt())
         val targetHeight = max(1, (displayHeight * scale).roundToInt())
         val limit = minOf(duration, 10_000L)
@@ -65,7 +74,12 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
         }
         val count = timesUs.size
         val options = PoseLandmarker.PoseLandmarkerOptions.builder()
-            .setBaseOptions(BaseOptions.builder().setModelAssetPath("pose_landmarker_lite.task").build())
+             .setBaseOptions(BaseOptions.builder().apply {
+                if (model == null) setModelAssetPath("pose_landmarker_lite.task") else setModelAssetBuffer(model)
+            }.build())
+            .setMinPoseDetectionConfidence(confidence)
+            .setMinPosePresenceConfidence(confidence)
+            .setMinTrackingConfidence(confidence)
             .setRunningMode(RunningMode.VIDEO)
             .setNumPoses(1)
             .build()
@@ -90,8 +104,8 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
                 }
                 if (BuildConfig.DEBUG && index == 0) android.util.Log.d("JumpScan",
                     "Decoded ${raw.width}x${raw.height}, rotation=$rotation, aspect=$aspect, samples=$count")
-                val resized = if (max(raw.width, raw.height) > 720) {
-                    val factor = 720.0 / max(raw.width, raw.height)
+                val resized = if (max(raw.width, raw.height) > longSide) {
+                    val factor = longSide.toDouble() / max(raw.width, raw.height)
                     Bitmap.createScaledBitmap(raw, max(1, (raw.width * factor).roundToInt()),
                         max(1, (raw.height * factor).roundToInt()), true).also { if (it !== raw) raw.recycle() }
                 } else raw
@@ -129,6 +143,7 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
                     }
                 }
             }
+            if (BuildConfig.DEBUG) android.util.Log.d("JumpScan", "Analysis elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
             val metrics = try { JumpAnalyzer.analyze(frames, test, aspect) }
                 catch (_: IllegalArgumentException) {
                     error("Too few clear frames. Keep hips, knees and feet visible, and try a longer video.")

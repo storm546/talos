@@ -17,6 +17,7 @@ object JumpAnalyzer {
     private const val WINDOW_MS = 500L           // landing window after initial contact
     private const val MAX_FLIGHT_MS = 1000.0     // a longer airborne run is not a jump (122.6 cm, inside the server's 150 cm limit)
     private const val MAX_GAP_FACTOR = 1.5       // a time step above this many median frame intervals means dropped frames
+    private const val MAX_TRACKING_GAP_MS = 150L // about four 25-fps intervals; longer gaps can hide a separate contact
     private const val LOW_FPS = 24.0
     private const val LOW_QUALITY = 0.7
     private const val G = 9.81
@@ -40,7 +41,8 @@ object JumpAnalyzer {
     fun analyze(frames: List<Frame>, test: String, aspect: Float = 9f / 16f): JumpMetrics =
         analyzeWithLanding(frames, test, aspect).metrics
 
-    internal data class Analysis(val metrics: JumpMetrics, val contactMs: Long?, val flightCount: Int)
+    internal data class Analysis(val metrics: JumpMetrics, val contactMs: Long?, val flightCount: Int,
+        val flightTimeMinMs: Long? = null, val flightTimeMaxMs: Long? = null)
 
     internal fun analyzeWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f): Analysis {
         require(test == "drop_jump" || test == "cmj") { "test must be drop_jump or cmj" }
@@ -50,55 +52,60 @@ object JumpAnalyzer {
         }
         require(frames.zipWithNext().all { (a, b) -> b.tMs > a.tMs }) { "frame times must increase" }
 
-        // A hidden heel does not hide the leg when its toe is visible; upper-body visibility is irrelevant.
+        fun angleUsable(f: Frame) = LEG_LANDMARKS.all { f.landmarks[it].visibility >= MIN_VISIBILITY }
+        require(frames.count(::angleUsable) >= MIN_USABLE_FRAMES) { "need at least $MIN_USABLE_FRAMES angle frames" }
+        // Contact needs observed foot points; hidden knees must not erase a visible contact.
         val usable = frames.filter { f ->
-            LEG_LANDMARKS.all { f.landmarks[it].visibility >= MIN_VISIBILITY } &&
-                listOf(29, 31).any { f.landmarks[it].visibility >= MIN_VISIBILITY } &&
+            listOf(29, 31).any { f.landmarks[it].visibility >= MIN_VISIBILITY } &&
                 listOf(30, 32).any { f.landmarks[it].visibility >= MIN_VISIBILITY }
         }
-        require(usable.size >= MIN_USABLE_FRAMES) { "need at least $MIN_USABLE_FRAMES usable frames, got ${usable.size}" }
+        require(usable.size >= MIN_USABLE_FRAMES) { "need at least $MIN_USABLE_FRAMES contact frames, got ${usable.size}" }
         val n = usable.size
         val t = usable.map { it.tMs }
-        val poses = smooth(usable.map { f ->
+        val rawPoses = usable.map { f ->
             Pose(DoubleArray(LANDMARKS) { f.landmarks[it].x * aspect.toDouble() },
-                DoubleArray(LANDMARKS) { f.landmarks[it].y.toDouble() },
-                DoubleArray(LANDMARKS))
-        })
-        val world = smooth(usable.map { f ->
-            Pose(DoubleArray(LANDMARKS) { f.worldLandmarks[it].x.toDouble() },
-                DoubleArray(LANDMARKS) { f.worldLandmarks[it].y.toDouble() },
-                DoubleArray(LANDMARKS) { f.worldLandmarks[it].z.toDouble() })
-        })
+                DoubleArray(LANDMARKS) { f.landmarks[it].y.toDouble() }, DoubleArray(LANDMARKS))
+        }
+        val poses = smooth(rawPoses)
+        val rejected = BooleanArray(n)
 
         // Each foot has its own ground height: perspective can put planted feet at different image y values.
         val footL = poses.mapIndexed { index, p -> listOf(27, 29, 31)
             .filter { usable[index].landmarks[it].visibility >= MIN_VISIBILITY }.maxOf { p.y[it] } }
         val footR = poses.mapIndexed { index, p -> listOf(28, 30, 32)
             .filter { usable[index].landmarks[it].visibility >= MIN_VISIBILITY }.maxOf { p.y[it] } }
-        val hipY = poses.map { (it.y[LEFT.hip] + it.y[RIGHT.hip]) / 2 }
-        val legLength = poses.map { (dist(it, LEFT.hip, LEFT.ankle) + dist(it, RIGHT.hip, RIGHT.ankle)) / 2 }
+        val hipY = poses.mapIndexed { i, p -> if (listOf(23, 24).all {
+            usable[i].landmarks[it].visibility >= MIN_VISIBILITY }) (p.y[23] + p.y[24]) / 2 else Double.NaN }
+        val legLength = poses.mapIndexed { i, p -> if (listOf(23, 24, 27, 28).all {
+            usable[i].landmarks[it].visibility >= MIN_VISIBILITY })
+            (dist(p, LEFT.hip, LEFT.ankle) + dist(p, RIGHT.hip, RIGHT.ankle)) / 2 else Double.NaN }
         // A gap greater than 1.5 median frame intervals means contact or flight may have been missed.
-        val medianStepMs = median(t.zipWithNext { a, b -> (b - a).toDouble() })
-        val gapBefore = BooleanArray(n) { it > 0 && t[it] - t[it - 1] > MAX_GAP_FACTOR * medianStepMs }
+        val medianStepMs = median(frames.zipWithNext { a, b -> (b.tMs - a.tMs).toDouble() })
 
-        data class Standing(val end: Int, val left: Double, val right: Double, val hip: Double, val leg: Double)
+        data class Standing(val end: Int, val left: Double, val right: Double, val hip: Double, val leg: Double, val segments: List<Double>)
         val standing = (0 until n).mapNotNull { end ->
             val start = (0..end).first { t[it] >= t[end] - WINDOW_MS / 2 }
             // A stance spans half the landing window (250 ms), allowing one frame of endpoint quantisation.
             if (end - start < 2 || t[end] - t[start] < WINDOW_MS / 2 - medianStepMs) return@mapNotNull null
             val window = start..end
+            if (window.any { !hipY[it].isFinite() || !legLength[it].isFinite() }) return@mapNotNull null
             val leg = median(window.map { legLength[it] })
+            if (window.any { angleUsable(usable[it]) && !upright(rawPoses[it], leg) }) return@mapNotNull null
             // Stable means hips and each foot vary by no more than the 2.5%-of-leg flight threshold.
             if (listOf(hipY, footL, footR).any { signal ->
                     window.maxOf { signal[it] } - window.minOf { signal[it] } > AIRBORNE_FRACTION * leg
                 }) return@mapNotNull null
             Standing(end, median(window.map { footL[it] }), median(window.map { footR[it] }),
-                median(window.map { hipY[it] }), leg)
+                median(window.map { hipY[it] }), leg, (23..26).map { joint ->
+                    median(window.filter { angleUsable(usable[it]) }.map { dist(rawPoses[it], joint, joint + 2) }
+                        .ifEmpty { listOf(leg / 2) })
+                })
         }
 
         val stableAt = BooleanArray(n)
         standing.forEach { stableAt[it.end] = true }
-        val candidates = mutableListOf<Pair<Int, Int>>()
+        data class Flight(val firstAir: Int, val contact: Int, val lastAir: Int, val lastGround: Int)
+        val candidates = mutableListOf<Flight>()
         var i = 0
         while (i < n) {
             // Use the tallest stable stance within flight limit + landing window (1.5 s), excluding the approach.
@@ -110,40 +117,80 @@ object JumpAnalyzer {
                 abs(it.right - latest.right) <= AIRBORNE_FRACTION * latest.leg
             }.minByOrNull { it.hip }
                 // Only a genuinely observed clip start may use future ground for a plain drop landing.
-                ?: if (i == 0 && t[0] == frames.first().tMs) Standing(0,
+                ?: if (i == 0 && t[0] == frames.first().tMs && angleUsable(usable[0])) Standing(0,
                     footL.sorted()[((n - 1) * 0.9).toInt()], footR.sorted()[((n - 1) * 0.9).toInt()],
-                    hipY[0], median(legLength)) else null
+                    hipY[0], median(legLength.filter { it.isFinite() }),
+                    (23..26).map { joint -> median(rawPoses.indices.filter { angleUsable(usable[it]) }
+                        .map { dist(rawPoses[it], joint, joint + 2) }) }) else null
             if (reference == null) { i++; continue }
             // Both feet must clear their own standing levels by 2.5% of the local hip-to-ankle length.
             fun airborne(index: Int) = reference.left - footL[index] > AIRBORNE_FRACTION * reference.leg &&
                 reference.right - footR[index] > AIRBORNE_FRACTION * reference.leg
-            if (!airborne(i)) { i++; continue }
-            var j = i + 1
-            // Freeze the stance through flight so an apex cannot redefine ground or standing height.
-            // A new steady pose above the old floor resets a changed camera distance instead of consuming the clip.
-            while (j < n && airborne(j) && !gapBefore[j] && (i == 0 || !stableAt[j])) j++
-            if (j < n && !airborne(j) && j - i >= MIN_AIRBORNE_FRAMES && !gapBefore[i] && !gapBefore[j] &&
-                t[j] - t[i] <= MAX_FLIGHT_MS) {
-                val apexHip = (i until j).minOf { hipY[it] }
-                // Hips must rise 2.5% of leg length above standing and the last ground frame, excluding settled sway.
-                if (i == 0 || min(reference.hip, hipY[i - 1]) - apexHip >= AIRBORNE_FRACTION * reference.leg)
-                    candidates += i to j
+            if (!airborne(i) || (i > 0 && airborne(i - 1))) { i++; continue }
+            fun plausible(index: Int): Boolean {
+                if (!angleUsable(usable[index])) return true // Missing knees cannot disprove observed feet.
+                val p = rawPoses[index]
+                if (!upright(p, reference.leg)) return false
+                // Projection may shorten a bent limb; it cannot double its standing segment length at fixed distance.
+                return (23..26).all { dist(p, it, it + 2) <= 2 * reference.segments[it - 23] }
             }
-            i = if (j < n && airborne(j) && stableAt[j] && !gapBefore[j]) j + 1 else j
+            val observed = mutableListOf<Int>()
+            var j = i
+            var previous = max(0, i - 1)
+            // Freeze the stance through flight. Reject impossible poses before they can supply ascent evidence.
+            while (j < n) {
+                if (airborne(j) && !plausible(j)) { rejected[j] = true; j++; continue }
+                if (t[j] - t[previous] > MAX_TRACKING_GAP_MS || !airborne(j) ||
+                    (i > 0 && stableAt[j])) break
+                observed += j
+                previous = j
+                j++
+            }
+            if (j < n && !airborne(j) && observed.size >= MIN_AIRBORNE_FRAMES &&
+                t[j] - t[previous] <= MAX_TRACKING_GAP_MS && t[j] - t[i] <= MAX_FLIGHT_MS) {
+                val apexHip = observed.map { hipY[it] }.filter { it.isFinite() }.minOrNull()
+                // Hips must rise above standing and the preceding ground frame, excluding settled sway.
+                if (i == 0 || (apexHip != null && min(reference.hip, hipY[i - 1]) - apexHip >= AIRBORNE_FRACTION * reference.leg))
+                    candidates += Flight(observed.first(), j, observed.last(), max(0, i - 1))
+            }
+            i = if (j < n && airborne(j) && stableAt[j]) j + 1 else max(i + 1, j)
         }
 
         // Analyse the last verified airborne-to-ground transition; without one, retain the no-flight result.
         val landing = candidates.lastOrNull()
-        val contact = landing?.second ?: 0
-
-        // Flight time: from first airborne frame to first ground frame of the landing run.
-        val flightMs = landing?.let { (s, e) -> (t[e] - t[s]).toDouble() }
-        // Height from flight time: h = g * t^2 / 8 (rise and fall take t/2 each). Not available when take-off
-        // was not seen (run starts with the clip) or, for a drop jump, when no earlier landing exists to rebound from.
-        val rebound = landing != null && landing.first > 0 && (test == "cmj" || candidates.indexOf(landing) > 0)
+        val contact = landing?.contact ?: 0
+        val uncertainTiming = landing?.let { flight ->
+            t[flight.firstAir] - t[flight.lastGround] > MAX_GAP_FACTOR * medianStepMs ||
+                t[flight.contact] - t[flight.lastAir] > MAX_GAP_FACTOR * medianStepMs
+        } == true
+        // With a missing take-off edge, use the last observed ground frame: this is an upper timing bound.
+        val flightMs = landing?.let { flight ->
+            val start = if (t[flight.firstAir] - t[flight.lastGround] > MAX_GAP_FACTOR * medianStepMs)
+                flight.lastGround else flight.firstAir
+            (t[flight.contact] - t[start]).toDouble()
+        }
+        // Observations bracket each edge; dropped frames and frame-rate quantisation do not imply exact contact.
+        val flightMin = landing?.let { t[it.lastAir] - t[it.firstAir] }
+        val flightMax = landing?.let { t[it.contact] - t[it.lastGround] }
+        val rebound = landing != null && landing.firstAir > 0 && (test == "cmj" || candidates.indexOf(landing) > 0)
         val heightCm = if (flightMs != null && rebound) G * (flightMs / 1000).pow(2) / 8 * 100 else null
 
-        val window = (contact until n).takeWhile { t[it] <= t[contact] + WINDOW_MS }
+        // Angles need hips, knees and ankles, regardless of heel or toe visibility.
+        val rejectedTimes = rejected.indices.filter { rejected[it] }.map { t[it] }.toSet()
+        val metricFrames = frames.filter { angleUsable(it) && it.tMs !in rejectedTimes }
+        require(metricFrames.size >= MIN_USABLE_FRAMES) { "need at least $MIN_USABLE_FRAMES angle frames" }
+        val metricPoses = smooth(metricFrames.map { f ->
+            Pose(DoubleArray(LANDMARKS) { f.landmarks[it].x * aspect.toDouble() },
+                DoubleArray(LANDMARKS) { f.landmarks[it].y.toDouble() }, DoubleArray(LANDMARKS))
+        })
+        val world = smooth(metricFrames.map { f ->
+            Pose(DoubleArray(LANDMARKS) { f.worldLandmarks[it].x.toDouble() },
+                DoubleArray(LANDMARKS) { f.worldLandmarks[it].y.toDouble() },
+                DoubleArray(LANDMARKS) { f.worldLandmarks[it].z.toDouble() })
+        })
+        val contactTime = if (landing != null) t[contact] else metricFrames.first().tMs
+        val window = metricFrames.indices.filter { metricFrames[it].tMs in contactTime..(contactTime + WINDOW_MS) }
+        require(window.isNotEmpty()) { "no usable angles in landing window" }
         // Knee flexion from the 3D world landmarks: the knee bends towards a frontal camera, so the image plane cannot see it.
         val flexL = window.map { deviation(world[it], LEFT) }
         val flexR = window.map { deviation(world[it], RIGHT) }
@@ -152,7 +199,7 @@ object JumpAnalyzer {
         val peakBoth = flexL.indices.maxBy { flexL[it] + flexR[it] }
 
         // Knee separation / ankle separation (horizontal) at the frame of greatest combined flexion.
-        val p = poses[window[peakBoth]]
+        val p = metricPoses[window[peakBoth]]
         val ankleSep = abs(p.x[LEFT.ankle] - p.x[RIGHT.ankle])
         val ratio = if (ankleSep < 1e-6) 5.0 else (abs(p.x[LEFT.knee] - p.x[RIGHT.knee]) / ankleSep).coerceIn(0.0, 5.0)
 
@@ -162,7 +209,7 @@ object JumpAnalyzer {
         val asymmetry = if (max(peakFlexL, peakFlexR) == 0.0) 0.0 else abs(peakFlexL - peakFlexR) / max(peakFlexL, peakFlexR) * 100
 
         // Quality: mean visibility of hips, knees, ankles over all input frames of the window, skipped ones included.
-        val windowFrames = frames.filter { it.tMs in t[contact]..(t[contact] + WINDOW_MS) }
+        val windowFrames = frames.filter { it.tMs in contactTime..(contactTime + WINDOW_MS) }
         val quality = windowFrames.flatMap { f -> (23..28).map { f.landmarks[it].visibility.toDouble() } }.average()
 
         val fps = (frames.size - 1) * 1000.0 / (frames.last().tMs - frames.first().tMs)
@@ -170,6 +217,7 @@ object JumpAnalyzer {
             if (fps < LOW_FPS) add("low_fps")
             if (quality < LOW_QUALITY) add("low_visibility")
             if (landing == null) add("no_flight_detected")
+            if (uncertainTiming) add("uncertain_timing")
         }
 
         val metrics = JumpMetrics(
@@ -181,14 +229,14 @@ object JumpAnalyzer {
             kneeFlexionContactR = flexR[0],
             kneeFlexionPeakL = peakFlexL,
             kneeFlexionPeakR = peakFlexR,
-            fppaPeakL = fppa(poses[window[peakL]], LEFT),
-            fppaPeakR = fppa(poses[window[peakR]], RIGHT),
+            fppaPeakL = fppa(metricPoses[window[peakL]], LEFT),
+            fppaPeakR = fppa(metricPoses[window[peakR]], RIGHT),
             kneeAnkleRatio = ratio,
             flexionAsymmetryPct = asymmetry,
             quality = quality,
             warnings = warnings,
         )
-        return Analysis(metrics, landing?.let { t[it.second] }, candidates.size)
+        return Analysis(metrics, landing?.let { t[it.contact] }, candidates.size, flightMin, flightMax)
     }
 
     /** Median of three neighbouring frames per coordinate: removes jitter spikes, keeps landing edges sharp. */
@@ -197,6 +245,11 @@ object JumpAnalyzer {
         else Pose(DoubleArray(LANDMARKS) { median3(raw[i - 1].x[it], raw[i].x[it], raw[i + 1].x[it]) },
             DoubleArray(LANDMARKS) { median3(raw[i - 1].y[it], raw[i].y[it], raw[i + 1].y[it]) },
             DoubleArray(LANDMARKS) { median3(raw[i - 1].z[it], raw[i].z[it], raw[i + 1].z[it]) })
+    }
+
+    // Allow 10% of leg length for projection/noise; hips further below knees are not an upright stance or jump.
+    private fun upright(p: Pose, legLength: Double) = listOf(LEFT, RIGHT).all {
+        p.y[it.hip] - p.y[it.knee] <= 0.1 * legLength
     }
 
     private fun median3(a: Double, b: Double, c: Double) = max(min(a, b), min(max(a, b), c))

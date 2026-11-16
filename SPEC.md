@@ -30,7 +30,7 @@ Produced by `core`, shown by `app`, stored by `server`.
 | `knee_ankle_ratio` | number | knee separation / ankle separation at peak flexion (below ~0.8 means knees collapsing inward) | 0–5 |
 | `flexion_asymmetry_pct` | number | `abs(l - r) / max(l, r) * 100` of peak flexion | 0–100 |
 | `quality` | number | mean landmark visibility of hips, knees, ankles over the landing window | 0–1 |
-| `warnings` | string[] | any of `low_fps`, `low_visibility`, `no_flight_detected` | max 5 items |
+| `warnings` | string[] | any of `low_fps`, `low_visibility`, `no_flight_detected`, `uncertain_timing` (tracking missing at a flight edge; timing uses nearest observed frames) | max 5 items |
 
 ## 2. core (Kotlin/JVM, package `jumpscan.core`)
 

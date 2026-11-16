@@ -196,16 +196,89 @@ class JumpAnalyzerTest {
     }
 
     @Test
-    fun runCutByVisibilityGapIsRejected() {
+    fun shortInteriorTrackingGapIsBridged() {
+        val frames = clip(60, 2.0, parabola(0.8, 0.5)).map { f ->
+            if (f.tMs in 1000..1099) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0f) }) else f
+        }
+        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        assertEquals(1, result.flightCount)
+        assertEquals(500.0, result.metrics.flightTimeMs!!, 40.0)
+        assertTrue("uncertain_timing" !in result.metrics.warnings)
+    }
+
+    @Test
+    fun trackingGapAtEitherEdgeWarnsAndBracketsTiming() {
         val good = clip(60, 2.0, parabola(0.8, 0.5))
-        fun hide(from: Double, to: Double) = good.map { f ->
-            if (f.tMs in (from * 1000).toLong() until (to * 1000).toLong()) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0.1f) }) else f
+        for (gap in listOf(800L..899L, 1250L..1349L)) {
+            val frames = good.map { f ->
+                if (f.tMs in gap) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0f) }) else f
+            }
+            val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+            assertEquals(1, result.flightCount)
+            assertTrue("uncertain_timing" in result.metrics.warnings)
+            val minMs = result.flightTimeMinMs!!
+            val maxMs = result.flightTimeMaxMs!!
+            assertTrue(minMs <= 500 && maxMs >= 500)
+            assertTrue(result.metrics.flightTimeMs!! in minMs.toDouble()..maxMs.toDouble())
         }
-        for (m in listOf(hide(1.0, 1.1), hide(1.25, 1.35))) {   // gap in the middle; gap at the landing
-            val metrics = JumpAnalyzer.analyze(m, "cmj")
-            assertNull(metrics.flightTimeMs)
-            assertTrue("no_flight_detected" in metrics.warnings)
+    }
+
+    @Test
+    fun longTrackingGapCannotVerifyOneFlight() {
+        val frames = clip(60, 2.0, parabola(0.8, 0.5)).map { f ->
+            if (f.tMs in 1000..1210) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0f) }) else f
         }
+        val metrics = JumpAnalyzer.analyze(frames, "cmj")
+        assertNull(metrics.flightTimeMs)
+        assertTrue("no_flight_detected" in metrics.warnings)
+    }
+
+    @Test
+    fun invertedAirborneLegsCannotSupplyAscentEvidence() {
+        val frames = clip(60, 2.0, { t -> if (t in 0.8..1.2) 0.15 else 0.0 }).map { f ->
+            if (f.tMs !in 800..1200) f else f.copy(landmarks = f.landmarks.mapIndexed { index, point ->
+                when (index) {
+                    23, 24 -> point.copy(y = 0.30f)
+                    25, 26 -> point.copy(y = 0.20f)
+                    else -> point
+                }
+            })
+        }
+        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        assertEquals(0, result.flightCount)
+        assertNull(result.metrics.flightTimeMs)
+    }
+
+    @Test
+    fun impossibleSegmentLengthIsATrackingDropout() {
+        val good = clip(60, 2.0, parabola(0.8, 0.5))
+        val frames = good.map { f ->
+            if (f.tMs !in 1000..1049) f else f.copy(landmarks = f.landmarks.mapIndexed { index, point ->
+                if (index in 25..26) point.copy(x = point.x + 2f) else point
+            })
+        }
+        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        assertEquals(1, result.flightCount)
+        assertEquals(500.0, result.metrics.flightTimeMs!!, 40.0)
+    }
+
+    @Test
+    fun contactAndAnglesUseTheirOwnLandmarks() {
+        val good = clip(60, 2.0, parabola(0.8, 0.5), flexL = landingDev(1.3, 50.0))
+        // Hidden knees at take-off still leave observed foot contact and hip ascent.
+        val hiddenKnees = good.map { f ->
+            if (f.tMs !in 800..899) f else f.copy(landmarks = f.landmarks.mapIndexed { index, point ->
+                if (index in 25..26) point.copy(visibility = 0f) else point
+            })
+        }
+        assertEquals(500.0, JumpAnalyzer.analyze(hiddenKnees, "cmj").flightTimeMs!!, 40.0)
+        // Hidden toes and heels after contact do not remove visible joint-angle measurements.
+        val hiddenFeet = good.map { f ->
+            if (f.tMs < 1320) f else f.copy(landmarks = f.landmarks.mapIndexed { index, point ->
+                if (index in 29..32) point.copy(visibility = 0f) else point
+            })
+        }
+        assertEquals(50.0, JumpAnalyzer.analyze(hiddenFeet, "cmj").kneeFlexionPeakL, 1.0)
     }
 
     @Test

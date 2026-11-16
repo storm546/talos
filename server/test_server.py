@@ -672,3 +672,13 @@ def test_seed_command_is_idempotent_and_environment_selects_database(monkeypatch
         with TestClient(main.create_app()) as client:
             response = client.post("/api/auth/login", json={"email": "admin@demo.test", "password": "demo1234"})
             assert response.status_code == 200
+
+
+def test_uncertain_timing_warning_is_accepted_and_preserved(api, auth):
+    client, _ = api
+    response = client.post("/api/jumps", json={**METRICS, "warnings": ["uncertain_timing"]},
+                           headers=auth("athlete1"))
+    assert response.status_code == 201
+    saved = next(jump for jump in client.get("/api/jumps", headers=auth("athlete1")).json()
+                 if jump["id"] == response.json()["id"])
+    assert saved["warnings"] == ["uncertain_timing"]
