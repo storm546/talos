@@ -107,4 +107,13 @@
     <string name="explain_knees">Bending at first contact and the deepest bend within the next half second.</string>
     <string name="group_sides">Left / right</string>
     <string name="explain_sides">Compare leg movement and tracking quality against your own previous jumps.</string>
+    <string name="filming_guide">Filming guide</string>
+    <string name="guide_diagram">A level phone at knee height faces a person whose whole body fits inside the frame with headroom.</string>
+    <string name="guide_phone">Place the phone at knee height, level and steady.</string>
+    <string name="guide_body">Keep your whole body in frame, with space above your head.</string>
+    <string name="guide_face">Face the camera so both legs are visible.</string>
+    <string name="guide_fps">Use 60 frames per second if your phone allows it.</string>
+    <string name="guide_still">Stand still for one second before and after the jump.</string>
+    <string name="guide_light">Film in good light, with the light in front of you.</string>
+    <string name="continue_video">Continue to video</string>
 </resources>

@@ -13,10 +13,10 @@
     <string name="continue_offline">Продължи без интернет</string>
     <string name="privacy">Изпращат се само числовите резултати. Видеото и точките на тялото остават на това устройство.</string>
     <string name="home_title">Техника на приземяване</string>
-    <string name="guide_short">Поставете телефона хоризонтално на височината на коленете. Цялото тяло трябва да е в кадър, с място над главата. Използвайте 60 кадъра/сек.</string>
+    <string name="guide_short">Поставете телефона на височината на коленете, без наклон. Цялото тяло трябва да е в кадър, с място над главата. Използвайте 60 кадъра/сек.</string>
     <string name="choose_test">Изберете тест</string>
     <string name="cmj">Скок с предварително приклякане</string>
-    <string name="drop_jump">Скок след отскок от платформа</string>
+    <string name="drop_jump">Скок от платформа с отскок</string>
     <string name="record">Запис на видео</string>
     <string name="pick_video">Избор на видео</string>
     <string name="analysis_hint">Анализират се първите 10 секунди. Стойте неподвижно за кратко преди и след скока.</string>
@@ -107,4 +107,13 @@
     <string name="explain_knees">Сгъване при първия контакт и най-дълбоко сгъване през следващата половин секунда.</string>
     <string name="group_sides">Ляво / дясно</string>
     <string name="explain_sides">Сравнявайте движението на краката и качеството на проследяване със собствените си предишни скокове.</string>
+    <string name="filming_guide">Как да заснемете скока</string>
+    <string name="guide_diagram">Телефон без наклон на височината на коленете, насочен към човек с цяло тяло в кадър и място над главата.</string>
+    <string name="guide_phone">Поставете телефона стабилно на височината на коленете, без наклон.</string>
+    <string name="guide_body">Цялото тяло трябва да е в кадър, с място над главата.</string>
+    <string name="guide_face">Застанете с лице към камерата, така че и двата крака да се виждат.</string>
+    <string name="guide_fps">Използвайте 60 кадъра/сек, ако телефонът го позволява.</string>
+    <string name="guide_still">Стойте неподвижно по една секунда преди и след скока.</string>
+    <string name="guide_light">Снимайте на добре осветено място, със светлината пред вас.</string>
+    <string name="continue_video">Продължи към видеото</string>
 </resources>

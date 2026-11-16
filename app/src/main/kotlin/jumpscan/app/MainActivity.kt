@@ -203,12 +203,12 @@ class MainActivity : Activity() {
         }
         page.addView(types)
         button(getString(R.string.record)) {
-            launchVideo(Intent(MediaStore.ACTION_VIDEO_CAPTURE).putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1), 10)
+            filmingGuide { launchVideo(Intent(MediaStore.ACTION_VIDEO_CAPTURE).putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1), 10) }
         }
         button(getString(R.string.pick_video)) {
             val pick = if (Build.VERSION.SDK_INT >= 33) Intent(MediaStore.ACTION_PICK_IMAGES)
                 else Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-            launchVideo(pick.setType("video/*"), 11)
+            filmingGuide { launchVideo(pick.setType("video/*"), 11) }
         }
         text(getString(R.string.analysis_hint), 14)
         if (analysis != null) button(getString(R.string.last_result)) { result() }
@@ -225,6 +225,21 @@ class MainActivity : Activity() {
             }
         } else button(getString(R.string.sign_in)) { login() }
         text(getString(R.string.coach_note), 14)
+    }
+
+    private fun filmingGuide(continueAction: () -> Unit) {
+        layout(getString(R.string.filming_guide), "guide")
+        page.addView(ImageView(this).apply {
+            setImageResource(R.drawable.filming_guide)
+            contentDescription = getString(R.string.guide_diagram)
+            adjustViewBounds = true
+        }, LinearLayout.LayoutParams(-1, dp(140)))
+        for (line in listOf(R.string.guide_phone, R.string.guide_body, R.string.guide_face,
+                R.string.guide_fps, R.string.guide_still, R.string.guide_light)) {
+            text(getString(line)).setPadding(0, dp(8), 0, dp(8))
+        }
+        button(getString(R.string.continue_video), continueAction)
+        button(getString(R.string.cancel)) { home() }
     }
 
     @Suppress("DEPRECATION")
