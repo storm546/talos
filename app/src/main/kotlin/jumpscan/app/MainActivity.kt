@@ -182,7 +182,7 @@ class MainActivity : Activity() {
     private fun home(message: String? = null) {
         layout("Landing mechanics", "home")
         if (message != null) text(message, 15, Color.rgb(157, 45, 36))
-        text("Camera at knee height, facing the athlete, whole body in frame.")
+        text("Camera at knee height and level. Stand still with your whole body and space above your head in frame; use 60 fps.")
         text("Choose a test", 18)
         val types = RadioGroup(this)
         listOf("cmj" to "Countermovement jump", "drop_jump" to "Drop jump").forEach { (value, label) ->

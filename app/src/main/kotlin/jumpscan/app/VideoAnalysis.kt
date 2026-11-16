@@ -2,6 +2,8 @@ package jumpscan.app
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
@@ -37,14 +39,31 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
         val scale = minOf(1.0, 720.0 / max(displayWidth, displayHeight))
         val targetWidth = max(1, (displayWidth * scale).roundToInt())
         val targetHeight = max(1, (displayHeight * scale).roundToInt())
-        val frameCount = if (Build.VERSION.SDK_INT >= 28)
-            metadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)?.toLongOrNull() else null
-        // Frame count reflects playback timing, including slow-motion files. Capture rate may not.
-        val fps = if (frameCount != null && frameCount > 1) frameCount * 1000.0 / duration
-            else metadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toDoubleOrNull() ?: 30.0
-        require(fps.isFinite() && fps in 10.0..480.0) { "Use a video between 10 and 480 frames per second." }
         val limit = minOf(duration, 10_000L)
-        val count = kotlin.math.ceil(limit * fps / 1000).toInt()
+        val extractor = MediaExtractor()
+        val timesUs = try {
+            extractor.setDataSource(context, uri, null)
+            val track = (0 until extractor.trackCount).firstOrNull {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
+            } ?: error("This video has no video track.")
+            extractor.selectTrack(track)
+            val times = mutableListOf<Long>()
+            while (extractor.sampleTime >= 0 && extractor.sampleTime < limit * 1000) {
+                if (Thread.currentThread().isInterrupted) throw InterruptedException()
+                times += extractor.sampleTime
+                if (!extractor.advance()) break
+            }
+            // Sort presentation times because compressed samples may arrive in decoding order.
+            times.distinct().sorted()
+        } finally { extractor.release() }
+        require(timesUs.size >= 2) { "This video has too few frames." }
+        val fps = (timesUs.size - 1) * 1_000_000.0 / (timesUs.last() - timesUs.first())
+        require(fps.isFinite() && fps in 10.0..480.0) { "Use a video between 10 and 480 frames per second." }
+        // Core and VIDEO mode use milliseconds; reject samples that cannot have distinct timestamps.
+        require(timesUs.zipWithNext().all { (a, b) -> b / 1000 > a / 1000 }) {
+            "This video's frame timestamps are too close together. Try another video."
+        }
+        val count = timesUs.size
         val options = PoseLandmarker.PoseLandmarkerOptions.builder()
             .setBaseOptions(BaseOptions.builder().setModelAssetPath("pose_landmarker_lite.task").build())
             .setRunningMode(RunningMode.VIDEO)
@@ -57,14 +76,20 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
             var foundPerson = false
             for (index in 0 until count) {
                 if (Thread.currentThread().isInterrupted) throw InterruptedException()
-                val tMs = (index * 1000.0 / fps).toLong()
-                if (tMs >= limit) break
+                val timeUs = timesUs[index]
+                val tMs = timeUs / 1000
                 val raw = if (Build.VERSION.SDK_INT >= 27) {
-                    retriever.getScaledFrameAtTime(tMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST,
+                    retriever.getScaledFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST,
                         targetWidth, targetHeight)
                 } else {
-                    retriever.getFrameAtTime(tMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST)
+                    retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
                 } ?: error("Cannot decode this video. Try an MP4 video from your camera.")
+                // Retriever applies the display rotation; verify its bitmap aspect before using image coordinates.
+                require(kotlin.math.abs(raw.width.toDouble() / raw.height - aspect) < 0.01) {
+                    "Cannot decode this video's orientation. Try another video."
+                }
+                if (BuildConfig.DEBUG && index == 0) android.util.Log.d("JumpScan",
+                    "Decoded ${raw.width}x${raw.height}, rotation=$rotation, aspect=$aspect, samples=$count")
                 val resized = if (max(raw.width, raw.height) > 720) {
                     val factor = 720.0 / max(raw.width, raw.height)
                     Bitmap.createScaledBitmap(raw, max(1, (raw.width * factor).roundToInt()),

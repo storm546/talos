@@ -251,6 +251,47 @@ class JumpAnalyzerTest {
     }
 
     @Test
+    fun approachDoesNotSetGroundForASmallJump() {
+        val frames = clip(25, 3.0, parabola(1.5, 0.24)).map { f ->
+            if (f.tMs >= 800) f else f.copy(landmarks = f.landmarks.map { point ->
+                // The approach changes apparent scale and floor height, then ends before the standing reference.
+                point.copy(x = 0.5f + (point.x - 0.5f) * 1.3f, y = point.y * 1.3f - 0.1f)
+            })
+        }
+        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        assertEquals(1, result.flightCount)
+        assertEquals(1740.0, result.contactMs!!.toDouble(), 80.0)
+        assertEquals(240.0, result.metrics.flightTimeMs!!, 80.0)
+    }
+
+    @Test
+    fun variableTimesAndHiddenUpperBodyOrHeelKeepVisibleLegs() {
+        val frames = clip(25, 3.0, parabola(1.0, 0.4)).mapIndexed { index, f ->
+            f.copy(tMs = f.tMs + if (index % 2 == 0) 0 else 12,
+                landmarks = f.landmarks.mapIndexed { i, point ->
+                    if (i < 23 || i == 29 || i == 30) point.copy(visibility = 0f) else point
+                })
+        }
+        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        assertEquals(1, result.flightCount)
+        assertEquals(1400.0, result.contactMs!!.toDouble(), 80.0)
+        assertEquals(400.0, result.metrics.flightTimeMs!!, 80.0)
+        assertTrue(result.metrics.warnings.isEmpty())
+    }
+
+    @Test
+    fun settledHipSwayBeforeFootMotionIsNotFlight() {
+        val frames = clip(25, 2.0, { t -> if (t in 1.0..1.28) 0.02 else 0.0 }).map { f ->
+            f.copy(landmarks = f.landmarks.mapIndexed { index, point ->
+                // The hips finish rising before the apparent foot lift, as can happen with pose drift during sway.
+                if (index in 23..24) point.copy(y = (GROUND_Y - 0.04 - 2 * SEGMENT -
+                    if (f.tMs in 800..1280) 0.02 else 0.0).toFloat()) else point
+            })
+        }
+        assertNull(JumpAnalyzer.analyze(frames, "cmj").flightTimeMs)
+    }
+
+    @Test
     fun invalidInputThrows() {
         val frames = clip(60, 2.0, { 0.0 })
         assertThrows<IllegalArgumentException> { JumpAnalyzer.analyze(frames, "squat") }
