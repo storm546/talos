@@ -363,6 +363,22 @@ class JumpAnalyzerTest {
     }
 
     @Test
+    fun firstObservedFootContactEndsFlight() {
+        val leftLift = parabola(0.8, 0.5)
+        val rightLift = parabola(0.8, 0.6)
+        val frames = clip(60, 2.0, leftLift).map { f ->
+            val t = f.tMs / 1000.0
+            f.copy(landmarks = f.landmarks.mapIndexed { index, point ->
+                if (index in listOf(28, 30, 32))
+                    point.copy(y = (point.y + leftLift(t) - rightLift(t)).toFloat()) else point
+            })
+        }
+        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        assertEquals(1300.0, result.contactMs!!.toDouble(), 1000.0 / 60)
+        assertEquals(500.0, result.metrics.flightTimeMs!!, 40.0)
+    }
+
+    @Test
     fun movingCrouchWithPlantedFeetStillSuppliesGround() {
         // No 250 ms interval has still hips: preparation flows straight into the jump.
         val frames = clip(60, 1.5, parabola(0.5, 0.4), devL = { t ->

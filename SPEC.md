@@ -55,7 +55,9 @@ object JumpAnalyzer { fun analyze(frames: List<Frame>, test: String): JumpMetric
   recent reference at this floor and the preceding ground frame, so settled sway cannot supply ascent.
 - Airborne: both feet above ground level by a threshold scaled to body size (hip-to-ankle length).
   Smooth the signal first; pose data is jittery.
-- Analysed landing: the last airborne-to-ground transition. Initial contact is its first ground frame.
+- Analysed landing: the last airborne-to-ground transition. Initial contact is the first observed
+  frame where either measured foot crosses back through its floor clearance threshold. No fixed
+  frame correction is applied: delayed pose estimates do not identify an earlier physical contact.
 - A CMJ requires an observed take-off after an observed ground reference. A clip starting above a
   future floor reference cannot supply a CMJ. An explicitly selected `drop_jump` may start airborne;
   its initial drop landing has `jump_height_cm: null` because its take-off was not observed.
