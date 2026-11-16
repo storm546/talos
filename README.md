@@ -109,16 +109,15 @@ The pose model `pose_landmarker_heavy.task` ships in `app/src/main/assets/`. Deb
 
 ## Validation
 
-Accuracy is measured against laboratory reference data, not asserted. Numbers, method and limitations
-are written up under `docs/`; this table is the index. The write-ups are still being added there — until
-they land, the summary below is the measurement recorded in `ROADMAP.md` on 2026-11-16.
+Accuracy is measured against laboratory reference data, not asserted. The full write-up is
+`docs/validacia.md` (Bulgarian); this table is the summary.
 
 | What | Reference | Result | Details |
 |---|---|---|---|
-| Flight time, jump height | Force plate, lab dataset (40 jumps, 4 subjects) | about half a frame (17 ms) off when the pose is clean | `docs/` |
-| Knee flexion curve | Optical motion capture, same dataset | follows the reference curve, correlation 0.91–0.95, ~15° RMSE | `docs/` |
-| Detection rate | Public jump clips | 65 % of lab jumps detected from the front view | `docs/` |
-| Own filmed jumps | Manual frame labelling | pending | `docs/` |
+| Flight time, jump height | Force plate, lab dataset (40 jumps, 4 subjects) | 17 ms mean error (0.56 of a frame); 1.4 cm at a jump of about 17 cm | `docs/validacia.md` |
+| Knee flexion curve | Optical motion capture, same dataset | front view RMSE 16–17°, correlation 0.91–0.93; peaks about 12° low | `docs/validacia.md` |
+| Detection rate | Lab clips, front view | 65 % of jumps detected; short flights and pose dropouts are the failure cases | `docs/validacia.md` |
+| Own filmed jumps | Manual frame labelling | in progress | `docs/validacia.md` |
 
 The honest reading: the numbers are good for comparing an athlete with themselves over time, not for
 absolute angles, and side view is not supported yet.
