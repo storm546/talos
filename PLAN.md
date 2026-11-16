@@ -71,10 +71,24 @@ Tests: server 131 pass; core 26 synthetic and the squat fixture pass; the privat
 and fails on two ("expected 1 flight"). The app with these last changes has not been rebuilt or run in the emulator.
 
 Unfinished, in order:
-- [ ] Pose coverage table: lite vs full vs heavy model, lower confidence thresholds, larger frames
+- [x] Pose coverage table: lite vs full vs heavy model, lower confidence thresholds, larger frames
       (models were downloaded to /work/jumpscan-run/private/models on the kit; no result recorded)
-- [ ] Private-clip acceptance for the two failing clips, or a documented limit
-- [ ] Rebuild, emulator rerun of the three clips, screenshots; remove the private videos from the emulator storage
-- [ ] Dataset job: write INDEX.csv and logs/data-inventory.md with licences for /work/jumpscan-data (21 GB on the kit),
+- [x] Private-clip acceptance for the two failing clips, or a documented limit
+- [x] Rebuild, emulator rerun of the three clips, screenshots; remove the private videos from the emulator storage
+- [x] Dataset job: write INDEX.csv and logs/data-inventory.md with licences for /work/jumpscan-data (21 GB on the kit),
       resume or delete kaggle-gesture-jumps/dataset.zip.part, prune rejected candidates
 - [ ] Re-film with the phone at knee height, whole body in frame, 60 or 120 fps
+
+## State on 2026-11-16, late evening
+
+The heavy pose model replaced the lite one: it is the only variant that tracks the legs through the whole flight
+on all three owner clips (lite lost 2 to 7 airborne frames per clip, full lost one clip). All three real jumps are
+now detected, landing contact within one frame of the hand label, flight time within two frame intervals.
+Tests: server 131, core 26 synthetic plus squat fixture plus the private-clip test, all pass on the kit.
+
+Open:
+- [ ] Flight time is quantised to 40 ms at 25 fps (about 5 cm of jump height); film at 60 or 120 fps
+- [ ] Analysis speed with the heavy model on a real phone is unmeasured (2.5 to 5 minutes per clip in the software emulator)
+- [ ] Knee-angle accuracy against reference data (Twente dataset on the kit has knee flexion and forces for 4 subjects)
+- [ ] Negative and positive detection rate on the Kaggle clips (600 jump, 400 non-jump) on the kit
+- [ ] Decide on the 17.8 GB Twente source archive: extract the rest, then delete

@@ -112,7 +112,7 @@ Screens:
    "Pick video" (system photo picker). Shows a one-line filming guide: camera at knee height,
    facing the athlete, whole body in frame.
 3. Analysis: decode the clip frame by frame on a background thread, run Pose Landmarker
-   (`pose_landmarker_lite.task` bundled in assets, VIDEO mode), pass frames to `JumpAnalyzer`,
+   (`pose_landmarker_heavy.task` bundled in assets, VIDEO mode), pass frames to `JumpAnalyzer`,
    show progress.
 4. Result: the numbers of section 1 with plain labels and the warnings; "Upload" sends the JSON to
    `POST /api/jumps`. The video is never uploaded.

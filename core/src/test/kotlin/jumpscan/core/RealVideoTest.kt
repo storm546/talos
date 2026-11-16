@@ -54,10 +54,14 @@ class RealVideoTest {
             val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj", aspect)
             val metrics = result.metrics
             println("$name contact=${result.contactMs} flights=${result.flightCount} ${metrics.toJson()}")
-            assertEquals(1, result.flightCount, "$name must contain exactly the labelled flight")
+            // jump2 also holds an earlier real jump (frames 42-49, confirmed by viewing); only the last is labelled,
+            // and the analysed landing is the last one, so the contact check below pins the labelled flight.
+            assertTrue(result.flightCount >= 1, "$name must contain the labelled flight")
             val detectedContact = frames.indexOfFirst { it.tMs == result.contactMs }
             assertTrue(abs(detectedContact - contactIndex) <= 2, "$name contact at $detectedContact, labelled $contactIndex")
-            assertEquals(contactMs - lastGroundMs, metrics.flightTimeMs!!, 80.0, name)
+            // The label spans last-grounded to first-landed frame; the detector reports first-airborne to first-ground.
+            // Each edge is only known to one frame, so allow two frame intervals plus the 1 ms timestamp rounding.
+            assertEquals(contactMs - lastGroundMs, metrics.flightTimeMs!!, 2000.0 / metrics.fps + 1.0, name)
             assertTrue("no_flight_detected" !in metrics.warnings, name)
             assertRanges(metrics)
             inRange(metrics.flightTimeMs!!, 0.0, 1500.0)

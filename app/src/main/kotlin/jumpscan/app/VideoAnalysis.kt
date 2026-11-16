@@ -22,14 +22,7 @@ internal data class Analysis(val metrics: JumpMetrics, val truncated: Boolean)
 
 internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (Int) -> Unit): Analysis {
     val started = android.os.SystemClock.elapsedRealtime()
-    val trial = if (BuildConfig.DEBUG) java.io.File(context.getExternalFilesDir(null), "trial.txt")
-        .takeIf { it.exists() }?.readText()?.trim()?.split(",") else null
-    val longSide = trial?.getOrNull(2)?.toInt() ?: 720
-    val confidence = trial?.getOrNull(1)?.toFloat() ?: 0.5f
-    val model = trial?.getOrNull(0)?.takeIf { it != "lite" }?.let {
-        val bytes = java.io.File(context.getExternalFilesDir(null), "$it.task").readBytes()
-        java.nio.ByteBuffer.allocateDirect(bytes.size).put(bytes).apply { rewind() }
-    }
+    val longSide = 720
     val retriever = MediaMetadataRetriever()
     try {
         retriever.setDataSource(context, uri)
@@ -74,12 +67,10 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
         }
         val count = timesUs.size
         val options = PoseLandmarker.PoseLandmarkerOptions.builder()
-             .setBaseOptions(BaseOptions.builder().apply {
-                if (model == null) setModelAssetPath("pose_landmarker_lite.task") else setModelAssetBuffer(model)
-            }.build())
-            .setMinPoseDetectionConfidence(confidence)
-            .setMinPosePresenceConfidence(confidence)
-            .setMinTrackingConfidence(confidence)
+             .setBaseOptions(BaseOptions.builder().setModelAssetPath("pose_landmarker_heavy.task").build())
+            .setMinPoseDetectionConfidence(0.5f)
+            .setMinPosePresenceConfidence(0.5f)
+            .setMinTrackingConfidence(0.5f)
             .setRunningMode(RunningMode.VIDEO)
             .setNumPoses(1)
             .build()
