@@ -1,0 +1,4 @@
+// Plugin versions live here so :core (Kotlin JVM) and a later :app (AGP) share one classpath.
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.0.21' apply false
+}

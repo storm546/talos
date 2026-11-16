@@ -39,7 +39,8 @@ coordinates (x right, y down, 0–1), with visibility.
 
 ```kotlin
 data class Landmark(val x: Float, val y: Float, val z: Float, val visibility: Float)
-data class Frame(val tMs: Long, val landmarks: List<Landmark>)   // size 33, MediaPipe order
+data class Frame(val tMs: Long, val landmarks: List<Landmark>,   // size 33, MediaPipe order, normalised image
+                 val worldLandmarks: List<Landmark>)             // size 33, MediaPipe world landmarks, metres
 data class JumpMetrics(...)                                      // fields of section 1, camelCase
 fun JumpMetrics.toJson(): String                                 // snake_case keys of section 1, no library
 object JumpAnalyzer { fun analyze(frames: List<Frame>, test: String): JumpMetrics }
@@ -50,7 +51,9 @@ object JumpAnalyzer { fun analyze(frames: List<Frame>, test: String): JumpMetric
 - Airborne: both feet above ground level by a threshold scaled to body size (hip-to-ankle length).
   Smooth the signal first; pose data is jittery.
 - Analysed landing: the last airborne-to-ground transition. Initial contact is its first ground frame.
-- Knee flexion: 180 minus the hip-knee-ankle angle in the image plane.
+- Knee flexion: 180 minus the 3D hip-knee-ankle angle from the world landmarks. Seen from the front
+  the knee bends towards the camera, so the image plane alone cannot show it. Single-camera depth is
+  an estimate; the number is for comparing an athlete with themselves over time.
 - FPPA: angle between thigh (hip to knee) and shank (knee to ankle) projected on the image plane,
   signed so that medial knee displacement is positive for both legs.
 - Frames with missing or low-visibility leg landmarks are skipped, not guessed.
