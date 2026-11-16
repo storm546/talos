@@ -43,6 +43,7 @@
     <string name="uncertain_timing">Проследяването е прекъснато при отскока или приземяването. Времето във въздуха е изчислено по най-близките проследени кадри.</string>
     <string name="low_visibility">Тялото не се вижда достатъчно ясно. Тазът, коленете и стъпалата трябва да са в кадър.</string>
     <string name="no_flight_detected">Не е открит полет. Резултатите използват началото на видеото.</string>
+    <string name="single_leg_view">Страничен изглед: измерен е само по-добре видимият крак.</string>
     <string name="unknown_warning">Някои кадри не могат да бъдат анализирани надеждно. Опитайте да заснемете ново видео.</string>
     <string name="not_available">Няма данни</string>
     <string name="loading_history">Зареждане на историята…</string>

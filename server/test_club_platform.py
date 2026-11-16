@@ -432,3 +432,13 @@ def test_openapi_describes_new_endpoints(api):
     assert schema['info']['version'] == '2.0.0' and schema['info']['description']
     for _, endpoint, _ in PRIVATE:
         assert endpoint.replace('/users/1', '/users/{target_id}').replace('/athletes/1', '/athletes/{athlete_id}') in schema['paths']
+
+
+def test_side_view_jump_with_one_measured_leg_is_accepted():
+    from server.test_server import METRICS
+    side = {**METRICS, "knee_flexion_contact_r": None, "knee_flexion_peak_r": None, "fppa_peak_l": None,
+            "fppa_peak_r": None, "knee_ankle_ratio": None, "flexion_asymmetry_pct": None,
+            "warnings": ["single_leg_view"]}
+    assert main.Jump(**side).knee_flexion_peak_r is None
+    row = {**side, "created_at": "2026-11-16T00:00:00Z"}
+    assert main.summary([row])["metrics"]["knee_flexion_peak_mean"]["latest"] == side["knee_flexion_peak_l"]

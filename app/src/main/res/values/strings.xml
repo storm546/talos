@@ -43,6 +43,7 @@
     <string name="uncertain_timing">Tracking lost near take-off or landing: flight time uses the nearest observed frames.</string>
     <string name="low_visibility">Low visibility: keep hips, knees and feet in view.</string>
     <string name="no_flight_detected">No flight detected. Numbers use the start of the clip.</string>
+    <string name="single_leg_view">Side view: only the better-seen leg is measured.</string>
     <string name="unknown_warning">Some frames could not be analysed reliably. Try filming again.</string>
     <string name="not_available">Not available</string>
     <string name="loading_history">Loading history…</string>

@@ -418,6 +418,7 @@ class MainActivity : Activity() {
         else for (i in 0 until warnings.length()) text(when (warnings.getString(i)) {
             "low_fps" -> getString(R.string.low_fps)
             "uncertain_timing" -> getString(R.string.uncertain_timing)
+            "single_leg_view" -> getString(R.string.single_leg_view)
             "low_visibility" -> getString(R.string.low_visibility)
             "no_flight_detected" -> getString(R.string.no_flight_detected)
             else -> getString(R.string.unknown_warning)

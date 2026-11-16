@@ -158,8 +158,8 @@ class NewClub(StrictModel):
     _name = field_validator("name")(NewUser.valid_name.__func__)
 
 
-Angle = Annotated[float, Field(ge=0, le=180)]
-FrontalAngle = Annotated[float, Field(ge=-90, le=90)]
+Angle = Annotated[float | None, Field(ge=0, le=180)]
+FrontalAngle = Annotated[float | None, Field(ge=-90, le=90)]
 
 
 class Jump(StrictModel):
@@ -173,10 +173,10 @@ class Jump(StrictModel):
     knee_flexion_peak_r: Angle
     fppa_peak_l: FrontalAngle
     fppa_peak_r: FrontalAngle
-    knee_ankle_ratio: float = Field(ge=0, le=5)
-    flexion_asymmetry_pct: float = Field(ge=0, le=100)
+    knee_ankle_ratio: float | None = Field(ge=0, le=5)
+    flexion_asymmetry_pct: float | None = Field(ge=0, le=100)
     quality: float = Field(ge=0, le=1)
-    warnings: list[Literal["low_fps", "low_visibility", "no_flight_detected", "uncertain_timing"]] = Field(max_length=5)
+    warnings: list[Literal["low_fps", "low_visibility", "no_flight_detected", "uncertain_timing", "single_leg_view"]] = Field(max_length=5)
 
 
 def get_db(request: Request):
@@ -241,8 +241,10 @@ def jump_rows(db, athlete_id):
 
 def summary(rows):
     numeric = [key for key in Jump.model_fields if key not in ("test", "warnings")]
-    values = [{**row, "knee_flexion_peak_mean": (row["knee_flexion_peak_l"] + row["knee_flexion_peak_r"]) / 2}
-              for row in rows]
+    def peak_mean(row):  # side-view jumps measure one leg; the other is null
+        peaks = [v for v in (row["knee_flexion_peak_l"], row["knee_flexion_peak_r"]) if v is not None]
+        return sum(peaks) / len(peaks) if peaks else None
+    values = [{**row, "knee_flexion_peak_mean": peak_mean(row)} for row in rows]
     metrics = {}
     for key in [*numeric, "knee_flexion_peak_mean"]:
         first = [row[key] for row in values[:3] if row[key] is not None]
