@@ -87,7 +87,7 @@ docker compose up -d --build      # http://127.0.0.1:8160/
 ## Tests
 
 ```sh
-server/.venv/bin/python -m pytest server -q      # 131 server tests
+server/.venv/bin/python -m pytest server -q      # 252 server tests
 ./gradlew --no-daemon :core:test                 # core tests, JDK 17
 ```
 
@@ -116,11 +116,12 @@ Accuracy is measured against laboratory reference data, not asserted. The full w
 |---|---|---|---|
 | Flight time, jump height | Force plate, lab dataset (40 jumps, 4 subjects) | 17 ms mean error (0.56 of a frame); 1.4 cm at a jump of about 17 cm | `docs/validacia.md` |
 | Knee flexion curve | Optical motion capture, same dataset | front view RMSE 16–17°, correlation 0.91–0.93; peaks about 12° low | `docs/validacia.md` |
-| Detection rate | Lab clips, front view | 65 % of jumps detected; short flights and pose dropouts are the failure cases | `docs/validacia.md` |
-| Own filmed jumps | Manual frame labelling | in progress | `docs/validacia.md` |
+| Detection rate | Lab clips | right jump found in 28 of 40 (front, no spurious results) and 20 of 40 (side) | `docs/validacia.md` |
+| False alarms | 400 public webcam clips without a jump | 3–7 % | `docs/validacia.md` |
+| Own filmed jumps | Manual frame labelling | all three found; landing within one frame | `docs/validacia.md` |
 
 The honest reading: the numbers are good for comparing an athlete with themselves over time, not for
-absolute angles, and side view is not supported yet.
+absolute angles; in side view one leg is measured and flight timing is only indicative.
 
 ## Privacy
 
