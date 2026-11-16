@@ -51,10 +51,17 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (!openVideo(intent)) {
+        val retained = lastNonConfigurationInstance as? RetainedResult
+        if (retained != null) { analysis = retained.analysis; uploadedId = retained.uploadedId; test = retained.test }
+        if (analysis != null) result() else if (!openVideo(intent)) {
             if (token().isEmpty()) login() else home()
         }
     }
+
+    private data class RetainedResult(val analysis: Analysis?, val uploadedId: Long?, val test: String)
+
+    @Deprecated("Uses the platform non-configuration state API")
+    override fun onRetainNonConfigurationInstance(): Any = RetainedResult(analysis, uploadedId, test)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -258,6 +265,23 @@ class MainActivity : Activity() {
         text(if (current.metrics.test == "cmj") getString(R.string.cmj) else getString(R.string.drop_jump), 18)
         if (current.truncated) text(getString(R.string.truncated), 14)
         text(getString(R.string.depth_note), 14)
+        text(getString(if (current.contactFound) R.string.landing_frame else R.string.peak_frame), 18)
+        page.addView(ImageView(this).apply {
+            setImageBitmap(current.preview)
+            adjustViewBounds = true
+            maxHeight = dp(330)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = getString(R.string.skeleton_description)
+        }, LinearLayout.LayoutParams(-1, -2))
+        val legend = LinearLayout(this)
+        for ((label, color) in listOf(R.string.left_blue to LEFT_COLOR, R.string.right_orange to RIGHT_COLOR)) {
+            legend.addView(TextView(this).apply {
+                text = getString(label); textSize = 14f
+                setTextColor(if (color == LEFT_COLOR) Color.rgb(0, 78, 162) else Color.rgb(139, 76, 0))
+                setPadding(0, dp(8), dp(16), dp(8))
+            })
+        }
+        page.addView(legend)
         metricRows(JSONObject(current.metrics.toJson()))
         if (uploadedId == null) button(if (token().isEmpty()) getString(R.string.sign_in_upload) else getString(R.string.upload)) {
             if (token().isEmpty()) login() else {
@@ -274,7 +298,16 @@ class MainActivity : Activity() {
     }
 
     private fun metricRows(json: JSONObject) {
-        labels.forEach { (key, label) ->
+        val groups = listOf(
+            Triple(R.string.group_jump, R.string.explain_jump, listOf("flight_time_ms", "jump_height_cm", "fps")),
+            Triple(R.string.group_knees, R.string.explain_knees, listOf("knee_flexion_contact_l", "knee_flexion_contact_r", "knee_flexion_peak_l", "knee_flexion_peak_r", "fppa_peak_l", "fppa_peak_r")),
+            Triple(R.string.group_sides, R.string.explain_sides, listOf("knee_ankle_ratio", "flexion_asymmetry_pct", "quality"))
+        )
+        for ((heading, explanation, keys) in groups) {
+            text(getString(heading), 21).setPadding(0, dp(20), 0, dp(4))
+            text(getString(explanation), 14)
+            for (key in keys) {
+            val label = labels.getValue(key)
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -290,6 +323,7 @@ class MainActivity : Activity() {
                 setPadding(dp(12), 0, 0, 0)
             })
             page.addView(row, LinearLayout.LayoutParams(-1, -2))
+        }
         }
         val warnings = json.optJSONArray("warnings") ?: JSONArray()
         if (warnings.length() == 0) text(getString(R.string.no_warnings), 14, green)

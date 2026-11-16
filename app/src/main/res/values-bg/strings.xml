@@ -96,4 +96,15 @@
     <string name="history_numbers">%1$s\nМаксимално сгъване ляво / дясно: %2$s° / %3$s°\nРазстояние колене / глезени: %4$s</string>
     <string name="view_jump">Резултати за скок №%1$d</string>
     <string name="jump_title">Скок №%1$d</string>
+    <string name="landing_frame">Първи контакт със земята</string>
+    <string name="peak_frame">Максимално сгъване · не е открито приземяване</string>
+    <string name="skeleton_description">Кадър с откритите тазобедрени стави, колене, глезени и стъпала. Левият крак е в синьо, десният — в оранжево. Скритите точки не са показани.</string>
+    <string name="left_blue">Ляво · синьо</string>
+    <string name="right_orange">Дясно · оранжево</string>
+    <string name="group_jump">Скок</string>
+    <string name="explain_jump">Време във въздуха и височина, изчислена от него.</string>
+    <string name="group_knees">Колене при приземяване</string>
+    <string name="explain_knees">Сгъване при първия контакт и най-дълбоко сгъване през следващата половин секунда.</string>
+    <string name="group_sides">Ляво / дясно</string>
+    <string name="explain_sides">Сравнявайте движението на краката и качеството на проследяване със собствените си предишни скокове.</string>
 </resources>

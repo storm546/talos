@@ -96,4 +96,15 @@
     <string name="history_numbers">%1$s\nPeak flexion L / R: %2$s° / %3$s°\nKnee / ankle separation: %4$s</string>
     <string name="view_jump">View numbers for jump #%1$d</string>
     <string name="jump_title">Jump #%1$d</string>
+    <string name="landing_frame">Initial contact</string>
+    <string name="peak_frame">Peak knee flexion · no landing found</string>
+    <string name="skeleton_description">Video frame with detected hips, knees, ankles and feet. Left leg in blue, right leg in orange. Hidden points are omitted.</string>
+    <string name="left_blue">Left · blue</string>
+    <string name="right_orange">Right · orange</string>
+    <string name="group_jump">Jump</string>
+    <string name="explain_jump">Time in the air and height estimated from that time.</string>
+    <string name="group_knees">Knees at landing</string>
+    <string name="explain_knees">Bending at first contact and the deepest bend within the next half second.</string>
+    <string name="group_sides">Left / right</string>
+    <string name="explain_sides">Compare leg movement and tracking quality against your own previous jumps.</string>
 </resources>

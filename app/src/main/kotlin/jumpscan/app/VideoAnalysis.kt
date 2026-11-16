@@ -12,13 +12,14 @@ import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import jumpscan.core.Frame
-import jumpscan.core.JumpAnalyzer
+import jumpscan.core.toJson
 import jumpscan.core.JumpMetrics
 import jumpscan.core.Landmark
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-internal data class Analysis(val metrics: JumpMetrics, val truncated: Boolean)
+internal data class Analysis(val metrics: JumpMetrics, val truncated: Boolean,
+    val preview: Bitmap, val contactFound: Boolean)
 
 internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (Int) -> Unit): Analysis {
     val started = android.os.SystemClock.elapsedRealtime()
@@ -133,12 +134,20 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
                 }
             }
             if (BuildConfig.DEBUG) android.util.Log.d("JumpScan", "Analysis elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
-            val metrics = try { JumpAnalyzer.analyze(frames, test, aspect) }
+            val landing = try { CoreLanding(frames, test, aspect) }
                 catch (_: IllegalArgumentException) {
                     throw AppError(R.string.too_few_clear_frames)
                 }
+            val previewFrame = landing.contactMs?.let { time -> frames.first { it.tMs == time } }
+                ?: peakFlexionFrame(frames)
+            val rawPreview = (if (Build.VERSION.SDK_INT >= 27) retriever.getScaledFrameAtTime(previewFrame.tMs * 1000,
+                MediaMetadataRetriever.OPTION_CLOSEST, targetWidth, targetHeight)
+                else retriever.getFrameAtTime(previewFrame.tMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST))
+                ?: throw AppError(R.string.decode_error)
+            val preview = try { landingPreview(rawPreview, previewFrame) } finally { rawPreview.recycle() }
+            if (BuildConfig.DEBUG) android.util.Log.d("JumpScan", "Metrics ${landing.metrics.toJson()} contactMs=${landing.contactMs} previewMs=${previewFrame.tMs}")
             // Container duration can extend past the last frame; warn only for at least one omitted frame.
-            return Analysis(metrics, duration - limit > 1000.0 / fps)
+            return Analysis(landing.metrics, duration - limit > 1000.0 / fps, preview, landing.contactMs != null)
         } finally { landmarker.close() }
     } finally { retriever.release() }
 }
