@@ -15,7 +15,9 @@ object JumpAnalyzer {
     private const val AIRBORNE_FRACTION = 0.025  // feet must be this fraction of leg length above ground; small, so flight is only slightly underestimated
     private const val MIN_AIRBORNE_FRAMES = 2    // a single airborne frame is jitter, not a jump
     private const val WINDOW_MS = 500L           // landing window after initial contact
-    private const val MAX_FLIGHT_MS = 1500.0     // longer "flight" means take-off (e.g. a box) was not observed
+    private const val MAX_FLIGHT_MS = 1000.0     // a longer airborne run is not a jump (122.6 cm, inside the server's 150 cm limit)
+    private const val MAX_GAP_FACTOR = 1.5       // a time step above this many median frame intervals means dropped frames
+    private const val PRE_RUN_MS = 500L          // hips of the frames this long before a run give the standing hip height
     private const val LOW_FPS = 24.0
     private const val LOW_QUALITY = 0.7
     private const val G = 9.81
@@ -68,25 +70,42 @@ object JumpAnalyzer {
         val legLength = median(poses.map { (dist(it, LEFT.hip, LEFT.ankle) + dist(it, RIGHT.hip, RIGHT.ankle)) / 2 })
         val airborne = footY.map { ground - it > AIRBORNE_FRACTION * legLength }
 
-        // Airborne runs that end with feet back on the ground: (first airborne frame, first ground frame).
-        val runs = mutableListOf<Pair<Int, Int>>()
+        // Frames dropped for low visibility leave time gaps; flight must never be measured across one.
+        val medianStepMs = median(t.zipWithNext { a, b -> (b - a).toDouble() })
+        val gapBefore = BooleanArray(n) { it > 0 && t[it] - t[it - 1] > MAX_GAP_FACTOR * medianStepMs }
+        val hipY = poses.map { (it.y[LEFT.hip] + it.y[RIGHT.hip]) / 2 }
+
+        // Candidate runs: (first airborne frame, first ground frame), consecutive airborne frames only.
+        val candidates = mutableListOf<Pair<Int, Int>>()
         var i = 0
         while (i < n) {
             if (!airborne[i]) { i++; continue }
-            var j = i
-            while (j < n && airborne[j]) j++
-            if (j < n && j - i >= MIN_AIRBORNE_FRAMES) runs += i to j
+            var j = i + 1
+            while (j < n && airborne[j] && !gapBefore[j]) j++
+            if (j < n && j - i >= MIN_AIRBORNE_FRAMES) candidates += i to j
             i = j
         }
-        val landing = runs.lastOrNull()
-        // No landing found: analyse from the first frame instead of guessing.
+
+        fun isFlight(s: Int, e: Int): Boolean {
+            if (gapBefore[s] || gapBefore[e]) return false                  // cut by a gap: start or landing not seen
+            if (t[e] - t[s] > MAX_FLIGHT_MS) return false                    // too long to be a jump
+            val before = (0 until s).filter { t[it] >= t[s] - PRE_RUN_MS }
+            if (before.isEmpty()) return true                                // clip starts airborne (drop landing): nothing to compare
+            // The body must rise: highest mid-hip in the run vs median mid-hip just before it (y points down).
+            val rise = median(before.map { hipY[it] }) - (s until e).minOf { hipY[it] }
+            return rise >= AIRBORNE_FRACTION * legLength
+        }
+
+        // Analysed landing: the last valid airborne-to-ground transition. No valid one (including rejected
+        // candidates) means no_flight_detected; then analyse from the first frame instead of guessing.
+        val landing = candidates.lastOrNull { (s, e) -> isFlight(s, e) }
         val contact = landing?.second ?: 0
 
-        // Flight time: from first airborne frame to first ground frame of the last run.
-        val flightMs = landing?.let { (s, e) -> (t[e] - t[s]).toDouble() }?.takeIf { it <= MAX_FLIGHT_MS }
+        // Flight time: from first airborne frame to first ground frame of the landing run.
+        val flightMs = landing?.let { (s, e) -> (t[e] - t[s]).toDouble() }
         // Height from flight time: h = g * t^2 / 8 (rise and fall take t/2 each). Not available when take-off
-        // was not seen (run starts with the clip) or, for a drop jump, when there was no earlier landing to rebound from.
-        val rebound = landing != null && landing.first > 0 && (test == "cmj" || runs.size > 1)
+        // was not seen (run starts with the clip) or, for a drop jump, when no earlier landing exists to rebound from.
+        val rebound = landing != null && landing.first > 0 && (test == "cmj" || candidates.indexOf(landing) > 0)
         val heightCm = if (flightMs != null && rebound) G * (flightMs / 1000).pow(2) / 8 * 100 else null
 
         val window = (contact until n).takeWhile { t[it] <= t[contact] + WINDOW_MS }

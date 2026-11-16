@@ -196,10 +196,48 @@ class JumpAnalyzerTest {
     }
 
     @Test
+    fun runCutByVisibilityGapIsRejected() {
+        val good = clip(60, 2.0, parabola(0.8, 0.5))
+        fun hide(from: Double, to: Double) = good.map { f ->
+            if (f.tMs in (from * 1000).toLong() until (to * 1000).toLong()) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0.1f) }) else f
+        }
+        for (m in listOf(hide(1.0, 1.1), hide(1.25, 1.35))) {   // gap in the middle; gap at the landing
+            val metrics = JumpAnalyzer.analyze(m, "cmj")
+            assertNull(metrics.flightTimeMs)
+            assertTrue("no_flight_detected" in metrics.warnings)
+        }
+    }
+
+    @Test
+    fun pushUpPhaseIsNotFlight() {
+        // 0.4-1.2 s: feet up in the image but hips lower (push-up position); real 400 ms jump at 1.6 s.
+        val good = clip(120, 3.0, { t -> if (t in 0.4..1.2) 0.12 else parabola(1.6, 0.4)(t) })
+        fun pushUp(visible: Boolean) = good.map { f ->
+            val inPhase = f.tMs in 400..1199
+            val lms = if (inPhase) f.landmarks.mapIndexed { i, l -> if (i in 23..24) l.copy(y = l.y + 0.2f) else l } else f.landmarks
+            f.copy(landmarks = if (inPhase && !visible) lms.map { it.copy(visibility = 0.1f) } else lms)
+        }
+        for (visible in listOf(true, false)) {
+            val m = JumpAnalyzer.analyze(pushUp(visible), "cmj")
+            assertEquals(400.0, m.flightTimeMs!!, 40.0)
+            assertTrue(m.warnings.isEmpty())
+        }
+    }
+
+    @Test
+    fun tooLongFlightIsRejectedWithWarning() {
+        val m = JumpAnalyzer.analyze(clip(60, 3.0, parabola(0.5, 1.2, metresPerImageHeight = 6.0)), "cmj")
+        assertNull(m.flightTimeMs)
+        assertNull(m.jumpHeightCm)
+        assertTrue("no_flight_detected" in m.warnings)
+    }
+
+    @Test
     fun lowVisibilityFramesAreSkipped() {
         val good = clip(60, 2.0, parabola(0.8, 0.5))
         val bad = good.mapIndexed { i, f ->
-            if (i % 4 == 1) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0.1f) }) else f
+            // every 4th frame hidden, but not during the flight (0.8-1.3 s): a gap there would reject the run
+            if (i % 4 == 1 && (f.tMs < 700 || f.tMs > 1400)) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0.1f) }) else f
         }
         val m = JumpAnalyzer.analyze(bad, "cmj")
         assertEquals(500.0, m.flightTimeMs!!, 60.0)

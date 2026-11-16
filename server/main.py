@@ -167,6 +167,44 @@ def require_role(user, *roles):
         raise HTTPException(403, "Not permitted for this role")
 
 
+class RequestBodyLimit:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        too_large = JSONResponse(status_code=413, content={"detail": "Request body too large"})
+        for name, value in scope["headers"]:
+            if name.lower() == b"content-length":
+                try:
+                    if int(value) > 16 * 1024:
+                        return await too_large(scope, receive, send)
+                except ValueError:
+                    pass
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            chunk = message.get("body", b"")
+            if len(body) + len(chunk) > 16 * 1024:
+                return await too_large(scope, receive, send)
+            body.extend(chunk)
+            if not message.get("more_body", False):
+                break
+
+        async def buffered_receive():
+            nonlocal body
+            if body is not None:
+                message = {"type": "http.request", "body": bytes(body), "more_body": False}
+                body = None
+                return message
+            return await receive()
+
+        await self.app(scope, buffered_receive, send)
+
+
 def create_app(db_path=None):
     @asynccontextmanager
     async def lifespan(app):
@@ -175,6 +213,7 @@ def create_app(db_path=None):
 
     app = FastAPI(title="JumpScan", lifespan=lifespan, debug=False)
     app.state.db_path = db_path if db_path is not None else database_path()
+    app.add_middleware(RequestBodyLimit)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, exc):
@@ -201,16 +240,25 @@ def create_app(db_path=None):
     @app.post("/api/auth/login")
     def login(body: Login, db: sqlite3.Connection = Depends(get_db)):
         now = time.time()
-        # Serialize checks and failure inserts so concurrent attempts cannot bypass the limit.
+        # Keep write transactions short; scrypt must not hold the write lock.
         db.execute("BEGIN IMMEDIATE")
-        db.execute("DELETE FROM login_failures WHERE email = ? AND failed_at <= ?", (body.email, now - 900))
+        db.execute("DELETE FROM login_failures WHERE failed_at <= ?", (now - 900,))
         failures = db.execute("SELECT COUNT(*) FROM login_failures WHERE email = ?", (body.email,)).fetchone()[0]
+        db.commit()
         if failures >= 5:
-            db.commit()
             raise HTTPException(429, "Too many failed logins; try again later", headers={"Retry-After": "900"})
         user = db.execute("SELECT * FROM users WHERE email = ?", (body.email,)).fetchone()
         salt, expected = (user["password_salt"], user["password_hash"]) if user else (DUMMY_SALT, DUMMY_HASH)
         matches = hmac.compare_digest(password_hash(body.password, salt), expected)
+        # Recheck under the write lock so concurrent hashes cannot bypass the limit.
+        now = time.time()
+        db.execute("BEGIN IMMEDIATE")
+        failures = db.execute(
+            "SELECT COUNT(*) FROM login_failures WHERE email = ? AND failed_at > ?", (body.email, now - 900),
+        ).fetchone()[0]
+        if failures >= 5:
+            db.commit()
+            raise HTTPException(429, "Too many failed logins; try again later", headers={"Retry-After": "900"})
         if not matches or user is None:
             db.execute("INSERT INTO login_failures(email, failed_at) VALUES (?, ?)", (body.email, now))
             db.commit()
@@ -219,11 +267,13 @@ def create_app(db_path=None):
         token = secrets.token_urlsafe(32)
         db.execute("INSERT INTO tokens(token_hash, user_id, expires_at) VALUES (?, ?, ?)",
                    (token_hash(token), user["id"], now + 30 * 86400))
+        db.commit()
         return {"token": token, "user": public_user(user)}
 
     @app.post("/api/auth/logout", status_code=204)
     def logout(authorization: Annotated[str, Header()], user=Depends(current_user), db=Depends(get_db)):
         db.execute("DELETE FROM tokens WHERE token_hash = ?", (token_hash(authorization.split()[1]),))
+        db.commit()
 
     @app.get("/api/me")
     def me(user=Depends(current_user)):
@@ -245,16 +295,19 @@ def create_app(db_path=None):
             )
         except sqlite3.IntegrityError:
             raise HTTPException(409, "Email already exists") from None
+        db.commit()
         return {"id": cursor.lastrowid, "name": body.name, "role": body.role, "club_id": club_id}
 
     @app.get("/api/athletes")
-    def athletes(user=Depends(current_user), db=Depends(get_db)):
+    def athletes(limit: Annotated[int, Query(ge=1, le=500)] = 100,
+                 offset: Annotated[int, Query(ge=0)] = 0, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         rows = db.execute(
             "SELECT users.id, users.name, users.club_id, COUNT(jumps.id) AS jump_count, "
             "MAX(jumps.created_at) AS last_jump_at FROM users LEFT JOIN jumps ON jumps.athlete_id = users.id "
             "WHERE users.role = 'athlete' AND (? = 'admin' OR users.club_id = ?) "
-            "GROUP BY users.id ORDER BY users.name, users.id", (user["role"], user["club_id"]),
+            "GROUP BY users.id ORDER BY users.name, users.id LIMIT ? OFFSET ?",
+            (user["role"], user["club_id"], limit, offset),
         ).fetchall()
         return [dict(row) for row in rows]
 
@@ -264,25 +317,27 @@ def create_app(db_path=None):
         created_at = datetime.now(timezone.utc).isoformat()
         cursor = db.execute("INSERT INTO jumps(athlete_id, created_at, metrics) VALUES (?, ?, ?)",
                             (user["id"], created_at, body.model_dump_json()))
+        db.commit()
         return {"id": cursor.lastrowid, "created_at": created_at}
 
     @app.get("/api/jumps")
-    def jumps(athlete_id: Annotated[int | None, Query(gt=0)] = None, user=Depends(current_user), db=Depends(get_db)):
+    def jumps(athlete_id: Annotated[int | None, Query(gt=0)] = None,
+              limit: Annotated[int, Query(ge=1, le=500)] = 100,
+              offset: Annotated[int, Query(ge=0)] = 0, user=Depends(current_user), db=Depends(get_db)):
         if user["role"] == "athlete":
             if athlete_id is not None and athlete_id != user["id"]:
                 raise HTTPException(403, "Athletes can read their own data only")
             athlete_id = user["id"]
         if athlete_id is not None:
             athlete = db.execute("SELECT role, club_id FROM users WHERE id = ?", (athlete_id,)).fetchone()
-            if athlete is None or athlete["role"] != "athlete":
+            if (athlete is None or athlete["role"] != "athlete"
+                    or (user["role"] == "coach" and athlete["club_id"] != user["club_id"])):
                 raise HTTPException(404, "Athlete not found")
-            if user["role"] == "coach" and athlete["club_id"] != user["club_id"]:
-                raise HTTPException(403, "Athlete belongs to another club")
         rows = db.execute(
             "SELECT jumps.* FROM jumps JOIN users ON users.id = jumps.athlete_id "
             "WHERE (? IS NULL OR jumps.athlete_id = ?) AND (? != 'coach' OR users.club_id = ?) "
-            "ORDER BY jumps.created_at DESC, jumps.id DESC",
-            (athlete_id, athlete_id, user["role"], user["club_id"]),
+            "ORDER BY jumps.created_at DESC, jumps.id DESC LIMIT ? OFFSET ?",
+            (athlete_id, athlete_id, user["role"], user["club_id"], limit, offset),
         ).fetchall()
         return [{"id": row["id"], "athlete_id": row["athlete_id"], "created_at": row["created_at"],
                  **json.loads(row["metrics"])} for row in rows]
@@ -291,6 +346,7 @@ def create_app(db_path=None):
     def delete_data(user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "athlete")
         db.execute("DELETE FROM jumps WHERE athlete_id = ?", (user["id"],))
+        db.commit()
 
     return app
 

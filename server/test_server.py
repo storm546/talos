@@ -2,10 +2,12 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+import asyncio
 import hashlib
 import json
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -153,6 +155,42 @@ def test_concurrent_failures_cannot_bypass_limit(api):
         statuses = list(pool.map(attempt, range(8)))
     assert statuses.count(401) == 5
     assert statuses.count(429) == 3
+
+
+@pytest.mark.parametrize("email,password,status", [
+    ("coach@demo.test", "demo1234", 200),
+    ("coach@demo.test", "wrong", 401),
+    ("absent@demo.test", "wrong", 401),
+])
+def test_login_hash_runs_without_sqlite_write_lock(api, monkeypatch, email, password, status):
+    client, path = api
+    original_hash = main.password_hash
+    hashes = []
+
+    def hash_without_lock(password, salt):
+        with sqlite3.connect(path, timeout=0) as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("INSERT INTO login_failures VALUES ('unrelated@demo.test', ?)", (time.time(),))
+        hashes.append(salt)
+        return original_hash(password, salt)
+
+    monkeypatch.setattr(main, "password_hash", hash_without_lock)
+    response = client.post("/api/auth/login", json={"email": email, "password": password})
+    assert response.status_code == status
+    assert len(hashes) == 1
+
+
+def test_login_purges_expired_failures_for_all_emails(api):
+    client, path = api
+    with main.database(path) as db:
+        db.executemany("INSERT INTO login_failures VALUES (?, ?)", [
+            ("old1@demo.test", time.time() - 901),
+            ("old2@demo.test", time.time() - 1800),
+            ("recent@demo.test", time.time()),
+        ])
+    assert client.post("/api/auth/login", json={"email": "coach@demo.test", "password": "demo1234"}).status_code == 200
+    with main.database(path) as db:
+        assert [row[0] for row in db.execute("SELECT email FROM login_failures")] == ["recent@demo.test"]
 
 
 def test_success_resets_failed_login_count(api):
@@ -330,8 +368,8 @@ def test_unfiltered_history_obeys_scope(api, auth, account, count):
 
 @pytest.mark.parametrize("account,target,status", [
     ("athlete1", "athlete1", 200), ("athlete1", "athlete2", 403), ("athlete1", "athlete3", 403),
-    ("coach", "athlete1", 200), ("coach", "athlete3", 403),
-    ("coach2", "athlete1", 403), ("coach2", "athlete3", 200),
+    ("coach", "athlete1", 200), ("coach", "athlete3", 404),
+    ("coach2", "athlete1", 404), ("coach2", "athlete3", 200),
     ("admin", "athlete1", 200), ("admin", "athlete3", 200),
 ])
 def test_object_access_for_history(api, auth, account, target, status):
@@ -348,11 +386,181 @@ def test_history_checks_objects_even_when_empty(api, auth):
     client, path = api
     with main.database(path) as db:
         db.execute("DELETE FROM jumps WHERE athlete_id = ?", (user_id(path, "athlete3"),))
-    assert client.get("/api/jumps", params={"athlete_id": user_id(path, "athlete3")}, headers=auth("coach")).status_code == 403
+    assert client.get("/api/jumps", params={"athlete_id": user_id(path, "athlete3")}, headers=auth("coach")).status_code == 404
     assert client.get("/api/jumps", params={"athlete_id": 99999}, headers=auth("admin")).status_code == 404
     assert client.get("/api/jumps", params={"athlete_id": user_id(path, "coach")}, headers=auth("admin")).status_code == 404
     for value in ("1 OR 1=1", "-1", "0", "1.5"):
         assert client.get("/api/jumps", params={"athlete_id": value}, headers=auth("admin")).status_code == 422
+
+
+@pytest.mark.parametrize("account,other_athlete", [("coach", "athlete3"), ("coach2", "athlete1")])
+def test_coach_history_not_found_is_uniform(api, auth, account, other_athlete):
+    client, path = api
+    headers = auth(account)
+    for target in (99999, user_id(path, "coach"), user_id(path, "admin"), user_id(path, other_athlete)):
+        response = client.get("/api/jumps", params={"athlete_id": target}, headers=headers)
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Athlete not found"}
+
+
+@pytest.fixture(params=["login", "logout", "add_user", "add_jump", "delete_data"])
+def write_request(api, auth, request):
+    client, path = api
+    operation = request.param
+    headers = {} if operation == "login" else auth("coach" if operation == "add_user" else "athlete1")
+    method, endpoint, body, table, change, status = {
+        "login": ("POST", "/api/auth/login", {"email": "coach@demo.test", "password": "demo1234"}, "tokens", 1, 200),
+        "logout": ("POST", "/api/auth/logout", None, "tokens", -1, 204),
+        "add_user": ("POST", "/api/users", new_user(), "users", 1, 201),
+        "add_jump": ("POST", "/api/jumps", METRICS, "jumps", 1, 201),
+        "delete_data": ("DELETE", "/api/me/data", None, "jumps", -10, 204),
+    }[operation]
+    with main.database(path) as db:
+        before = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+    return {"method": method, "url": endpoint, "json": body, "headers": headers}, table, before, change, status
+
+
+def test_writes_are_durable_before_response_starts(api, write_request):
+    client, path = api
+    arguments, table, before, change, status = write_request
+    observed = []
+
+    async def observe_response(scope, receive, send):
+        async def observe_send(message):
+            if message["type"] == "http.response.start":
+                with main.database(path) as db:
+                    observed.append(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+            await send(message)
+        await client.app(scope, receive, observe_send)
+
+    with TestClient(observe_response, raise_server_exceptions=False) as observer:
+        response = observer.request(**arguments)
+    assert response.status_code == status
+    assert observed == [before + change]
+
+
+def test_commit_failure_cannot_report_success(api, write_request):
+    client, path = api
+    arguments, table, before, _, _ = write_request
+
+    class FailingCommit(sqlite3.Connection):
+        def commit(self):
+            if self.total_changes:
+                raise sqlite3.OperationalError("simulated commit failure")
+            super().commit()
+
+    def failing_db():
+        db = sqlite3.connect(path, check_same_thread=False, factory=FailingCommit)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA foreign_keys = ON")
+        try:
+            yield db
+            db.commit()
+        finally:
+            db.close()
+
+    client.app.dependency_overrides[main.get_db] = failing_db
+    try:
+        response = client.request(**arguments)
+    finally:
+        client.app.dependency_overrides.clear()
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error"}
+    with main.database(path) as db:
+        assert db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == before
+
+
+@pytest.mark.parametrize("endpoint", ["/api/auth/login", "/api/users", "/api/jumps"])
+@pytest.mark.parametrize("chunked", [False, True])
+def test_oversize_body_is_rejected_before_json_parsing(api, endpoint, chunked):
+    client, _ = api
+    body = b"{" + b"x" * (16 * 1024)
+    content = iter([body[:8192], body[8192:]]) if chunked else body
+    response = client.post(endpoint, content=content, headers={"Content-Type": "application/json"})
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Request body too large"}
+
+
+def test_body_limit_accepts_exactly_16_kib(api):
+    client, _ = api
+    body = json.dumps({"email": "coach@demo.test", "password": "demo1234"}).encode()
+    body += b" " * (16 * 1024 - len(body))
+    assert client.post("/api/auth/login", content=body, headers={"Content-Type": "application/json"}).status_code == 200
+    assert client.post("/api/auth/login", content=body + b" ", headers={"Content-Type": "application/json"}).status_code == 413
+
+
+@pytest.mark.parametrize("content_length,expected_reads", [(b"16385", 0), (None, 2), (b"1", 2)])
+def test_body_limit_stops_reading_as_soon_as_oversize(content_length, expected_reads):
+    messages, reads = [], []
+    chunks = iter([b"x" * 8192, b"x" * 8193, b"unread remainder"])
+
+    async def downstream(scope, receive, send):
+        pytest.fail("Oversize request reached the parser")
+
+    async def receive():
+        reads.append(True)
+        return {"type": "http.request", "body": next(chunks), "more_body": True}
+
+    async def send(message):
+        messages.append(message)
+
+    headers = [] if content_length is None else [(b"content-length", content_length)]
+    asyncio.run(main.RequestBodyLimit(downstream)({"type": "http", "headers": headers}, receive, send))
+    assert messages[0]["status"] == 413
+    assert len(reads) == expected_reads
+
+
+@pytest.mark.parametrize("endpoint", ["/api/jumps", "/api/athletes"])
+def test_lists_apply_default_maximum_limit_and_offset_in_sql(api, auth, monkeypatch, endpoint):
+    client, path = api
+    headers = auth("coach")
+    athlete_id = user_id(path, "athlete1")
+    other_id = user_id(path, "athlete3")
+    with main.database(path) as db:
+        if endpoint == "/api/jumps":
+            db.executemany("INSERT INTO jumps(athlete_id, created_at, metrics) VALUES (?, ?, ?)",
+                           [(athlete_id, "2026-11-16T00:00:00+00:00", json.dumps(METRICS))] * 501)
+        else:
+            db.executemany(
+                "INSERT INTO users(club_id, email, name, role, password_salt, password_hash) "
+                "SELECT club_id, ?, ?, role, password_salt, password_hash FROM users WHERE id = ?",
+                [(f"page{i}@demo.test", f"Page {i:03}", athlete_id) for i in range(501)],
+            )
+    original_database = main.database
+    statements = []
+
+    @contextmanager
+    def traced_database(path):
+        with original_database(path) as db:
+            db.set_trace_callback(statements.append)
+            yield db
+
+    monkeypatch.setattr(main, "database", traced_database)
+    default = client.get(endpoint, headers=headers)
+    first = client.get(endpoint, params={"limit": 500}, headers=headers)
+    following = client.get(endpoint, params={"limit": 500, "offset": 500}, headers=headers)
+    small = client.get(endpoint, params={"limit": 2, "offset": 1}, headers=headers)
+    assert default.status_code == first.status_code == following.status_code == small.status_code == 200
+    assert len(default.json()) == 100
+    assert len(first.json()) == 500
+    assert len(following.json()) == (21 if endpoint == "/api/jumps" else 3)
+    assert default.json() == first.json()[:100]
+    assert small.json() == first.json()[1:3]
+    assert not {row["id"] for row in first.json()} & {row["id"] for row in following.json()}
+    rows = first.json() + following.json()
+    assert all(row.get("athlete_id", row["id"]) != other_id for row in rows)
+    for clause in ("LIMIT 100 OFFSET 0", "LIMIT 500 OFFSET 0", "LIMIT 500 OFFSET 500", "LIMIT 2 OFFSET 1"):
+        assert any(clause in statement for statement in statements)
+
+
+@pytest.mark.parametrize("endpoint", ["/api/jumps", "/api/athletes"])
+@pytest.mark.parametrize("params", [
+    {"limit": 0}, {"limit": -1}, {"limit": 501}, {"limit": "1.5"},
+    {"offset": -1}, {"offset": "1.5"},
+])
+def test_list_pagination_rejects_invalid_parameters(api, auth, endpoint, params):
+    client, _ = api
+    assert client.get(endpoint, params=params, headers=auth("coach")).status_code == 422
 
 
 RANGES = [
