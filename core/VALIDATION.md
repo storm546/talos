@@ -23,6 +23,8 @@ The force reference uses 20 N at 100 Hz, with video alignment uncertain by rough
 | 3: landing edge retained | Side | 6/40 | 1 | 33 | 59.3 | 0/6 | 16 |
 | 4: profile and single leg | Front | 28/40 | 0 | 12 | 26.0 | 19/28 | 0 |
 | 4: profile and single leg | Side | 20/40 | 0 | 20 | 97.0 | 4/20 | 2 |
+| 5: regression coverage | Front | 28/40 | 0 | 12 | 26.0 | 19/28 | 0 |
+| 5: regression coverage | Side | 20/40 | 0 | 20 | 97.0 | 4/20 | 2 |
 
 Webcam classes contain 200 clips each at 30 fps. Each cell lists flights / no flight / errors;
 errors count against positive recall and are not treated as successful negative analyses.
@@ -37,6 +39,7 @@ all of them to the detector. Class labels are nevertheless scored as supplied.
 | 2: planted-foot reference | 121/58/21 | 89/94/17 | 107/84/9 | 13/177/10 | 6/193/1 |
 | 3: landing edge retained | 121/58/21 | 89/94/17 | 107/84/9 | 13/177/10 | 6/193/1 |
 | 4: profile and single leg | 121/58/21 | 89/94/17 | 107/84/9 | 13/177/10 | 6/193/1 |
+| 5: regression coverage | 121/58/21 | 89/94/17 | 107/84/9 | 13/177/10 | 6/193/1 |
 
 Step 1 removes only the CMJ first-frame fallback. The explicitly selected drop landing may still
 start above the future floor, with no inferred jump height. Sampled still-pose false alarms (1, 103,
@@ -102,3 +105,30 @@ variability increases. No calibration is applied.
 Step 4 validation: all 35 core tests pass on the kit. The side mode loses the previously matched
 Subj04 side jump08 while gaining six other Subj04 trials (net 1 to 6 matches); the other lost
 result, Subj07 side jump02, was spurious. This is not a per-trial monotonic recall improvement.
+
+Step 5 adds the optional Twente and webcam regression tests and pins the private clips to their
+reviewed 280/360/360 ms outputs. The Twente assertions require at least 27 front and 18 side
+matches, zero spurious flights, at least 18/3 within-frame results, MAE <= 30/110 ms and no more
+than 0/3 errors. The webcam assertions bound false alarms, positive recall and analyzer errors,
+so making every result empty cannot pass. Missing dataset directories skip only the relevant
+test; installed but incomplete datasets fail. Batch contact timestamps are also checked.
+
+Reproduce on the kit from the isolated directory (with data installed at the default locations):
+
+```sh
+ssh android-build-kit 'cd /work/jumpscan-detector && timeout 900 ./gradlew --no-daemon :core:test'
+ssh android-build-kit 'cd /work/jumpscan-detector && timeout 900 ./gradlew --no-daemon :core:batch -Pin=/work/jumpscan-data/twente-jumps -Pout=/work/jumpscan-detector/step5-twente.csv'
+ssh android-build-kit 'cd /work/jumpscan-detector && timeout 900 ./gradlew --no-daemon :core:batch -Pin=/work/jumpscan-data/kaggle-landmarks -Pout=/work/jumpscan-detector/step5-kaggle.csv'
+```
+
+The batch walker also reports root-level metadata CSVs as malformed input. All tables and
+regression tests above restrict scoring to the 80 labelled Twente files or the five named webcam
+class folders; metadata errors are not pose-track errors. The Python comparison script is
+`/root/jumpscan/logs/detector/summarize.py`; the angle rerun is `knee_check.py` in the same folder.
+The local copies of reference data remain outside version control. No dependencies were added.
+
+Final validation includes 37 passing tests (35 synthetic/fixture tests plus both measured-data
+tests), no skipped tests with the datasets installed. Running only `BenchmarkTest` with both
+dataset environment variables set to absent paths also succeeds, with exactly two skipped tests.
+Both final batches reproduce step 4 counts. `git diff --check` passes. Side output nullability is
+a documented consumer integration requirement; no app/server changes are included here.

@@ -86,6 +86,11 @@ object JumpAnalyzer {
 Tests (JUnit, synthetic landmark series built in code): known flight time gives the right height,
 known joint geometry gives the right flexion and FPPA within 1 degree, symmetric input gives 0 % asymmetry,
 noisy input stays within tolerance, a clip with no jump gives `no_flight_detected`, 15 fps gives `low_fps`.
+Optional measured-data tests use `JUMPSCAN_TWENTE_DIR` and `JUMPSCAN_KAGGLE_DIR`, defaulting to
+`/work/jumpscan-data/twente-jumps` and `/work/jumpscan-data/kaggle-landmarks`. Missing directories
+skip the corresponding test cleanly; an installed but incomplete dataset fails validation. These
+tests assert measured detection, false-alarm, timing and error rates with small regression margins.
+The full before/after measurements and limits are recorded in `core/VALIDATION.md`.
 
 Gradle: root `settings.gradle` includes `:core` (Kotlin JVM, JDK 17). Gradle 8.10.2 wrapper.
 Leave room for Worker A to add `:app`.

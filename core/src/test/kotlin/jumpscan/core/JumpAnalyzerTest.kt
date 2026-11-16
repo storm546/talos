@@ -129,7 +129,7 @@ class JumpAnalyzerTest {
         val wideAspect = 2.0f
         val wide = frames.map { f -> f.copy(landmarks = f.landmarks.mapIndexed { index, point ->
             point.copy(x = (point.x * ASPECT / wideAspect).toFloat(),
-                visibility = if (index in 11..12) 0f else point.visibility)
+                visibility = if (index in 11..12 || index == 24) 0f else point.visibility)
         }) }
         val m = JumpAnalyzer.analyze(wide, "cmj", wideAspect, JumpAnalyzer.View.SIDE)
         assertEquals(60.0, m.kneeFlexionPeakL!!, 1.0)
