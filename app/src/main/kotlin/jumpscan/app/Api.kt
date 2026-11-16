@@ -5,15 +5,15 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
 
-internal class ApiError(val status: Int, message: String) : IOException(message)
+internal class ApiError(val status: Int) : IOException()
+internal class AppError(val resource: Int) : IOException()
 
 internal fun serverUrl(input: String): String {
     val value = input.trim().trimEnd('/')
-    val uri = try { URI(value) } catch (_: Exception) { throw IOException("Enter a valid server URL.") }
+    val uri = try { URI(value) } catch (_: Exception) { throw AppError(R.string.invalid_url) }
     if (uri.host.isNullOrBlank() || uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null ||
         (uri.scheme != "https" && !(BuildConfig.DEBUG && uri.scheme == "http"))) {
-        throw IOException(if (BuildConfig.DEBUG) "Enter an http:// or https:// server URL."
-            else "Enter an https:// server URL.")
+        throw AppError(if (BuildConfig.DEBUG) R.string.debug_url else R.string.https_url)
     }
     return value
 }
@@ -41,19 +41,13 @@ internal fun api(base: String, path: String, method: String = "GET", token: Stri
             while (true) {
                 val count = reader.read(buffer)
                 if (count < 0) break
-                if (result.length + count > 1_048_576) throw IOException("Server response is too large.")
+                if (result.length + count > 1_048_576) throw AppError(R.string.response_large)
                 result.append(buffer, 0, count)
             }
             result.toString()
         }.orEmpty()
         if (status !in 200..299) {
-            val detail = runCatching { JSONObject(response).optString("detail").takeIf { it.isNotBlank() } }.getOrNull()
-            throw ApiError(status, when (status) {
-                401 -> "Login failed or your session expired. Please sign in again."
-                403 -> "This account cannot perform this action. Uploads need an athlete account."
-                429 -> "Too many login attempts. Please try again later."
-                else -> detail?.take(300) ?: "Server request failed ($status). Try again."
-            })
+            throw ApiError(status)
         }
         return response
     } finally { connection.disconnect() }

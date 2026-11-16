@@ -35,18 +35,18 @@ class MainActivity : Activity() {
     private val green = Color.rgb(22, 102, 91)
     private val ink = Color.rgb(23, 42, 37)
     private val labels = linkedMapOf(
-        "fps" to "Analysed frames / second",
-        "flight_time_ms" to "Flight time (ms)",
-        "jump_height_cm" to "Jump height (cm)",
-        "knee_flexion_contact_l" to "Contact knee flexion · left (°)",
-        "knee_flexion_contact_r" to "Contact knee flexion · right (°)",
-        "knee_flexion_peak_l" to "Peak knee flexion · left (°)",
-        "knee_flexion_peak_r" to "Peak knee flexion · right (°)",
-        "fppa_peak_l" to "FPPA at peak · left (°)",
-        "fppa_peak_r" to "FPPA at peak · right (°)",
-        "knee_ankle_ratio" to "Knee / ankle separation",
-        "flexion_asymmetry_pct" to "Peak flexion asymmetry (%)",
-        "quality" to "Landmark visibility (0–1)"
+        "fps" to R.string.fps,
+        "flight_time_ms" to R.string.flight_time_ms,
+        "jump_height_cm" to R.string.jump_height_cm,
+        "knee_flexion_contact_l" to R.string.knee_flexion_contact_l,
+        "knee_flexion_contact_r" to R.string.knee_flexion_contact_r,
+        "knee_flexion_peak_l" to R.string.knee_flexion_peak_l,
+        "knee_flexion_peak_r" to R.string.knee_flexion_peak_r,
+        "fppa_peak_l" to R.string.fppa_peak_l,
+        "fppa_peak_r" to R.string.fppa_peak_r,
+        "knee_ankle_ratio" to R.string.knee_ankle_ratio,
+        "flexion_asymmetry_pct" to R.string.flexion_asymmetry_pct,
+        "quality" to R.string.quality
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,7 +72,7 @@ class MainActivity : Activity() {
             else -> null
         } ?: return false
         if (uri.scheme !in listOf("content", "file")) {
-            home("Open a local video from your camera or files.")
+            home(getString(R.string.local_video))
         } else startAnalysis(uri)
         return true
     }
@@ -105,7 +105,7 @@ class MainActivity : Activity() {
         }
         setContentView(scroll)
         scroll.requestApplyInsets()
-        text("JUMPSCAN", 12, green).apply { letterSpacing = 0.16f }
+        text(getString(R.string.brand), 12, green).apply { letterSpacing = 0.16f }
         text(title, 28).apply { setPadding(0, dp(10), 0, dp(14)) }
     }
 
@@ -140,33 +140,33 @@ class MainActivity : Activity() {
     }
 
     private fun login(message: String? = null) {
-        layout("Sign in", "login")
-        text("Sign in to upload numbers and see your history. Video analysis works offline.")
+        layout(getString(R.string.sign_in), "login")
+        text(getString(R.string.login_intro))
         if (message != null) text(message, 15, Color.rgb(157, 45, 36))
-        val url = field("Server URL", base(), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-        val email = field("Email", type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
-        val password = field("Password", type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+        val url = field(getString(R.string.server_url), base(), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        val email = field(getString(R.string.email), type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
+        val password = field(getString(R.string.password), type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
         password.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
-        button("Sign in") {
+        button(getString(R.string.sign_in)) {
             val address = try { serverUrl(url.text.toString()) } catch (e: IOException) {
-                Toast.makeText(this, e.message, Toast.LENGTH_LONG).show()
+                Toast.makeText(this, errorMessage(e), Toast.LENGTH_LONG).show()
                 return@button
             }
             val emailValue = email.text.toString().trim()
             val passwordValue = password.text.toString()
             if (emailValue.isBlank() || passwordValue.isBlank()) {
-                Toast.makeText(this, "Enter your email and password.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.credentials_required), Toast.LENGTH_LONG).show()
                 return@button
             }
             password.text.clear()
-            work("Signing in…", {
+            work(getString(R.string.signing_in), {
                 val response = JSONObject(api(address, "/api/auth/login", "POST", body =
                     JSONObject().put("email", emailValue).put("password", passwordValue)))
                 val newToken = response.getString("token")
                 val user = response.getJSONObject("user")
                 if (user.getString("role") != "athlete") {
                     runCatching { api(address, "/api/auth/logout", "POST", newToken) }
-                    throw IOException("Use an athlete account here. Coaches can use the web dashboard.")
+                    throw AppError(R.string.athlete_account)
                 }
                 Triple(newToken, user.getString("name"), user.getLong("id"))
             }, { (newToken, name, id) ->
@@ -175,55 +175,55 @@ class MainActivity : Activity() {
                 if (analysis != null) result() else home()
             }, { login(it) })
         }
-        button("Continue offline") { if (analysis != null) result() else home() }
-        text("Only numbers are uploaded. Your video and pose landmarks stay on this device.", 14)
+        button(getString(R.string.continue_offline)) { if (analysis != null) result() else home() }
+        text(getString(R.string.privacy), 14)
     }
 
     private fun home(message: String? = null) {
-        layout("Landing mechanics", "home")
+        layout(getString(R.string.home_title), "home")
         if (message != null) text(message, 15, Color.rgb(157, 45, 36))
-        text("Camera at knee height and level. Stand still with your whole body and space above your head in frame; use 60 fps.")
-        text("Choose a test", 18)
+        text(getString(R.string.guide_short))
+        text(getString(R.string.choose_test), 18)
         val types = RadioGroup(this)
-        listOf("cmj" to "Countermovement jump", "drop_jump" to "Drop jump").forEach { (value, label) ->
+        listOf("cmj" to R.string.cmj, "drop_jump" to R.string.drop_jump).forEach { (value, label) ->
             types.addView(RadioButton(this).apply {
                 id = View.generateViewId()
-                text = label
+                text = getString(label)
                 minHeight = dp(48)
                 isChecked = test == value
                 setOnClickListener { test = value }
             })
         }
         page.addView(types)
-        button("Record") {
+        button(getString(R.string.record)) {
             launchVideo(Intent(MediaStore.ACTION_VIDEO_CAPTURE).putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1), 10)
         }
-        button("Pick video") {
+        button(getString(R.string.pick_video)) {
             val pick = if (Build.VERSION.SDK_INT >= 33) Intent(MediaStore.ACTION_PICK_IMAGES)
                 else Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
             launchVideo(pick.setType("video/*"), 11)
         }
-        text("Analysis uses the first 10 seconds. Keep still briefly before and after the jump.", 14)
-        if (analysis != null) button("Last result") { result() }
+        text(getString(R.string.analysis_hint), 14)
+        if (analysis != null) button(getString(R.string.last_result)) { result() }
         if (token().isNotEmpty()) {
-            text("Signed in as ${prefs.getString("name", "athlete")}", 14)
-            button("History") { history() }
-            button("Sign out") {
+            text(getString(R.string.signed_in, prefs.getString("name", "")), 14)
+            button(getString(R.string.history)) { history() }
+            button(getString(R.string.sign_out)) {
                 val savedToken = token()
                 val savedBase = base()
-                work("Signing out…", { api(savedBase, "/api/auth/logout", "POST", savedToken) }, {
+                work(getString(R.string.signing_out), { api(savedBase, "/api/auth/logout", "POST", savedToken) }, {
                     prefs.edit().remove("token").remove("name").remove("user_id").apply()
                     login()
-                }, { error -> home("Could not sign out: $error") })
+                }, { error -> home(getString(R.string.signout_error, error)) })
             }
-        } else button("Sign in") { login() }
-        text("Numbers to discuss with a coach. Single-camera depth is an estimate; compare your own jumps over time.", 14)
+        } else button(getString(R.string.sign_in)) { login() }
+        text(getString(R.string.coach_note), 14)
     }
 
     @Suppress("DEPRECATION")
     private fun launchVideo(intent: Intent, request: Int) {
         try { startActivityForResult(intent, request) }
-        catch (_: Exception) { home("No app can open this action. Use Pick video or open a video with JumpScan.") }
+        catch (_: Exception) { home(getString(R.string.no_video_app)) }
     }
 
     @Deprecated("Uses the platform activity result API")
@@ -231,7 +231,7 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode in 10..11 && resultCode == RESULT_OK) {
             val uri = data?.data
-            if (uri != null) startAnalysis(uri) else home("No video returned. Try Pick video.")
+            if (uri != null) startAnalysis(uri) else home(getString(R.string.no_video_returned))
         }
     }
 
@@ -239,38 +239,38 @@ class MainActivity : Activity() {
         analysis = null
         uploadedId = null
         val expectedGeneration = generation + 1
-        work("Analysing video…", { analyzeVideo(this, uri, test) { value ->
+        work(getString(R.string.analysing), { analyzeVideo(this, uri, test) { value ->
             runOnUiThread {
                 if (screen == "busy" && !isDestroyed && generation == expectedGeneration) {
                     progress?.isIndeterminate = false
                     progress?.progress = value
-                    progressText?.text = "$value% · Video stays on this device"
+                    progressText?.text = getString(R.string.progress, value)
                 }
             }
         } }, { analysis = it; result() }, { home(it) })
         progress?.isIndeterminate = false
-        text("Only the first 10 seconds are analysed.", 14)
+        text(getString(R.string.first_ten), 14)
     }
 
     private fun result() {
         val current = analysis ?: return home()
-        layout("Your result", "result")
-        text(if (current.metrics.test == "cmj") "Countermovement jump" else "Drop jump", 18)
-        if (current.truncated) text("Clip longer than 10 seconds. Only the first 10 seconds were analysed.", 14)
-        text("Numbers to discuss with a coach. Depth is an estimate.", 14)
+        layout(getString(R.string.result), "result")
+        text(if (current.metrics.test == "cmj") getString(R.string.cmj) else getString(R.string.drop_jump), 18)
+        if (current.truncated) text(getString(R.string.truncated), 14)
+        text(getString(R.string.depth_note), 14)
         metricRows(JSONObject(current.metrics.toJson()))
-        if (uploadedId == null) button(if (token().isEmpty()) "Sign in to upload" else "Upload numbers") {
+        if (uploadedId == null) button(if (token().isEmpty()) getString(R.string.sign_in_upload) else getString(R.string.upload)) {
             if (token().isEmpty()) login() else {
                 val savedToken = token()
                 val savedBase = base()
-                work("Uploading numbers…", {
+                work(getString(R.string.uploading), {
                     JSONObject(api(savedBase, "/api/jumps", "POST", savedToken, JSONObject(current.metrics.toJson()))).getLong("id")
                 }, { uploadedId = it; result() }, { result(); text(it, 15, Color.rgb(157, 45, 36)) })
             }
-        } else text("Uploaded · jump #$uploadedId", 16, green)
-        if (token().isNotEmpty()) button("History") { history() }
-        button("Home") { home() }
-        text("No video or landmarks are uploaded.", 13)
+        } else text(getString(R.string.uploaded, uploadedId), 16, green)
+        if (token().isNotEmpty()) button(getString(R.string.history)) { history() }
+        button(getString(R.string.home)) { home() }
+        text(getString(R.string.no_video_upload), 13)
     }
 
     private fun metricRows(json: JSONObject) {
@@ -280,7 +280,7 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, dp(3), 0, dp(3))
             }
-            val caption = TextView(this).apply { text = label; textSize = 14f; setTextColor(ink) }
+            val caption = TextView(this).apply { text = getString(label); textSize = 14f; setTextColor(ink) }
             row.addView(caption, LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(TextView(this).apply {
                 text = number(json, key)
@@ -292,41 +292,42 @@ class MainActivity : Activity() {
             page.addView(row, LinearLayout.LayoutParams(-1, -2))
         }
         val warnings = json.optJSONArray("warnings") ?: JSONArray()
-        if (warnings.length() == 0) text("Warnings: none", 14, green)
+        if (warnings.length() == 0) text(getString(R.string.no_warnings), 14, green)
         else for (i in 0 until warnings.length()) text(when (warnings.getString(i)) {
-            "low_fps" -> "Low frame rate: timing may be less precise."
-            "uncertain_timing" -> "Tracking lost near take-off or landing: flight time uses the nearest observed frames."
-            "low_visibility" -> "Low visibility: keep hips, knees and feet in view."
-            "no_flight_detected" -> "No flight detected. Numbers use the start of the clip."
-            else -> "Analysis warning: ${warnings.getString(i)}"
+            "low_fps" -> getString(R.string.low_fps)
+            "uncertain_timing" -> getString(R.string.uncertain_timing)
+            "low_visibility" -> getString(R.string.low_visibility)
+            "no_flight_detected" -> getString(R.string.no_flight_detected)
+            else -> getString(R.string.unknown_warning)
         }, 14, Color.rgb(133, 80, 12))
     }
 
-    private fun number(json: JSONObject, key: String): String = if (json.isNull(key)) "Not available"
-        else String.format(Locale.US, "%.2f", json.getDouble(key))
+    private fun number(json: JSONObject, key: String): String = if (json.isNull(key)) getString(R.string.not_available)
+        else String.format(Locale.getDefault(), "%.2f", json.getDouble(key))
 
     private fun history() {
         if (token().isEmpty()) return login()
         val savedToken = token()
         val savedBase = base()
-        work("Loading history…", { JSONArray(api(savedBase, "/api/jumps", token = savedToken)) }, { rows ->
-            layout("Your history", "history")
-            text("${rows.length()} jumps · newest first", 14)
-            button("Home") { home() }
-            if (rows.length() == 0) text("No uploaded jumps yet. Analyse a video, then upload your numbers.")
+        work(getString(R.string.loading_history), { JSONArray(api(savedBase, "/api/jumps", token = savedToken)) }, { rows ->
+            layout(getString(R.string.your_history), "history")
+            text(getString(R.string.history_summary, rows.length()), 14)
+            button(getString(R.string.home)) { home() }
+            if (rows.length() == 0) text(getString(R.string.empty_history))
             for (i in 0 until rows.length()) {
                 val item = rows.getJSONObject(i)
                 // The API returns metadata and metric fields in the same object.
                 val metrics = item.optJSONObject("metrics") ?: item
-                text("#${item.getLong("id")} · ${item.getString("created_at").replace('T', ' ').take(19)}", 16, green)
-                text("${if (metrics.getString("test") == "cmj") "Countermovement jump" else "Drop jump"}\n" +
-                    "Peak flexion L / R: ${number(metrics, "knee_flexion_peak_l")}° / ${number(metrics, "knee_flexion_peak_r")}°\n" +
-                    "Knee / ankle separation: ${number(metrics, "knee_ankle_ratio")}", 14)
-                button("View numbers for jump #${item.getLong("id")}") {
-                    layout("Jump #${item.getLong("id")}", "history_detail")
+                text(getString(R.string.history_item, item.getLong("id"), item.getString("created_at").replace('T', ' ').take(19)), 16, green)
+                text(getString(R.string.history_numbers,
+                    getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump),
+                    number(metrics, "knee_flexion_peak_l"), number(metrics, "knee_flexion_peak_r"),
+                    number(metrics, "knee_ankle_ratio")), 14)
+                button(getString(R.string.view_jump, item.getLong("id"))) {
+                    layout(getString(R.string.jump_title, item.getLong("id")), "history_detail")
                     metricRows(metrics)
-                    button("History") { history() }
-                    button("Home") { home() }
+                    button(getString(R.string.history)) { history() }
+                    button(getString(R.string.home)) { home() }
                 }
             }
         }, { home(it) })
@@ -341,13 +342,13 @@ class MainActivity : Activity() {
             isIndeterminate = true
             page.addView(this, LinearLayout.LayoutParams(-1, dp(16)))
         }
-        progressText = text("Please wait…", 14)
-        button("Cancel") { cancelWork(); home() }
+        progressText = text(getString(R.string.please_wait), 14)
+        button(getString(R.string.cancel)) { cancelWork(); home() }
         task = executor.submit {
             try {
                 val value = action()
                 runOnUiThread { if (!isDestroyed && currentGeneration == generation) {
-                    try { success(value) } catch (_: Exception) { failure("Unexpected server response. Please try again.") }
+                    try { success(value) } catch (_: Exception) { failure(getString(R.string.unexpected_response)) }
                 } }
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
@@ -355,17 +356,26 @@ class MainActivity : Activity() {
                 runOnUiThread { if (!isDestroyed && currentGeneration == generation) {
                     if (e is ApiError && e.status == 401 && token().isNotEmpty()) {
                         prefs.edit().remove("token").apply()
-                        login("Your session expired. Sign in again.")
-                    } else failure(when (e) {
-                        is java.net.SocketTimeoutException -> "Connection timed out. Check the server URL and try again."
-                        is java.net.ConnectException, is java.net.UnknownHostException -> "Cannot reach the server. Check the server URL and your connection."
-                        is SecurityException -> "Cannot read this video. Open it again from Pick video."
-                        else -> e.message?.take(300) ?: "Could not complete this action. Please try again."
-                    })
+                        login(getString(R.string.session_expired))
+                    } else failure(errorMessage(e))
                 } }
             }
         }
     }
+
+    private fun errorMessage(e: Exception): String = getString(when (e) {
+        is AppError -> e.resource
+        is ApiError -> when (e.status) {
+            401 -> R.string.unauthorized
+            403 -> R.string.forbidden
+            429 -> R.string.rate_limit
+            else -> R.string.server_failed
+        }
+        is java.net.SocketTimeoutException -> R.string.timeout
+        is IOException -> R.string.unreachable
+        is SecurityException -> R.string.video_permission
+        else -> R.string.action_failed
+    })
 
     private fun cancelWork() { generation++; task?.cancel(true) }
 

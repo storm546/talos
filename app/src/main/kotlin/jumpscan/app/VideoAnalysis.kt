@@ -28,11 +28,11 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
         retriever.setDataSource(context, uri)
         fun metadata(key: Int) = retriever.extractMetadata(key)
         val duration = metadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-            ?: error("Cannot read this video's duration. Try another video.")
-        require(duration > 0) { "This video has no frames." }
+            ?: throw AppError(R.string.duration_error)
+        if (!(duration > 0)) throw AppError(R.string.no_frames)
         val width = metadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
         val height = metadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
-        require(width > 0 && height > 0) { "Cannot read this video's dimensions." }
+        if (!(width > 0 && height > 0)) throw AppError(R.string.dimensions_error)
         val rotation = metadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
         val rotated = rotation % 180 != 0
         val displayWidth = if (rotated) height else width
@@ -47,7 +47,7 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
             extractor.setDataSource(context, uri, null)
             val track = (0 until extractor.trackCount).firstOrNull {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
-            } ?: error("This video has no video track.")
+            } ?: throw AppError(R.string.no_track)
             extractor.selectTrack(track)
             val times = mutableListOf<Long>()
             while (extractor.sampleTime >= 0 && extractor.sampleTime < limit * 1000) {
@@ -58,13 +58,12 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
             // Sort presentation times because compressed samples may arrive in decoding order.
             times.distinct().sorted()
         } finally { extractor.release() }
-        require(timesUs.size >= 2) { "This video has too few frames." }
+        if (!(timesUs.size >= 2)) throw AppError(R.string.too_few_frames)
         val fps = (timesUs.size - 1) * 1_000_000.0 / (timesUs.last() - timesUs.first())
-        require(fps.isFinite() && fps in 10.0..480.0) { "Use a video between 10 and 480 frames per second." }
+        if (!(fps.isFinite() && fps in 10.0..480.0)) throw AppError(R.string.fps_error)
         // Core and VIDEO mode use milliseconds; reject samples that cannot have distinct timestamps.
-        require(timesUs.zipWithNext().all { (a, b) -> b / 1000 > a / 1000 }) {
-            "This video's frame timestamps are too close together. Try another video."
-        }
+        if (!timesUs.zipWithNext().all { (a, b) -> b / 1000 > a / 1000 })
+            throw AppError(R.string.timestamps_error)
         val count = timesUs.size
         val options = PoseLandmarker.PoseLandmarkerOptions.builder()
              .setBaseOptions(BaseOptions.builder().setModelAssetPath("pose_landmarker_heavy.task").build())
@@ -88,11 +87,10 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
                         targetWidth, targetHeight)
                 } else {
                     retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
-                } ?: error("Cannot decode this video. Try an MP4 video from your camera.")
+                } ?: throw AppError(R.string.decode_error)
                 // Retriever applies the display rotation; verify its bitmap aspect before using image coordinates.
-                require(kotlin.math.abs(raw.width.toDouble() / raw.height - aspect) < 0.01) {
-                    "Cannot decode this video's orientation. Try another video."
-                }
+                if (kotlin.math.abs(raw.width.toDouble() / raw.height - aspect) >= 0.01)
+                    throw AppError(R.string.orientation_error)
                 if (BuildConfig.DEBUG && index == 0) android.util.Log.d("JumpScan",
                     "Decoded ${raw.width}x${raw.height}, rotation=$rotation, aspect=$aspect, samples=$count")
                 val resized = if (max(raw.width, raw.height) > longSide) {
@@ -121,7 +119,7 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
                 } finally { bitmap.recycle() }
                 progress((index + 1) * 100 / count)
             }
-            require(foundPerson) { "No person found. Face the camera with your whole body in frame." }
+            if (!(foundPerson)) throw AppError(R.string.no_person)
             // The constant debug guard removes this local-only fixture export from release bytecode.
             if (BuildConfig.DEBUG) {
                 java.io.File(context.getExternalFilesDir(null), "landmarks.csv").bufferedWriter().use { out ->
@@ -137,7 +135,7 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
             if (BuildConfig.DEBUG) android.util.Log.d("JumpScan", "Analysis elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
             val metrics = try { JumpAnalyzer.analyze(frames, test, aspect) }
                 catch (_: IllegalArgumentException) {
-                    error("Too few clear frames. Keep hips, knees and feet visible, and try a longer video.")
+                    throw AppError(R.string.too_few_clear_frames)
                 }
             // Container duration can extend past the last frame; warn only for at least one omitted frame.
             return Analysis(metrics, duration - limit > 1000.0 / fps)
