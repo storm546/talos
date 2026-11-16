@@ -25,8 +25,8 @@ No model training: MediaPipe Pose Landmarker is pretrained, and the kit's GPU is
 ### Phase 1: parallel
 - [ ] S: REST API with auth, roles, jumps, delete-my-data, input validation, seed data, pytest green
 - [ ] S: coach dashboard page served by the API
-- [ ] C: Gradle scaffold builds on the kit
-- [ ] C: metrics core with synthetic-landmark unit tests green on the kit
+- [x] C: Gradle scaffold builds on the kit
+- [x] C: metrics core with synthetic-landmark unit tests green on the kit
 - [ ] Orchestrator: review both diffs, rerun both test commands, commit
 
 ### Phase 2: app
