@@ -92,11 +92,24 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, progress: (I
                 progress((index + 1) * 100 / count)
             }
             require(foundPerson) { "No person found. Face the camera with your whole body in frame." }
+            // The constant debug guard removes this local-only fixture export from release bytecode.
+            if (BuildConfig.DEBUG) {
+                java.io.File(context.getExternalFilesDir(null), "landmarks.csv").bufferedWriter().use { out ->
+                    out.appendLine("tMs,aspect," + listOf("image", "world").flatMap { space ->
+                        (0 until 33).flatMap { i -> listOf("x", "y", "z", "visibility").map { "${space}_${i}_$it" } }
+                    }.joinToString(","))
+                    frames.forEach { frame ->
+                        out.appendLine("${frame.tMs},$aspect," + (frame.landmarks + frame.worldLandmarks)
+                            .flatMap { listOf(it.x, it.y, it.z, it.visibility) }.joinToString(","))
+                    }
+                }
+            }
             val metrics = try { JumpAnalyzer.analyze(frames, test, aspect) }
                 catch (_: IllegalArgumentException) {
                     error("Too few clear frames. Keep hips, knees and feet visible, and try a longer video.")
                 }
-            return Analysis(metrics, duration > 10_000)
+            // Container duration can extend past the last frame; warn only for at least one omitted frame.
+            return Analysis(metrics, duration - limit > 1000.0 / fps)
         } finally { landmarker.close() }
     } finally { retriever.release() }
 }

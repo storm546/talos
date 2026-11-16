@@ -37,6 +37,25 @@ No model training: MediaPipe Pose Landmarker is pretrained, and the kit's GPU is
 - [x] Orchestrator: review diff, look at the screenshots, check the stored row, commit
 
 ### Phase 3: close
-- [ ] Reviewer: security and correctness pass over the whole repo
-- [ ] Fix confirmed findings
-- [ ] Final report: what works, what was verified, what is left
+- [x] Reviewer: security and correctness pass over the whole repo
+- [x] Fix confirmed findings
+- [x] Final report: what works, what was verified, what is left
+
+## State on 2026-11-16
+
+Verified: server 130 tests, core 19 tests (18 synthetic, 1 real-video fixture), debug APK builds on the kit,
+emulator run from video to result screen, login, upload, history, coach read of the uploaded row.
+
+Not verified:
+- Flight time and jump height on a real jump. The stock clip used for testing turned out to contain squats
+  with planted feet, so it only proves that squats are not reported as jumps. A clip with a visible jump is
+  needed, ideally 60 to 120 fps, athlete facing the camera, whole body in frame.
+- Accuracy of any angle against a reference measurement.
+- Camera recording, the system picker, rotated video, a physical phone, a release build.
+
+Left out on purpose: public deployment, Bulgarian UI, documentation pack, real frame timestamps for
+slow-motion clips, stronger scrypt cost.
+
+Next step: film two or three real jumps, export the landmarks with the debug build
+(CSV in the app's external files folder), add them as fixtures with hand-labelled take-off and landing
+frames, and tune the detector against them.

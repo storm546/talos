@@ -17,7 +17,6 @@ object JumpAnalyzer {
     private const val WINDOW_MS = 500L           // landing window after initial contact
     private const val MAX_FLIGHT_MS = 1000.0     // a longer airborne run is not a jump (122.6 cm, inside the server's 150 cm limit)
     private const val MAX_GAP_FACTOR = 1.5       // a time step above this many median frame intervals means dropped frames
-    private const val PRE_RUN_MS = 500L          // hips of the frames this long before a run give the standing hip height
     private const val LOW_FPS = 24.0
     private const val LOW_QUALITY = 0.7
     private const val G = 9.81
@@ -74,6 +73,9 @@ object JumpAnalyzer {
         val medianStepMs = median(t.zipWithNext { a, b -> (b - a).toDouble() })
         val gapBefore = BooleanArray(n) { it > 0 && t[it] - t[it - 1] > MAX_GAP_FACTOR * medianStepMs }
         val hipY = poses.map { (it.y[LEFT.hip] + it.y[RIGHT.hip]) / 2 }
+        // Standing hip height = 10th percentile of grounded hips (smaller y is taller), excluding airborne poses.
+        val groundedHips = hipY.filterIndexed { index, _ -> !airborne[index] }.sorted()
+        val standingHip = groundedHips.getOrNull(((groundedHips.size - 1) * 0.1).toInt())
 
         // Candidate runs: (first airborne frame, first ground frame), consecutive airborne frames only.
         val candidates = mutableListOf<Pair<Int, Int>>()
@@ -89,10 +91,10 @@ object JumpAnalyzer {
         fun isFlight(s: Int, e: Int): Boolean {
             if (gapBefore[s] || gapBefore[e]) return false                  // cut by a gap: start or landing not seen
             if (t[e] - t[s] > MAX_FLIGHT_MS) return false                    // too long to be a jump
-            val before = (0 until s).filter { t[it] >= t[s] - PRE_RUN_MS }
-            if (before.isEmpty()) return true                                // clip starts airborne (drop landing): nothing to compare
-            // The body must rise: highest mid-hip in the run vs median mid-hip just before it (y points down).
-            val rise = median(before.map { hipY[it] }) - (s until e).minOf { hipY[it] }
+            if (s == 0) return true                                         // clip starts airborne: retain plain drop landings
+            if (standingHip == null) return false                           // no observed ground reference
+            // Hips must rise above standing, not merely above the preceding squat; y points down.
+            val rise = standingHip - (s until e).minOf { hipY[it] }
             return rise >= AIRBORNE_FRACTION * legLength
         }
 
