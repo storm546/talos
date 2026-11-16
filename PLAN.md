@@ -116,3 +116,10 @@ Open:
 - Decision for the owner: an opt-in server-side "precise mode" for side-view video. It contradicts "the video never leaves the phone" unless it is explicit.
 - The owner's list in `ROADMAP.md` section G is unchanged, as is the question about the 17.8 GB Twente archive on the kit.
 - Codex is out of quota until 2026-11-17 01:34.
+
+## Update on 2026-11-16, 23:20
+
+- Fixed a contract gap left by the detector merge: side-view results (one measured leg, warning `single_leg_view`, null metrics for the other leg) were rejected by the server. Server, dashboard and app now accept and label them; 252 server tests pass and the app builds.
+- Documents and README now quote the post-merge numbers, the webcam benchmark and the GPU experiment.
+- Container image: the build cannot be run on openclaw (Docker inside this container fails on its AppArmor profile, before any project step) and the kit has no container runtime. The Dockerfile is still untested. The published port was changed from 8160 (taken by another service on this host) to 8171.
+- Still open: emulator run of the merged app, less regular demo data, removing the lite model asset, the owner's decisions.

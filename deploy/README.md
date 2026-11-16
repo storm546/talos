@@ -4,11 +4,11 @@ Status: **nothing has been deployed.** These are the steps for the owner to run 
 Nothing in this repository publishes, pushes or restarts anything by itself.
 
 The shape being deployed: one container running the API, a SQLite file in a named volume, and a reverse
-proxy on the host that terminates TLS. The container port is published on `127.0.0.1:8160` only, so the
+proxy on the host that terminates TLS. The container port is published on `127.0.0.1:8171` only, so the
 API is never reachable directly from the internet.
 
 ```
-internet --443--> nginx / Nginx Proxy Manager --http--> 127.0.0.1:8160 -> container :8000
+internet --443--> nginx / Nginx Proxy Manager --http--> 127.0.0.1:8171 -> container :8000
 ```
 
 ## 0. Prerequisites
@@ -31,7 +31,7 @@ git checkout main          # deploy reviewed code, not the working branch
 ```sh
 docker compose up -d --build
 docker compose ps
-curl -i http://127.0.0.1:8160/        # expect HTTP/1.1 200 and the dashboard HTML
+curl -i http://127.0.0.1:8171/        # expect HTTP/1.1 200 and the dashboard HTML
 docker inspect --format '{{.State.Health.Status}}' jumpscan   # expect healthy
 ```
 
@@ -115,7 +115,7 @@ server {
     client_max_body_size 64k;          # the API caps requests at 16 KB
 
     location / {
-        proxy_pass http://127.0.0.1:8160;
+        proxy_pass http://127.0.0.1:8171;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -136,12 +136,12 @@ Point the app at `https://jumpscan.example.com`. Release builds of the app only 
 1. Proxy Hosts -> Add Proxy Host.
 2. Domain Names: `jumpscan.example.com`; Scheme `http`.
 3. Forward Hostname/IP and Forward Port: if NPM shares a Docker network with JumpScan, use `jumpscan`
-   and port `8000`. If NPM runs with host networking, use `127.0.0.1` and port `8160` (the port compose
+   and port `8000`. If NPM runs with host networking, use `127.0.0.1` and port `8171` (the port compose
    publishes). The container itself always listens on `8000`.
 4. Enable "Block Common Exploits".
 5. SSL tab: request a new Let's Encrypt certificate, enable Force SSL and HTTP/2.
 
-NPM running in a normal container cannot reach the host's `127.0.0.1:8160`; use a shared Docker network
+NPM running in a normal container cannot reach the host's `127.0.0.1:8171`; use a shared Docker network
 (`docker network connect`) and proxy to `jumpscan:8000`, or run NPM with host networking.
 
 ## 6. Backups
@@ -181,7 +181,7 @@ directory finishes the job — nothing else on the host was touched.
 ## Notes and limits
 
 - Single uvicorn process, no workers: fine for a club, and it keeps SQLite writes simple.
-- The API is HTTP inside the host. Do not expose `8160` on a public interface; the compose file binds it
+- The API is HTTP inside the host. Do not expose `8171` on a public interface; the compose file binds it
   to `127.0.0.1` on purpose.
 - Login is rate limited to 5 failures per email per 15 minutes; request bodies are capped at 16 KB.
 - No video or image ever reaches the server, so there is nothing large to store and nothing to redact.

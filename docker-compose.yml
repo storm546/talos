@@ -11,7 +11,7 @@ services:
     volumes:
       - jumpscan-data:/data
     ports:
-      - "127.0.0.1:8160:8000"
+      - "127.0.0.1:8171:8000"
 
 volumes:
   jumpscan-data:

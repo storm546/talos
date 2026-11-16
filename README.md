@@ -79,7 +79,7 @@ The seed is idempotent: it creates the accounts once and does nothing on later r
 Docker (server only, published on loopback):
 
 ```sh
-docker compose up -d --build      # http://127.0.0.1:8160/
+docker compose up -d --build      # http://127.0.0.1:8171/
 ```
 
 `deploy/README.md` has the step-by-step for a home server behind an HTTPS reverse proxy.
