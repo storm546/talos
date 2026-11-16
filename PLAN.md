@@ -123,3 +123,9 @@ Open:
 - Documents and README now quote the post-merge numbers, the webcam benchmark and the GPU experiment.
 - Container image: the build cannot be run on openclaw (Docker inside this container fails on its AppArmor profile, before any project step) and the kit has no container runtime. The Dockerfile is still untested. The published port was changed from 8160 (taken by another service on this host) to 8171.
 - Still open: emulator run of the merged app, less regular demo data, removing the lite model asset, the owner's decisions.
+
+## Update on 2026-11-16, 23:10 (after the limit reset)
+
+- Twente check: the video archive holds jump videos for nine subjects (Subj04 to Subj12) and Zenodo 7422031 has reference data for all nine; only four were used so far. Started on the kit: extraction of the remaining jump videos (done), download of the reference files for Subj08 to Subj12 (`/work/jumpscan-data/twente-more.sh`, log `twente-more.log`, ends with ALL-DONE), pose extraction for the five missing videos (`twente-pose-more.sh`).
+- Scheduled for 01:37 on 2026-11-17, when the Codex quota returns (`logs/run-night2.sh`): `logs/task-twente9.txt` (nine-subject validation, report to `logs/twente9/REPORT.md`, no commits) and `logs/task-appcheck.txt` (emulator check of the merged app, may commit under `app/` on `stage`). Reports land in `logs/out-twente9.txt` and `logs/out-appcheck.txt`. Their results are unreviewed until someone checks them; `main` is not touched.
+- Once the nine jump videos are confirmed extracted, the 17.8 GB `Videos_anonymized.rar` holds nothing further for jumps and can be deleted on the owner's word.
