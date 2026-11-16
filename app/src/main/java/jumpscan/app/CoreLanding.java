@@ -11,7 +11,7 @@ final class CoreLanding {
     final Long contactMs;
 
     CoreLanding(List<Frame> frames, String test, float aspect) {
-        JumpAnalyzer.Analysis result = JumpAnalyzer.INSTANCE.analyzeWithLanding$core(frames, test, aspect);
+        JumpAnalyzer.Analysis result = JumpAnalyzer.INSTANCE.analyzeWithLanding$core(frames, test, aspect, JumpAnalyzer.View.AUTO);
         metrics = result.getMetrics();
         contactMs = result.getContactMs();
     }
