@@ -8,3 +8,4 @@ local.properties
 logs/
 *.apk
 .idea/
+core/src/test/resources/private/
