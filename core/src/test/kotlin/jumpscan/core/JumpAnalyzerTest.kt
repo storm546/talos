@@ -363,6 +363,17 @@ class JumpAnalyzerTest {
     }
 
     @Test
+    fun movingCrouchWithPlantedFeetStillSuppliesGround() {
+        // No 250 ms interval has still hips: preparation flows straight into the jump.
+        val frames = clip(60, 1.5, parabola(0.5, 0.4), devL = { t ->
+            if (t < 0.5) 30 + 90 * t / 0.5 else 0.0
+        })
+        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        assertEquals(1, result.flightCount)
+        assertEquals(400.0, result.metrics.flightTimeMs!!, 40.0)
+    }
+
+    @Test
     fun settledHipSwayBeforeFootMotionIsNotFlight() {
         val frames = clip(25, 2.0, { t -> if (t in 1.0..1.28) 0.02 else 0.0 }).map { f ->
             f.copy(landmarks = f.landmarks.mapIndexed { index, point ->

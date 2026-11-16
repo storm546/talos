@@ -90,9 +90,8 @@ object JumpAnalyzer {
             val window = start..end
             if (window.any { !hipY[it].isFinite() || !legLength[it].isFinite() }) return@mapNotNull null
             val leg = median(window.map { legLength[it] })
-            if (window.any { angleUsable(usable[it]) && !upright(rawPoses[it], leg) }) return@mapNotNull null
-            // Stable means hips and each foot vary by no more than the 2.5%-of-leg flight threshold.
-            if (listOf(hipY, footL, footR).any { signal ->
+            // Planted feet establish ground over 250 ms even while the hips move through a countermovement.
+            if (listOf(footL, footR).any { signal ->
                     window.maxOf { signal[it] } - window.minOf { signal[it] } > AIRBORNE_FRACTION * leg
                 }) return@mapNotNull null
             Standing(end, median(window.map { footL[it] }), median(window.map { footR[it] }),

@@ -47,7 +47,12 @@ object JumpAnalyzer { fun analyze(frames: List<Frame>, test: String): JumpMetric
 ```
 
 - Landmark indices used: hips 23/24, knees 25/26, ankles 27/28, heels 29/30, foot index 31/32.
-- Ground level: robust estimate from foot landmarks (the feet spend most frames on the ground).
+- Ground level: each foot supplies its own median floor height from 250 ms of planted feet
+  (range <= 2.5% of local leg length), allowing one frame of endpoint quantisation. The hips may
+  move throughout this reference, including a deep countermovement; still standing is not required.
+  Ground references expire after 1.5 s (maximum flight plus landing window), excluding the approach.
+  During a flight the floor is frozen. Hips must rise by 2.5% of leg length above both the tallest
+  recent reference at this floor and the preceding ground frame, so settled sway cannot supply ascent.
 - Airborne: both feet above ground level by a threshold scaled to body size (hip-to-ankle length).
   Smooth the signal first; pose data is jittery.
 - Analysed landing: the last airborne-to-ground transition. Initial contact is its first ground frame.
