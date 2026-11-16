@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = 'jumpscan'
 include ':core'
-// Worker A adds: include ':app'
+include ':app'

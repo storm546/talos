@@ -30,11 +30,11 @@ No model training: MediaPipe Pose Landmarker is pretrained, and the kit's GPU is
 - [x] Orchestrator: review both diffs, rerun both test commands, commit
 
 ### Phase 2: app
-- [ ] A: Android app: login, pick or record video, on-device pose, metrics screen, upload, history
-- [ ] A: debug APK builds on the kit
-- [ ] A: emulator run on a real jump video gives finite knee numbers; screenshots saved
-- [ ] A: upload from the emulator reaches the API and shows up for the coach account
-- [ ] Orchestrator: review diff, look at the screenshots, check the stored row, commit
+- [x] A: Android app: login, pick or record video, on-device pose, metrics screen, upload, history
+- [x] A: debug APK builds on the kit
+- [x] A: emulator run on a real jump video gives finite knee numbers; screenshots saved
+- [x] A: upload from the emulator reaches the API and shows up for the coach account
+- [x] Orchestrator: review diff, look at the screenshots, check the stored row, commit
 
 ### Phase 3: close
 - [ ] Reviewer: security and correctness pass over the whole repo
