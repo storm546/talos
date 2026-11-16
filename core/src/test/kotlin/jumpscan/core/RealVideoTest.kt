@@ -74,11 +74,11 @@ class RealVideoTest {
 
     private fun assertRanges(metrics: JumpMetrics) {
         inRange(metrics.fps, 10.0, 480.0)
-        listOf(metrics.kneeFlexionContactL, metrics.kneeFlexionContactR,
-            metrics.kneeFlexionPeakL, metrics.kneeFlexionPeakR).forEach { inRange(it, 0.0, 180.0) }
-        listOf(metrics.fppaPeakL, metrics.fppaPeakR).forEach { inRange(it, -90.0, 90.0) }
-        inRange(metrics.kneeAnkleRatio, 0.0, 5.0)
-        inRange(metrics.flexionAsymmetryPct, 0.0, 100.0)
+        listOf(metrics.kneeFlexionContactL!!, metrics.kneeFlexionContactR!!,
+            metrics.kneeFlexionPeakL!!, metrics.kneeFlexionPeakR!!).forEach { inRange(it, 0.0, 180.0) }
+        listOf(metrics.fppaPeakL!!, metrics.fppaPeakR!!).forEach { inRange(it, -90.0, 90.0) }
+        inRange(metrics.kneeAnkleRatio!!, 0.0, 5.0)
+        inRange(metrics.flexionAsymmetryPct!!, 0.0, 100.0)
         inRange(metrics.quality, 0.0, 1.0)
     }
 }

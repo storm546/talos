@@ -9,20 +9,20 @@ data class Landmark(val x: Float, val y: Float, val z: Float, val visibility: Fl
  */
 data class Frame(val tMs: Long, val landmarks: List<Landmark>, val worldLandmarks: List<Landmark>)
 
-/** Fields of SPEC.md section 1. L/R are the person's left/right (MediaPipe naming). */
+/** Fields of SPEC.md section 1. L/R are the person's left/right; null means unavailable in this view. */
 data class JumpMetrics(
     val test: String,
     val fps: Double,
     val flightTimeMs: Double?,
     val jumpHeightCm: Double?,
-    val kneeFlexionContactL: Double,
-    val kneeFlexionContactR: Double,
-    val kneeFlexionPeakL: Double,
-    val kneeFlexionPeakR: Double,
-    val fppaPeakL: Double,
-    val fppaPeakR: Double,
-    val kneeAnkleRatio: Double,
-    val flexionAsymmetryPct: Double,
+    val kneeFlexionContactL: Double?,
+    val kneeFlexionContactR: Double?,
+    val kneeFlexionPeakL: Double?,
+    val kneeFlexionPeakR: Double?,
+    val fppaPeakL: Double?,
+    val fppaPeakR: Double?,
+    val kneeAnkleRatio: Double?,
+    val flexionAsymmetryPct: Double?,
     val quality: Double,
     val warnings: List<String>,
 )

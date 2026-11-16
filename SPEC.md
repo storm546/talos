@@ -24,13 +24,13 @@ Produced by `core`, shown by `app`, stored by `server`.
 | `fps` | number | frames per second analysed | 10–480 |
 | `flight_time_ms` | number or null | last airborne phase before the analysed landing | 0–1500 |
 | `jump_height_cm` | number or null | `g * t^2 / 8` from flight time; null for a plain drop landing | 0–150 |
-| `knee_flexion_contact_l`, `_r` | number | knee flexion at initial contact, degrees (0 = straight leg) | 0–180 |
-| `knee_flexion_peak_l`, `_r` | number | maximum knee flexion within 500 ms after contact | 0–180 |
-| `fppa_peak_l`, `_r` | number | frontal plane projection angle at peak flexion, degrees, positive = knee moved towards the midline (valgus direction) | -90–90 |
-| `knee_ankle_ratio` | number | knee separation / ankle separation at peak flexion (below ~0.8 means knees collapsing inward) | 0–5 |
-| `flexion_asymmetry_pct` | number | `abs(l - r) / max(l, r) * 100` of peak flexion | 0–100 |
+| `knee_flexion_contact_l`, `_r` | number or null | knee flexion at initial contact, degrees (0 = straight leg); null for the unmeasured leg | 0–180 |
+| `knee_flexion_peak_l`, `_r` | number or null | maximum knee flexion within 500 ms after contact; null for the unmeasured leg | 0–180 |
+| `fppa_peak_l`, `_r` | number or null | frontal plane projection angle at peak flexion, positive towards the midline; null in side view | -90–90 |
+| `knee_ankle_ratio` | number or null | knee separation / ankle separation at peak flexion; null in side view | 0–5 |
+| `flexion_asymmetry_pct` | number or null | `abs(l - r) / max(l, r) * 100` of peak flexion; null with one measured leg | 0–100 |
 | `quality` | number | mean landmark visibility of hips, knees, ankles over the landing window | 0–1 |
-| `warnings` | string[] | any of `low_fps`, `low_visibility`, `no_flight_detected`, `uncertain_timing` (tracking missing at a flight edge; timing uses nearest observed frames) | max 5 items |
+| `warnings` | string[] | any of `low_fps`, `low_visibility`, `no_flight_detected`, `uncertain_timing` (tracking missing at a flight edge), `single_leg_view` (only the better-observed leg is measured) | max 5 items |
 
 ## 2. core (Kotlin/JVM, package `jumpscan.core`)
 
@@ -43,7 +43,11 @@ data class Frame(val tMs: Long, val landmarks: List<Landmark>,   // size 33, Med
                  val worldLandmarks: List<Landmark>)             // size 33, MediaPipe world landmarks, metres
 data class JumpMetrics(...)                                      // fields of section 1, camelCase
 fun JumpMetrics.toJson(): String                                 // snake_case keys of section 1, no library
-object JumpAnalyzer { fun analyze(frames: List<Frame>, test: String): JumpMetrics }
+object JumpAnalyzer {
+    enum class View { AUTO, FRONT, SIDE }
+    fun analyze(frames: List<Frame>, test: String, aspect: Float = 9f / 16f,
+                view: View = View.AUTO): JumpMetrics
+}
 ```
 
 - Landmark indices used: hips 23/24, knees 25/26, ankles 27/28, heels 29/30, foot index 31/32.
@@ -64,6 +68,16 @@ object JumpAnalyzer { fun analyze(frames: List<Frame>, test: String): JumpMetric
 - Knee flexion: 180 minus the 3D hip-knee-ankle angle from the world landmarks. Seen from the front
   the knee bends towards the camera, so the image plane alone cannot show it. Single-camera depth is
   an estimate; the number is for comparing an athlete with themselves over time.
+- In side view, knee flexion uses the image hip-knee-ankle angle, with x multiplied by image aspect.
+  `AUTO` selects side view only when median shoulder width is below 0.5 times torso length and median
+  hip width is below 0.35 times torso length, from at least ten frames with all four joints visible.
+  Torso length is shoulder-midpoint to hip-midpoint distance in the image plane. Both width tests
+  require substantial foreshortening; borderline/oblique clips default to front. Callers may explicitly
+  choose `FRONT` or `SIDE`. These thresholds express near-profile geometry, not subject calibration.
+  Side views measure the leg with the most complete joint-and-foot observations (left on a tie),
+  because the profile overlaps the legs. Ground, flight, pose checks, angles and quality use only
+  that leg. The warning `single_leg_view` is always present. The other knee, FPPA, knee/ankle ratio
+  and asymmetry are null, never copied from the measured leg. Front-view formulas are unchanged.
 - FPPA: angle between thigh (hip to knee) and shank (knee to ankle) projected on the image plane,
   signed so that medial knee displacement is positive for both legs.
 - Frames with missing or low-visibility leg landmarks are skipped, not guessed.

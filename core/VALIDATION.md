@@ -21,6 +21,8 @@ The force reference uses 20 N at 100 Hz, with video alignment uncertain by rough
 | 2: planted-foot reference | Side | 6/40 | 1 | 33 | 59.3 | 0/6 | 16 |
 | 3: landing edge retained | Front | 28/40 | 0 | 12 | 26.0 | 19/28 | 0 |
 | 3: landing edge retained | Side | 6/40 | 1 | 33 | 59.3 | 0/6 | 16 |
+| 4: profile and single leg | Front | 28/40 | 0 | 12 | 26.0 | 19/28 | 0 |
+| 4: profile and single leg | Side | 20/40 | 0 | 20 | 97.0 | 4/20 | 2 |
 
 Webcam classes contain 200 clips each at 30 fps. Each cell lists flights / no flight / errors;
 errors count against positive recall and are not treated as successful negative analyses.
@@ -34,6 +36,7 @@ all of them to the detector. Class labels are nevertheless scored as supplied.
 | 1: observed CMJ take-off | 74/105/21 | 61/122/17 | 68/123/9 | 10/180/10 | 6/193/1 |
 | 2: planted-foot reference | 121/58/21 | 89/94/17 | 107/84/9 | 13/177/10 | 6/193/1 |
 | 3: landing edge retained | 121/58/21 | 89/94/17 | 107/84/9 | 13/177/10 | 6/193/1 |
+| 4: profile and single leg | 121/58/21 | 89/94/17 | 107/84/9 | 13/177/10 | 6/193/1 |
 
 Step 1 removes only the CMJ first-frame fallback. The explicitly selected drop landing may still
 start above the future floor, with no inferred jump height. Sampled still-pose false alarms (1, 103,
@@ -65,3 +68,37 @@ frames or increasing the clearance threshold would shift correctly timed flights
 correction is shipped. The synthetic first-foot test is the regression guard for edge semantics.
 
 Step 3 validation: all 32 core tests pass; both complete batches reproduce step 2 exactly.
+
+Step 4 adds conservative geometric view detection, an explicit view override, and measurement of
+the best-observed profile leg. Side fields that cannot be measured are nullable in Kotlin and JSON.
+This contract change requires app/server consumers to handle nulls; those directories are outside
+this worker's scope. Front outputs and all five webcam confusion counts are unchanged by step 4.
+Auto identifies 38 of the 40 labelled side clips as profile; two oblique Subj07 clips default to front.
+Side matches by subject become Subj04 6/10, Subj05 6/9, Subj06 2/10 and Subj07 6/11.
+One previously matched side trial (Subj05 jump08) has worse flight error, 515 ms versus 424 ms;
+recovering a nearer-leg take-off and the late pose contact can lengthen the measured interval.
+Side MAE increases from 59.3 to 97.0 ms on different matched populations, so improved recall must
+not be described as improved flight timing. No long tracking gap is filled to recover Subj06.
+Private flight times remain exactly 280, 360 and 360 ms; the squat has no flight.
+
+The existing Python reference loaders and knee formula were rerun on the full continuous side
+trials, gated on the visible left leg, with the benchmark's per-view alignment offsets. This checks
+the angle formula independently of selected landing timing (it is not the error of the batch peak).
+
+| Subject | World RMSE (degrees) | Image RMSE (degrees) |
+|---|---:|---:|
+| Subj04 | 15.44 | 12.73 |
+| Subj05 | 10.55 | 9.07 |
+| Subj06 | 12.99 | 8.75 |
+| Subj07 | 17.27 | 9.97 |
+| Pooled, 3738 frames | 14.40 | 10.41 |
+
+Pooled bias changes from -6.46 to -4.83 degrees. Force-anchored 500 ms peak error over 36
+landings changes from mean -10.41 (SD 6.33) to -7.58 (SD 9.13) degrees. The original report's
+10.3 degree image RMSE uses its original alignment; this rerun uses the labels' offsets (including
+0.49 s on Subj04 side) and obtains 10.4. Every subject improves on frame-level RMSE; peak error
+variability increases. No calibration is applied.
+
+Step 4 validation: all 35 core tests pass on the kit. The side mode loses the previously matched
+Subj04 side jump08 while gaining six other Subj04 trials (net 1 to 6 matches); the other lost
+result, Subj07 side jump02, was spurious. This is not a per-trial monotonic recall improvement.
