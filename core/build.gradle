@@ -14,3 +14,17 @@ dependencies {
 test {
     useJUnitPlatform()
 }
+
+// Usage: ./gradlew --no-daemon :core:batch -Pin=<dir> -Pout=<file.csv>  (relative paths resolve against the repo root)
+tasks.register('batch', JavaExec) {
+    group = 'verification'
+    description = 'Scores every landmark CSV under -Pin and writes one result table to -Pout.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'jumpscan.core.BatchKt'
+    doFirst {
+        if (!project.hasProperty('in') || !project.hasProperty('out')) {
+            throw new GradleException('Usage: :core:batch -Pin=<dir> -Pout=<file.csv>')
+        }
+        args rootProject.file(project.property('in')).path, rootProject.file(project.property('out')).path
+    }
+}

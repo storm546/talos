@@ -1,6 +1,5 @@
 package jumpscan.core
 
-import java.io.BufferedReader
 import java.util.zip.GZIPInputStream
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -20,7 +19,7 @@ class RealVideoTest {
         // There are zero observable jumps; sub-frame flight cannot be excluded at 29.97 fps.
         // Thus there is no last landing or flight duration to compare within 2 frames / 70 ms.
         val (aspect, frames) = GZIPInputStream(javaClass.getResourceAsStream("/squat_jumps_one_person.csv.gz")!!)
-            .bufferedReader().use { readFrames(it) }
+            .bufferedReader().use { readLandmarkCsv(it) }
         assertEquals(300, frames.size)
         assertEquals(400f / 720f, aspect)
         val metrics = JumpAnalyzer.analyze(frames, "cmj", aspect)
@@ -47,7 +46,7 @@ class RealVideoTest {
             val contactIndex = row[3].toInt()
             val contactMs = row[4].toDouble()
             val (aspect, frames) = javaClass.getResourceAsStream("/private/$name.csv")!!
-                .bufferedReader().use { readFrames(it) }
+                .bufferedReader().use { readLandmarkCsv(it) }
             // Frame labels and independent ffprobe times must agree with the exported presentation timeline.
             assertEquals(lastGroundMs, frames[lastGroundIndex].tMs.toDouble(), 1.0, name)
             assertEquals(contactMs, frames[contactIndex].tMs.toDouble(), 1.0, name)
@@ -67,22 +66,6 @@ class RealVideoTest {
             inRange(metrics.flightTimeMs!!, 0.0, 1500.0)
             inRange(metrics.jumpHeightCm!!, 0.0, 150.0)
         } })
-    }
-
-    private fun readFrames(reader: BufferedReader): Pair<Float, List<Frame>> {
-        val rows = reader.readLines().drop(1).map { it.split(',') }
-        val aspect = rows.first()[1].toFloat()
-        val frames = rows.map { row ->
-            assertEquals(266, row.size)
-            assertEquals(aspect, row[1].toFloat())
-            fun landmarks(start: Int) = List(33) { index ->
-                val offset = start + index * 4
-                Landmark(row[offset].toFloat(), row[offset + 1].toFloat(),
-                    row[offset + 2].toFloat(), row[offset + 3].toFloat())
-            }
-            Frame(row[0].toLong(), landmarks(2), landmarks(134))
-        }
-        return aspect to frames
     }
 
     private fun inRange(value: Double, min: Double, max: Double) {
