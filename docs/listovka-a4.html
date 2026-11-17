@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<title>JumpScan — листовка</title>
+<!-- Printed flyer, one A4 page. Text follows listovka.md; replace the bracketed fields before printing. -->
+<style>
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; }
+body { margin: 0; width: 210mm; height: 297mm; font-family: "Times New Roman", "Liberation Serif", serif; font-size: 11pt; line-height: 1.35; color: #1d2b25; background: #fff; }
+h1, h2, h3, .sans { font-family: "Liberation Sans", "DejaVu Sans", Arial, sans-serif; }
+.band { background: #176148; color: #fff; padding: 11mm 16mm 8mm; }
+.brand { font: 700 34pt/1 "Liberation Sans", Arial, sans-serif; letter-spacing: -0.5pt; margin: 0; }
+.brand span { display: inline-block; width: 14mm; height: 6mm; border-top: 1.2mm solid #fff; border-right: 1.2mm solid #fff; transform: skewX(-35deg); margin-left: 4mm; vertical-align: 2mm; }
+.tagline { font: 400 14pt/1.3 "Liberation Sans", Arial, sans-serif; margin: 4mm 0 0; }
+main { padding: 7mm 16mm 0; display: grid; grid-template-columns: 1fr 54mm; gap: 9mm; }
+h2 { font-size: 12.5pt; color: #176148; margin: 0 0 2.5mm; text-transform: uppercase; letter-spacing: 0.6pt; }
+section { margin-bottom: 5mm; }
+.benefits p { margin: 0 0 2.5mm; }
+.benefits b { font-family: "Liberation Sans", Arial, sans-serif; }
+ol { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+ol li { counter-increment: step; position: relative; padding-left: 10mm; margin-bottom: 2.5mm; }
+ol li::before { content: counter(step); position: absolute; left: 0; top: 0.3mm; width: 6.5mm; height: 6.5mm; border-radius: 50%; background: #176148; color: #fff; font: 700 10pt/6.5mm "Liberation Sans", Arial, sans-serif; text-align: center; }
+.phone { border: 2.2mm solid #1d2b25; border-radius: 6mm; overflow: hidden; width: 44mm; margin: 0 auto; }
+.phone img { display: block; width: 100%; }
+.caption { font-size: 9.5pt; color: #4b5b53; margin: 2mm 0 0; text-align: center; }
+.charts { padding: 0 16mm; }
+.charts img { width: 100%; max-height: 44mm; object-fit: contain; background: #f2f4f0; border: 0.3mm solid #cfd8d2; border-radius: 1.5mm; display: block; }
+.privacy { margin: 4mm 16mm 0; padding: 4mm 5mm; background: #eef4f0; border-left: 1.5mm solid #176148; }
+.privacy p { margin: 0; }
+footer { margin-top: auto; padding: 3mm 16mm 8mm; display: flex; justify-content: space-between; align-items: flex-end; gap: 10mm; }
+.qr { width: 26mm; height: 26mm; border: 0.4mm dashed #4b5b53; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 8.5pt; color: #4b5b53; }
+.qr img { width: 100%; height: 100%; }
+.contact { font-size: 10.5pt; }
+.contact strong { font-family: "Liberation Sans", Arial, sans-serif; color: #176148; font-size: 12pt; }
+body { display: flex; flex-direction: column; overflow: hidden; }
+</style>
+</head>
+<body>
+<header class="band">
+  <h1 class="brand">JumpScan<span aria-hidden="true"></span></h1>
+  <p class="tagline">Числа за приземяването — от един телефон, без лаборатория.</p>
+</header>
+
+<main>
+  <div>
+    <section class="benefits">
+      <h2>Защо</h2>
+      <p><b>Без апаратура.</b> Един телефон и клип от 10 секунди стигат, за да получиш числа за приземяването.</p>
+      <p><b>История, не един кадър.</b> Всеки резултат остава в клуба, така че се вижда промяната спрямо собствената базова стойност на спортиста.</p>
+      <p><b>Видеото остава на телефона.</b> Към сървъра тръгват само числа — без видео, без снимки, без точки от позата.</p>
+    </section>
+    <section>
+      <h2>Как работи</h2>
+      <ol>
+        <li><b class="sans">Заснеми.</b> Телефонът е на височината на коленете, спортистът е целият в кадъра, заснема се отпред.</li>
+        <li><b class="sans">Анализирай.</b> Приложението намира позата и смята ъглите, времето на полет и височината на самото устройство.</li>
+        <li><b class="sans">Изпрати.</b> Числата отиват в клубния сървър, а треньорът ги вижда в историята и на графика.</li>
+      </ol>
+    </section>
+    <section>
+      <h2>Какво показва</h2>
+      <p style="margin:0">Сгъване на коляното при контакт и в най-дълбоката точка · ъгъл на коляното в челната равнина · отношение колене/глезени · асиметрия между краката · време на полет · височина на отскока.</p>
+    </section>
+  </div>
+  <figure style="margin:0">
+    <div class="phone"><img src="img/app-result.png" alt="Резултат в приложението: скелет при първия контакт и числата"></div>
+    <p class="caption">Резултатът на телефона</p>
+    <section style="margin-top:5mm">
+      <h2>За кого</h2>
+      <p style="margin:0">Клубове по волейбол, баскетбол, лека атлетика и всички, които искат да следят приземяването с телефоните, с които вече разполагат.</p>
+    </section>
+  </figure>
+</main>
+
+<div class="charts">
+  <img src="img/dash-charts.png" alt="Треньорски панел: графики на промяната спрямо базовата стойност">
+  <p class="caption">Треньорският панел: всеки спортист спрямо собствената си базова стойност (пунктир)</p>
+</div>
+
+<div class="privacy"><p><b class="sans">Поверителност.</b> Видеото не се качва никъде. Сървърът съхранява само числа и всеки спортист може да изтрие своите с едно натискане.</p></div>
+
+<footer>
+  <div class="contact">
+    <strong>[АДРЕС НА САЙТА]</strong><br>
+    [ИМЕ НА АВТОРА] · [УЧИЛИЩЕ] · [ИМЕЙЛ ЗА КОНТАКТ]<br>
+    Отворен код, GPL-3.0
+  </div>
+  <div class="qr">[QR КОД КЪМ АДРЕСА]</div>
+</footer>
+</body>
+</html>

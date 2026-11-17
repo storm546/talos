@@ -1,6 +1,6 @@
 // Renders the Bulgarian documents to print-ready A4 PDFs in docs/out/.
 // Appendix 1 of the tournament rules: A4, Times New Roman 12 pt, line spacing 1.5.
-// Usage: node docs/build.cjs [name ...]   (needs the npm packages `marked` and `playwright`)
+// Usage: node docs/build.cjs [file.md|file.html ...]   (needs the npm packages `marked` and `playwright`)
 const { readFileSync, mkdirSync, readdirSync } = require('node:fs');
 const { join, basename } = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -10,8 +10,9 @@ const { chromium } = require('playwright');
 const dir = __dirname;
 const out = join(dir, 'out');
 mkdirSync(out, { recursive: true });
-const names = process.argv.slice(2).length ? process.argv.slice(2)
-  : readdirSync(dir).filter(f => f.endsWith('.md')).map(f => basename(f, '.md'));
+// Markdown files get the shared print style; .html files (the flyer) carry their own layout.
+const files = process.argv.slice(2).length ? process.argv.slice(2)
+  : readdirSync(dir).filter(f => f.endsWith('.md') || f.endsWith('.html'));
 
 // Liberation Serif has the same metrics as Times New Roman, so page breaks match on machines without it.
 const css = `
@@ -31,11 +32,15 @@ pre { white-space: pre-wrap; font-size: 10pt; line-height: 1.3; }
 const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined });
 try {
   const page = await browser.newPage();
-  for (const name of names) {
-    const body = marked.parse(readFileSync(join(dir, `${name}.md`), 'utf8'));
-    // A base URL lets relative image paths such as img/app-result.png resolve.
-    await page.setContent(`<!doctype html><html lang="bg"><head><meta charset="utf-8"><base href="${pathToFileURL(dir + '/')}"><style>${css}</style></head><body>${body}</body></html>`, { waitUntil: 'load' });
-    await page.pdf({ path: join(out, `${name}.pdf`), format: 'A4', preferCSSPageSize: true });
+  for (const file of files) {
+    const name = basename(file).replace(/\.(md|html)$/, '');
+    if (file.endsWith('.html')) await page.goto(pathToFileURL(join(dir, basename(file))).href, { waitUntil: 'load' });
+    else {
+      const body = marked.parse(readFileSync(join(dir, basename(file)), 'utf8'));
+      // A base URL lets relative image paths such as img/app-result.png resolve.
+      await page.setContent(`<!doctype html><html lang="bg"><head><meta charset="utf-8"><base href="${pathToFileURL(dir + '/')}"><style>${css}</style></head><body>${body}</body></html>`, { waitUntil: 'load' });
+    }
+    await page.pdf({ path: join(out, `${name}.pdf`), format: 'A4', preferCSSPageSize: true, printBackground: true });
     console.log(`${name}.pdf`);
   }
 } finally {
