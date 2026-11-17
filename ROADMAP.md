@@ -26,12 +26,13 @@ not as a medical measurement.
 
 The strongest single asset is the validation: most school projects cannot say how wrong they are. Ours can.
 
-## Honest state of accuracy (2026-11-16)
+## Honest state of accuracy (2026-11-17, nine lab subjects)
 
-- Flight time: about one frame off the force plate when the jump is found. Found from the front in 28 of
-  40 lab jumps with no spurious results, from the side in 20 of 40 (timing about three frames off).
-- Knee flexion from the front: follows the reference curve (correlation about 0.9) but about 16 degrees
-  RMSE and peaks 12 degrees low. From the side, the image-plane angle gives about 10 degrees RMSE.
+- Detection: the right jump is found in 71 of 91 lab jumps from the front and 60 of 91 from the side,
+  with no spurious result. Ten of the 20 front misses are one subject whose pose is lost mid-air.
+- Flight time: front mean error 32 ms (about one frame at 33 fps); side flights are about 87 ms long
+  because the pose lags at landing.
+- Knee flexion: front RMSE 17.3 degrees with the range compressed (slope 0.65); side, image plane, 10.0.
 - A server-side model (RTMPose-x) reaches about 5 degrees from the side; it does not help from the front.
 - On 1000 public webcam clips: a flight is found in 45 to 60 percent of jump clips; false alarms 3 to 7 percent.
 
@@ -44,27 +45,30 @@ Status key: done, running, staged (built but not reviewed or not deployed), todo
 ### A. Measurement core
 - done: knee flexion, frontal-plane angle, knee/ankle ratio, asymmetry, flight time, jump height; heavy pose model
 - done: validation against Twente; batch scorer
-- running: 2D side-view angle, calibration, failure analysis (Twente follow-up); stronger models on GPU (decides server-side analysis)
-- todo: detector fixes against the 40-jump force-plate benchmark; per-leg visibility for side view; session of three trials with the median reported
+- done: side view with one measured leg and image-plane angle; detector fixes; nine-subject benchmark (182 clips)
+- running: RTMPose comparison, YouTube slow-motion benchmark, learned take-off/landing detector (logs/run-day.sh)
+- todo: session of three trials with the median reported; port the learned detector if its evaluation holds
 
 ### B. Club server
 - done: auth, roles, jumps, delete-my-data, validation, rate limit, coach dashboard v1
-- todo (stage tonight): consent record per athlete; baseline and change summary; CSV and JSON export; audit log; club and user administration; OpenAPI page
+- done: consent record per athlete; baseline and change summary; CSV and JSON export; audit log; club and user administration; OpenAPI page
 
 ### C. Coach and admin web dashboard
-- todo (stage tonight): team overview with change against baseline, athlete page with trend charts, admin page, Bulgarian and English, phone-friendly layout
+- done: team overview with change against baseline, athlete page with trend charts, admin page, Bulgarian and English, phone-friendly layout
 
 ### D. Android app
 - done: login, record or pick video, on-device analysis, result, upload, history
-- todo (stage tonight): Bulgarian and English texts, landing-frame skeleton overlay on the result screen, filming guide, offline upload queue, faster analysis (heavy model only around the jump)
-- todo: timing on a real phone, release build
+- done: Bulgarian and English texts, landing-frame skeleton overlay, filming guide, offline upload queue; checked on the emulator after the detector merge (280/360/360 ms on the own clips)
+- rejected: faster two-pass analysis (failed its accuracy check)
+- running: frame-confirm step, visual polish, signed release build (logs/run-confirm.sh)
+- todo: timing on a real phone
 
 ### E. Operations
-- todo (stage tonight): CI workflow (server tests, core tests), Dockerfile and compose file, deployment notes for the home server, README
+- done: CI workflow (both jobs checked from a fresh clone), Dockerfile and compose file (start command checked; image build not runnable here), systemd unit, deployment notes, README
 - needs the owner: public address and go-ahead to deploy; the rules require the project online from registration to the end of the tournament, with test accounts for every role
 
 ### F. Documents (Bulgarian)
-- todo (stage tonight, as drafts): documentation of at most five A4 pages in the Appendix 1 structure, leaflet text, presentation outline, user guide, formula explainer for the defence, test-account sheet
+- done (drafts with placeholders for names): documentation (five A4 pages with figures), A4 flyer, ten-slide deck, talk plan, user guide, formula explainer, test-account sheet, submission checklist; `node docs/build.cjs` prints them
 - needs the owner: names, school, supervisor, screenshots from the final build
 
 ### G. Things only the owner can do
