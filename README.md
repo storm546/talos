@@ -128,10 +128,21 @@ absolute angles; in side view one leg is measured and flight timing is only indi
 The video and the raw landmarks never leave the phone. The app uploads only the metrics JSON (a few
 hundred bytes per jump) to the club server, which stores numbers against an athlete account. Athletes
 can delete their own data (`DELETE /api/me/data`). Debug builds additionally write the landmark series of
-the analysed clip to `landmarks.csv` in the app's external files folder, so it can be exported for
-testing; that export does not exist in release builds.
+the analysed clip to `landmarks.csv` in the app's private files folder, so it can be pulled for testing
+with `adb`; that export does not exist in release builds.
 
 ## Licence
 
 JumpScan is licensed under the GNU General Public License, version 3 or later (GPL-3.0-or-later).
 The full text is in `LICENSE`; it is also available at <https://www.gnu.org/licenses/gpl-3.0.txt>.
+
+Third-party components keep their own licences: MediaPipe Tasks Vision and the bundled
+`pose_landmarker_heavy.task` model (Apache-2.0), AndroidX (Apache-2.0), FastAPI and Uvicorn (MIT,
+BSD-3-Clause), Kotlin (Apache-2.0). All are compatible with GPL-3.0.
+
+## Documents
+
+The Bulgarian competition documents are Markdown files in `docs/`. `node docs/build.cjs` renders them to
+A4 PDFs in `docs/out/` (Times New Roman 12 pt, line spacing 1.5, as the tournament rules require). It
+needs the npm packages `marked` and `playwright`; set `CHROME` to a browser binary if Playwright has not
+downloaded its own.
