@@ -279,7 +279,7 @@ function clubs(content) {
 }
 function audit(content) {
   content.append(heading(t('audit')));const grid=table(['date','actor','action','target','detail'],t('audit'));
-  for(const entry of state.audit){const row=node('tr');row.append(node('td',new Date(entry.at).toLocaleString(locale())),node('td',entry.actor_id==null?'—':String(entry.actor_id)),node('td',t(entry.action)),node('td',entry.target),node('td',JSON.stringify(entry.detail),'audit-detail'));grid.body.append(row);}content.append(state.audit.length?grid.wrap:node('p',t('noRows'),'empty'));
+  for(const entry of state.audit){const row=node('tr');row.append(node('td',new Date(entry.at).toLocaleString(locale())),node('td',entry.actor_email??(entry.actor_id==null?'—':String(entry.actor_id))),node('td',t(entry.action)),node('td',entry.target),node('td',Object.keys(entry.detail).length?JSON.stringify(entry.detail):'—','audit-detail'));grid.body.append(row);}content.append(state.audit.length?grid.wrap:node('p',t('noRows'),'empty'));
   const paging=node('div',null,'actions pagination');const previous=button('previous',()=>{state.offset=Math.max(0,state.offset-50);return load();});previous.disabled=!state.offset;const next=button('next',()=>{state.offset+=50;return load();});next.disabled=state.audit.length<50;paging.append(previous,next);content.append(paging);
 }
 function render(focusSelector=null) {

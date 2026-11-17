@@ -597,8 +597,10 @@ def create_app(db_path=None):
     def audit_log(limit: Annotated[int, Query(ge=1, le=500)] = 100,
                   offset: Annotated[int, Query(ge=0)] = 0, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin")
+        # The actor's email makes the log readable without a second lookup; deleted users leave it null.
         return [{**dict(row), "detail": json.loads(row["detail"])} for row in db.execute(
-            "SELECT * FROM audit ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset))]
+            "SELECT audit.*, users.email AS actor_email FROM audit LEFT JOIN users ON users.id = audit.actor_id "
+            "ORDER BY audit.id DESC LIMIT ? OFFSET ?", (limit, offset))]
 
     return app
 

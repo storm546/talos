@@ -339,6 +339,7 @@ def test_audit_records_workflows_without_passwords_and_paginates(api, auth):
         'json_export', 'csv_export', 'data_deleted', 'password_reset', 'user_deactivated', 'user_activated'}
     assert all(row['at'] and row['target'] and isinstance(row['detail'], dict) for row in rows)
     assert all(row['actor_id'] == user_id(path, 'admin') for row in rows if row['action'] == 'password_reset')
+    assert all(row['actor_email'] == 'admin@demo.test' for row in rows if row['action'] == 'password_reset')
     for secret in ['never-record-this', 'also-not-recorded', 'long-password', 'demo1234', 'password_hash']:
         assert secret not in response.text
     assert client.get('/api/audit?limit=2&offset=1', headers=admin).json() == rows[1:3]
