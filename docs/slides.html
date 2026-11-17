@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<title>JumpScan — презентация</title>
+<!-- Defence deck, 10 slides at 16:9; `node docs/build.cjs slides.html` prints one slide per PDF page.
+     Talk plan and timings: prezentacia.md. Replace the bracketed fields before the defence. -->
+<style>
+@page { size: 297mm 167.06mm; margin: 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #fff; }
+body { font-family: "Liberation Sans", "DejaVu Sans", Arial, sans-serif; color: #1d2b25; }
+.slide { width: 297mm; height: 167.06mm; padding: 13mm 16mm 11mm; position: relative; overflow: hidden; page-break-after: always; display: flex; flex-direction: column; }
+.slide:last-child { page-break-after: auto; }
+.kicker { font-size: 10pt; letter-spacing: 1.5pt; text-transform: uppercase; color: #176148; font-weight: 700; margin: 0 0 3mm; }
+h1 { font-size: 30pt; line-height: 1.15; margin: 0 0 6mm; letter-spacing: -0.3pt; }
+h2 { font-size: 18pt; margin: 0 0 3mm; color: #176148; }
+p, li { font-size: 17pt; line-height: 1.4; }
+p { margin: 0 0 3mm; }
+ul { margin: 0; padding-left: 6mm; } li { margin-bottom: 2.2mm; }
+.num { position: absolute; right: 16mm; bottom: 7mm; font-size: 9pt; color: #6b7a72; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; flex: 1; min-height: 0; }
+.cols3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7mm; }
+.card { background: #eef4f0; border-radius: 3mm; padding: 7mm; }
+.card b { display: block; font-size: 19pt; margin-bottom: 2mm; color: #176148; }
+.card p { font-size: 15.5pt; margin: 0; }
+.big { font-size: 48pt; font-weight: 700; color: #176148; line-height: 1; }
+.muted { color: #4b5b53; }
+.title { background: #176148; color: #fff; justify-content: center; }
+.title h1 { font-size: 44pt; margin-bottom: 4mm; }
+.title p { font-size: 18pt; }
+.title .who { position: absolute; left: 16mm; bottom: 12mm; font-size: 12pt; line-height: 1.5; opacity: .92; }
+img.shot { max-height: 118mm; max-width: 100%; border: 0.4mm solid #cfd8d2; border-radius: 2mm; display: block; }
+.phone { border: 1.8mm solid #1d2b25; border-radius: 5mm; overflow: hidden; max-height: 122mm; }
+.phone img { display: block; height: 118mm; }
+table { border-collapse: collapse; font-size: 16pt; width: 100%; align-self: start; }
+th, td { border-bottom: 0.3mm solid #cfd8d2; padding: 2mm 3mm; text-align: left; }
+th { color: #4b5b53; font-size: 12.5pt; font-weight: 600; }
+td.r, th.r { text-align: right; }
+.formula { font-family: "Liberation Serif", serif; font-size: 28pt; margin: 2mm 0 4mm; }
+.note { margin-top: auto; font-size: 14pt; color: #4b5b53; }
+</style>
+</head>
+<body>
+
+<section class="slide title">
+  <p class="kicker" style="color:#cfe6da">Национален есенен турнир „Джон Атанасов“ · Разпределени приложения</p>
+  <h1>JumpScan</h1>
+  <p>Числа за приземяването — от един телефон, без лаборатория.</p>
+  <div class="who">[ИМЕ НА АВТОРА] · [КЛАС] · [УЧИЛИЩЕ]<br>Ръководител: [ИМЕ НА РЪКОВОДИТЕЛЯ]</div>
+</section>
+
+<section class="slide">
+  <p class="kicker">Проблемът</p>
+  <h1>Приземяването се оценява на око</h1>
+  <div class="cols3" style="margin-top:4mm">
+    <div class="card"><b>Лаборатория</b><p>Оптична система с маркери и силови платформи: точно, но струва десетки хиляди левове и иска специалист.</p></div>
+    <div class="card"><b>Клубът</b><p>Треньорът гледа скока, сравнява го с паметта си и не пази история в числа.</p></div>
+    <div class="card"><b>Видеото</b><p>Заснемането на непълнолетни спортисти и качването му някъде е риск за поверителността.</p></div>
+  </div>
+  <p class="note">Въпросът: може ли телефонът, който всеки вече има, да даде числа, които се следят във времето?</p>
+  <span class="num">2</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Решението</p>
+  <h1>Телефонът смята, сървърът помни, треньорът вижда промяната</h1>
+  <div class="cols3" style="margin-top:2mm">
+    <div class="card"><b>1 · Заснеми</b><p>Клип от 10 секунди, телефонът на височината на коленете.</p></div>
+    <div class="card"><b>2 · Анализирай</b><p>Позата, ъглите, времето на полет и височината се смятат на самия телефон.</p></div>
+    <div class="card"><b>3 · Изпрати</b><p>Само 14 числа отиват в клубния сървър; треньорът вижда историята и графиките.</p></div>
+  </div>
+  <p class="note"><b style="color:#176148">Видеото никога не напуска телефона.</b> Няма поле за видео, снимка или точки от позата.</p>
+  <span class="num">3</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Архитектура</p>
+  <h1>Три части и един договор</h1>
+  <img src="img/arhitektura.svg" alt="Архитектура" style="width:100%; max-height:70mm">
+  <div class="cols3" style="margin-top:5mm">
+    <p><b>Администратор</b> — всички клубове, потребители, дневник</p>
+    <p><b>Треньор</b> — само своя клуб, съгласия, CSV</p>
+    <p><b>Състезател</b> — собствените записи, изтриване</p>
+  </div>
+  <span class="num">4</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Как се смята</p>
+  <h1>Две формули носят повечето работа</h1>
+  <div class="cols">
+    <div>
+      <h2>Сгъване на коляното</h2>
+      <svg viewBox="0 0 200 150" style="height:62mm" aria-label="Ъгъл между бедро и подбедрица">
+        <line x1="60" y1="15" x2="105" y2="80" stroke="#176148" stroke-width="7" stroke-linecap="round"/>
+        <line x1="105" y1="80" x2="70" y2="140" stroke="#176148" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="60" cy="15" r="6" fill="#1d2b25"/><circle cx="105" cy="80" r="6" fill="#1d2b25"/><circle cx="70" cy="140" r="6" fill="#1d2b25"/>
+        <line x1="105" y1="80" x2="150" y2="145" stroke="#9fb5a9" stroke-width="2" stroke-dasharray="5 4"/>
+        <path d="M 124 107 A 33 33 0 0 1 89 109" fill="none" stroke="#c46a1b" stroke-width="3"/>
+        <text x="128" y="132" font-size="16" fill="#c46a1b">θ</text>
+        <text x="20" y="20" font-size="13">таз</text><text x="115" y="78" font-size="13">коляно</text><text x="20" y="145" font-size="13">глезен</text>
+      </svg>
+      <p>θ = ъгълът между бедрото и подбедрицата от триизмерните точки на модела. Прав крак е 0°.</p>
+    </div>
+    <div>
+      <h2>Височина от времето на полет</h2>
+      <p class="formula">h = g · t² / 8</p>
+      <p>Времето t е от първия кадър във въздуха до първия кадър на земята. Половината полет тялото се издига, половината пада: h = ½·g·(t/2)².</p>
+      <p class="muted">t = 360 ms → h ≈ 15,9 cm</p>
+    </div>
+  </div>
+  <span class="num">5</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Демо</p>
+  <h1>От клипа до треньорския панел</h1>
+  <div style="display:flex; gap:10mm; align-items:flex-start; flex:1; min-height:0">
+    <div class="phone"><img src="img/app-result.png" alt="Резултат в приложението"></div>
+    <img class="shot" src="img/dash-charts.png" alt="Графики в панела" style="max-width:150mm">
+  </div>
+  <span class="num">6</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Точност</p>
+  <h1>Измерено срещу лаборатория, не обещано</h1>
+  <div class="cols" style="grid-template-columns: 1.35fr 1fr">
+    <table>
+      <tr><th>Девет души, 91 скока на изглед</th><th class="r">Отпред</th><th class="r">Отстрани</th></tr>
+      <tr><td>Намерени скокове</td><td class="r"><b>71</b></td><td class="r">60</td></tr>
+      <tr><td>Измислени скокове</td><td class="r"><b>0</b></td><td class="r">0</td></tr>
+      <tr><td>Грешка във времето на полет</td><td class="r"><b>32 ms</b></td><td class="r">88 ms</td></tr>
+      <tr><td>Грешка в ъгъла (RMSE)</td><td class="r">17°</td><td class="r"><b>10°</b></td></tr>
+    </table>
+    <div>
+      <p>Еталон: силова платформа и лабораторна кинематика, набор на Университета в Твенте (CC BY 4.0).</p>
+      <p>32 ms е около един кадър при 33 кадъра в секунда.</p>
+      <p class="muted">Затова числата са за сравнение на спортиста със самия него, не за диагноза.</p>
+    </div>
+  </div>
+  <span class="num">7</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Поверителност и сигурност</p>
+  <h1>Само числа, и само за който има право</h1>
+  <div class="cols">
+    <ul>
+      <li>Видеото не се качва; JSON с 14 полета, проверени по тип и граници</li>
+      <li>Непознато поле или стойност извън обхват → отказ 422</li>
+      <li>Пароли със scrypt и сол; токени за 30 дни, пазени хеширани</li>
+      <li>5 грешни входа за 15 минути → 429</li>
+    </ul>
+    <ul>
+      <li>Правата се проверяват при всяко четене: чужд клуб → 404</li>
+      <li>Записано съгласие преди първия скок</li>
+      <li>Дневник на действията, изтриване на собствените данни, CSV</li>
+      <li>CSP, без вграждане в чужди страници, тяло до 16 KB</li>
+    </ul>
+  </div>
+  <span class="num">8</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Тестове и качество</p>
+  <h1>Една и съща математика навсякъде</h1>
+  <div class="cols3">
+    <div class="card"><span class="big">252</span><p>автоматични теста на сървъра: права, граници, атаки, експорт</p></div>
+    <div class="card"><span class="big">37</span><p>теста на ядрото, включително истински клипове и лабораторния набор</p></div>
+    <div class="card"><span class="big">CI</span><p>двата набора се пускат при всяко качване в Git</p></div>
+  </div>
+  <p class="note">Числата във валидацията са получени от същия анализатор, който работи на телефона.</p>
+  <span class="num">9</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Резултат и развитие</p>
+  <h1>Работи от край до край днес</h1>
+  <div class="cols">
+    <div>
+      <h2>Готово</h2>
+      <ul><li>Анализ на телефона, без видео навън</li><li>Клубен сървър с три роли и панел</li><li>Валидация срещу лаборатория на девет души</li><li>Български и английски</li></ul>
+    </div>
+    <div>
+      <h2>Следва</h2>
+      <ul><li>Серия от три опита с медиана</li><li>Обучен детектор на отскока и приземяването</li><li>Измерване на реален телефон</li></ul>
+    </div>
+  </div>
+  <p class="note">[АДРЕС НА САЙТА] · код: [АДРЕС НА ХРАНИЛИЩЕТО] · GPL-3.0</p>
+  <span class="num">10</span>
+</section>
+
+</body>
+</html>
