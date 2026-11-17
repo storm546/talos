@@ -71,7 +71,9 @@ const $ = id => document.getElementById(id);
 const state = {language:'bg', token:null, user:null, view:'team', athletes:[], users:[], clubs:[], audit:[], offset:0, selected:null, jumps:[], summary:null, sort:'name', ascending:true, consent:null, reset:null, deleting:false};
 const t = key => dictionary[state.language][key] ?? key;
 const locale = () => state.language === 'bg' ? 'bg-BG' : 'en-GB';
-const format = value => value == null ? '—' : new Intl.NumberFormat(locale(), {maximumFractionDigits:2}).format(value);
+// Shown precision follows what a 30-60 fps phone clip can resolve: whole ms, tenths of a degree or cm.
+const DIGITS = {flight_time_ms:0, fps:0, knee_ankle_ratio:2, quality:2};
+const format = (value, key) => value == null ? '—' : new Intl.NumberFormat(locale(), {maximumFractionDigits:DIGITS[key] ?? 1}).format(value);
 const date = value => value ? new Date(value).toLocaleDateString(locale()) : '—';
 function node(tag, text, className) {const result = document.createElement(tag); if (text != null) result.textContent = text; if (className) result.className = className; return result;}
 function message(key) {$('message').textContent = key ? t(key) : '';}
@@ -164,7 +166,7 @@ function userForm(athleteOnly=false) {
     await api('/api/users',{method:'POST',body:JSON.stringify(body)});await load();message('saved');
   });return form;
 }
-function change(value) {return value == null ? '—' : (value>0?'↑ ':value<0?'↓ ':'')+format(Math.abs(value));}
+function change(value, key) {return value == null ? '—' : (value>0?'↑ ':value<0?'↓ ':'')+format(Math.abs(value), key);}
 function consentEditor(athlete) {
   const wrap=node('section',null,'inline-panel');wrap.append(node('h2',t('consent')+' · '+athlete.name),node('p',t('consentNote')));
   const form=node('form');field(form,'consentBy','consent_by','text',athlete.consent_by || '').id='consent-by';
@@ -196,7 +198,7 @@ function team(content) {
   for(const athlete of rows){
     const row=node('tr');const name=node('td');const link=button('athlete',async()=>{state.selected=athlete;await load('history');},'name-button');link.textContent=athlete.name;name.append(link);
     if(!athlete.active)name.append(node('small',t('inactive')));row.append(name,node('td',format(athlete.jump_count)),node('td',date(athlete.last_jump_at)));
-    for(const key of metricKeys)row.append(node('td',change(athlete.changes[key].change_absolute),'num'));
+    for(const key of metricKeys)row.append(node('td',change(athlete.changes[key].change_absolute,key),'num'));
     const consent=node('td');const actions=node('div',null,'cell-actions');actions.append(node('span',t(athlete.consent_recorded?'recorded':'missing'),'badge'+(athlete.consent_recorded?'':' pending')),
       button(athlete.consent_recorded?'consent':'record',()=>{state.consent=athlete;render('#consent-by');}));actions.lastElementChild.id='consent-'+athlete.id;consent.append(actions);row.append(consent);grid.body.append(row);
   }
@@ -219,7 +221,7 @@ function chart(title,fields) {
   const y=value=>166-(value-min)/(max-min)*140;
   const first=Date.parse(rows[0].created_at),last=Date.parse(rows[rows.length-1].created_at);
   const x=row=>54+(last>first?(Date.parse(row.created_at)-first)/(last-first):.5)*404;
-  for(const value of [min,(min+max)/2,max])svg.append(svgNode('line',{x1:54,x2:458,y1:y(value),y2:y(value),class:'chart-grid'}),svgNode('text',{x:46,y:y(value)+4,'text-anchor':'end','font-size':12,fill:'currentColor'},format(value)));
+  for(const value of [min,(min+max)/2,max])svg.append(svgNode('line',{x1:54,x2:458,y1:y(value),y2:y(value),class:'chart-grid'}),svgNode('text',{x:46,y:y(value)+4,'text-anchor':'end','font-size':12,fill:'currentColor'},format(value,fields[0])));
   fields.forEach((field,index)=>{
     const base=state.summary.metrics[field].baseline;
     if(base!=null)svg.append(svgNode('line',{x1:54,x2:458,y1:y(base),y2:y(base),class:'baseline-line'+(index?' series-right':'')}));
@@ -246,10 +248,10 @@ function history(content) {
     const baselines=table(['metric','baselineValue','latest','recent','absolute','percent'],t('baseline'));
     for(const [key,label]of [['knee_ankle_ratio','ratio'],['knee_flexion_peak_mean','peakMean'],['flexion_asymmetry_pct','asymmetry']]){
       const metric=state.summary.metrics[key];const row=node('tr');row.append(node('td',t(label)));
-      for(const key of ['baseline','latest','last_three_median','change_absolute','change_percent'])row.append(node('td',format(metric[key]),'num'));baselines.body.append(row);
+      for(const field of ['baseline','latest','last_three_median','change_absolute','change_percent'])row.append(node('td',format(metric[field],field==='change_percent'?null:key),'num'));baselines.body.append(row);
     }content.append(details('baseline',baselines.wrap));
     const grid=table(historyColumns.map(([,label])=>label),t('history'));
-    for(const jump of state.jumps){const row=node('tr');for(const [key]of historyColumns){const value=jump[key];const cell=node('td',key==='created_at'?date(value):key==='test'?t(value):key==='warnings'?(value.map(t).join(', ')||t('none')):format(value));if(key==='warnings'&&value.length)cell.className='warning';row.append(cell);}grid.body.append(row);}content.append(grid.wrap);
+    for(const jump of state.jumps){const row=node('tr');for(const [key]of historyColumns){const value=jump[key];const cell=node('td',key==='created_at'?date(value):key==='test'?t(value):key==='warnings'?(value.map(t).join(', ')||t('none')):format(value,key));if(key==='warnings'&&value.length)cell.className='warning';row.append(cell);}grid.body.append(row);}content.append(grid.wrap);
   }else content.append(node('p',t('noData'),'empty'));
   if(own){
     const area=node('section',null,'inline-panel');
