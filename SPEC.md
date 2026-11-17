@@ -22,7 +22,7 @@ Produced by `core`, shown by `app`, stored by `server`.
 |---|---|---|---|
 | `test` | string | `"drop_jump"` or `"cmj"` | enum |
 | `fps` | number | frames per second analysed | 10–480 |
-| `flight_time_ms` | number or null | selected airborne phase before the analysed landing (section 2) | 0–1500 |
+| `flight_time_ms` | number or null | last airborne phase before the analysed landing | 0–1500 |
 | `jump_height_cm` | number or null | `g * t^2 / 8` from flight time; null for a plain drop landing | 0–150 |
 | `knee_flexion_contact_l`, `_r` | number or null | knee flexion at initial contact, degrees (0 = straight leg); null for the unmeasured leg | 0–180 |
 | `knee_flexion_peak_l`, `_r` | number or null | maximum knee flexion within 500 ms after contact; null for the unmeasured leg | 0–180 |
@@ -30,7 +30,7 @@ Produced by `core`, shown by `app`, stored by `server`.
 | `knee_ankle_ratio` | number or null | knee separation / ankle separation at peak flexion; null in side view | 0–5 |
 | `flexion_asymmetry_pct` | number or null | `abs(l - r) / max(l, r) * 100` of peak flexion; null with one measured leg | 0–100 |
 | `quality` | number | mean landmark visibility of hips, knees, ankles over the landing window | 0–1 |
-| `warnings` | string[] | any of `low_fps`, `low_visibility`, `no_flight_detected`, `uncertain_timing` (detector disagreement or tracking missing at a rule-only flight edge), `single_leg_view` (only the better-observed leg is measured), `manual_edges` (take-off and landing frames chosen by the user) | max 6 items |
+| `warnings` | string[] | any of `low_fps`, `low_visibility`, `no_flight_detected`, `uncertain_timing` (tracking missing at a flight edge), `single_leg_view` (only the better-observed leg is measured), `manual_edges` (take-off and landing frames chosen by the user) | max 6 items |
 
 ## 2. core (Kotlin/JVM, package `jumpscan.core`)
 
@@ -56,8 +56,8 @@ object JumpAnalyzer {
 ```
 
 - `analyzeWithLanding` is the public entry point for metrics plus flight edges. `takeoffMs` in its
-  result is the frame where the reported flight starts, including the last ground frame when rule fallback
-  misses the take-off edge. Automatic `contactMs` and `takeoffMs` are null without a flight.
+  result is the frame where the reported flight starts, including the last ground frame when tracking
+  misses the automatic take-off edge. Automatic `contactMs` and `takeoffMs` are null without a flight.
 - Optional input edges must be supplied together, match input frame timestamps, have landing after
   take-off, and span at most 1000 ms; otherwise `IllegalArgumentException` is thrown. They override
   automatic detection, use landing as initial contact for the 500 ms metrics window, and calculate
@@ -66,39 +66,7 @@ object JumpAnalyzer {
   single-leg warnings still apply, and at least ten usable angle frames are required. Manual results
   have zero automatic flight candidates and null automatic timing bounds. Frame selection does not
   remove frame-rate quantisation or validate physical timing.
-- Automatic flight uses the learned MediaPipe temporal detector at the fixed probability threshold
-  0.5. The bundled model uses 37 features: twelve centered upward image heights normalized by the
-  median left hip-to-ankle image length, twelve frame gradients, twelve visibility values and a
-  pose-presence flag. Image x is scaled by aspect for leg length. The image points are shoulders
-  11/12, hips 23/24, knees 25/26, ankles 27/28, heels 29/30 and foot indices 31/32; world coordinates
-  are not network inputs. Medians average the two middle values for an even number of observations.
-- The network grid is always 1000/33 ms, including 60 and 120 fps clips. Each grid cell selects the
-  nearest observed pose within half a step. Half-step observations are assigned once, with ties to
-  even as in the Python reference. Missing positions are interpolated linearly, with endpoint
-  positions held and visibility/presence zero. Normalization uses the selected observed poses.
-  Three centered, zero-padded temporal convolutions have 32 channels, kernel five and dilations
-  1/2/4, each followed by ReLU; a final pointwise convolution and sigmoid supply probabilities.
-  Dropout is disabled at inference. All accumulation uses Double; no new dependency is required.
-- Select the longest run strictly above 0.5 with at least two samples, retaining the first run on
-  a tie. Interpolate threshold crossings; at an unbracketed clip boundary use that boundary's grid
-  timestamp, as in the evaluation. Snap each edge forward to the first real input frame at or after
-  the crossing. Flight time is the difference of these real timestamps; landing metrics and the
-  frame editor therefore use real frames. This is an offline whole-clip detector, not streaming.
-- The retained rule detector is a cross-check. If any rule flight has both edges within an inclusive
-  100 ms of the snapped learned edges, report the learned flight without an extra timing warning.
-  If learned detects a flight but rules detect none or disagree, report learned with
-  `uncertain_timing`. If only rules detect a flight, report the last rule flight with
-  `uncertain_timing`. If neither detects a flight, use `no_flight_detected`. Unusable learned input
-  (fewer than two selected pose frames, invalid leg length or nonfinite features) falls back to rules
-  without adding a warning; existing rule tracking-gap warnings remain. Manual edges bypass both
-  detectors and retain their existing behavior. No JSON fields are added.
-- For a learned flight, `flightCount` is one; rule fallback retains its rule candidate count.
-  Learned timing bounds use the real frames bracketing the predicted crossings; they describe frame
-  quantization, not calibrated model uncertainty. A learned flight whose take-off is after the first
-  observed frame receives the usual height calculation; an initial drop starting at the first frame
-  retains null height. The learned detector can select a different flight from the last rule flight.
-- The following ground, airborne and landing rules describe the retained cross-check and fallback.
-  Landmark indices used: hips 23/24, knees 25/26, ankles 27/28, heels 29/30, foot index 31/32.
+- Landmark indices used: hips 23/24, knees 25/26, ankles 27/28, heels 29/30, foot index 31/32.
 - Ground level: each foot supplies its own median floor height from 250 ms of planted feet
   (range <= 2.5% of local leg length), allowing one frame of endpoint quantisation. The hips may
   move throughout this reference, including a deep countermovement; still standing is not required.
@@ -107,10 +75,10 @@ object JumpAnalyzer {
   recent reference at this floor and the preceding ground frame, so settled sway cannot supply ascent.
 - Airborne: both feet above ground level by a threshold scaled to body size (hip-to-ankle length).
   Smooth the signal first; pose data is jittery.
-- Rule landing: the last airborne-to-ground transition. Initial contact is the first observed
+- Analysed landing: the last airborne-to-ground transition. Initial contact is the first observed
   frame where either measured foot crosses back through its floor clearance threshold. No fixed
   frame correction is applied: delayed pose estimates do not identify an earlier physical contact.
-- The rule CMJ requires an observed take-off after an observed ground reference. A clip starting above a
+- A CMJ requires an observed take-off after an observed ground reference. A clip starting above a
   future floor reference cannot supply a CMJ. An explicitly selected `drop_jump` may start airborne;
   its initial drop landing has `jump_height_cm: null` because its take-off was not observed.
 - Knee flexion: 180 minus the 3D hip-knee-ankle angle from the world landmarks. Seen from the front
@@ -123,24 +91,19 @@ object JumpAnalyzer {
   require substantial foreshortening; borderline/oblique clips default to front. Callers may explicitly
   choose `FRONT` or `SIDE`. These thresholds express near-profile geometry, not subject calibration.
   Side views measure the leg with the most complete joint-and-foot observations (left on a tie),
-  because the profile overlaps the legs. Rule ground, flight and pose checks, angles and quality use
-  only that leg; learned timing still uses all twelve image points. The warning `single_leg_view` is always present. The other knee, FPPA, knee/ankle ratio
+  because the profile overlaps the legs. Ground, flight, pose checks, angles and quality use only
+  that leg. The warning `single_leg_view` is always present. The other knee, FPPA, knee/ankle ratio
   and asymmetry are null, never copied from the measured leg. Front-view formulas are unchanged.
 - FPPA: angle between thigh (hip to knee) and shank (knee to ankle) projected on the image plane,
   signed so that medial knee displacement is positive for both legs.
-- Angle measurements skip frames with missing or low-visibility leg landmarks. The learned flight
-  detector interpolates missing positions on its own grid as described above.
+- Frames with missing or low-visibility leg landmarks are skipped, not guessed.
 - Throws `IllegalArgumentException` on fewer than 10 usable frames.
 
-Tests retain the rule cross-check's synthetic invariants: known flight time gives the right height,
+Tests (JUnit, synthetic landmark series built in code): known flight time gives the right height,
 known joint geometry gives the right flexion and FPPA within 1 degree, symmetric input gives 0 % asymmetry,
 noisy input stays within tolerance, a clip with no jump gives `no_flight_detected`, 15 fps gives `low_fps`.
 Optional measured-data tests use `JUMPSCAN_TWENTE_DIR` and `JUMPSCAN_KAGGLE_DIR`, defaulting to
-`/work/jumpscan-data/twente-jumps9` and `/work/jumpscan-data/kaggle-landmarks`. The Twente test covers
-all 182 labelled clips as an in-training consistency check. Webcam regression uses only the unchanged
-SHA256-sorted test halves (100 clips per class), with raw flight and 100–1000 ms class counts exposed.
-Three compact public landmark fixtures compare Kotlin probabilities with independent Python Double
-outputs to 1e-6, including webcam resampling. Missing directories
+`/work/jumpscan-data/twente-jumps` and `/work/jumpscan-data/kaggle-landmarks`. Missing directories
 skip the corresponding test cleanly; an installed but incomplete dataset fails validation. These
 tests assert measured detection, false-alarm, timing and error rates with small regression margins.
 The full before/after measurements and limits are recorded in `core/VALIDATION.md`.

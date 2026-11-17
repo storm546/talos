@@ -23,8 +23,7 @@ class RealVideoTest {
         assertEquals(300, frames.size)
         assertEquals(400f / 720f, aspect)
         val metrics = JumpAnalyzer.analyze(frames, "cmj", aspect)
-        println("stock squat ${metrics.toJson()}")
-        // The detector must not propose a flight for this reviewed planted-foot clip.
+        // No selected flight is equivalent to zero valid flights: analyze always selects the last one.
         assertEquals(listOf("no_flight_detected"), metrics.warnings)
         assertNull(metrics.flightTimeMs)
         assertNull(metrics.jumpHeightCm)
@@ -53,14 +52,9 @@ class RealVideoTest {
             assertEquals(contactMs, frames[contactIndex].tMs.toDouble(), 1.0, name)
             val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj", aspect)
             val metrics = result.metrics
-            val reviewedFlightMs = mapOf("jump1" to 280.0, "jump2" to 360.0, "jump3" to 360.0)
-            val rules = JumpAnalyzer.analyzeRulesWithLanding(frames, "cmj", aspect)
-            assertEquals(reviewedFlightMs.getValue(name), rules.metrics.flightTimeMs!!, 0.0, "$name rules")
-            println("$name rules_flight_ms=${rules.metrics.flightTimeMs} " +
-                "learned_change_ms=${metrics.flightTimeMs!! - rules.metrics.flightTimeMs!!}")
             println("$name contact=${result.contactMs} flights=${result.flightCount} ${metrics.toJson()}")
             // jump2 also holds an earlier real jump (frames 42-49, confirmed by viewing); only the last is labelled,
-            // the contact check below pins the selected flight to the labelled landing.
+            // and the analysed landing is the last one, so the contact check below pins the labelled flight.
             assertTrue(result.flightCount >= 1, "$name must contain the labelled flight")
             val detectedContact = frames.indexOfFirst { it.tMs == result.contactMs }
             assertTrue(abs(detectedContact - contactIndex) <= 2, "$name contact at $detectedContact, labelled $contactIndex")
@@ -68,6 +62,7 @@ class RealVideoTest {
             // Each edge is only known to one frame, so allow two frame intervals plus the 1 ms timestamp rounding.
             assertEquals(contactMs - lastGroundMs, metrics.flightTimeMs!!, 2000.0 / metrics.fps + 1.0, name)
             assertTrue("no_flight_detected" !in metrics.warnings, name)
+            val reviewedFlightMs = mapOf("jump1" to 280.0, "jump2" to 360.0, "jump3" to 360.0)
             assertEquals(reviewedFlightMs.getValue(name), metrics.flightTimeMs!!, 0.0, name)
             assertRanges(metrics)
             inRange(metrics.flightTimeMs!!, 0.0, 1500.0)
