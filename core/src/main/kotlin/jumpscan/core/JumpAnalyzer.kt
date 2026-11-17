@@ -39,19 +39,32 @@ object JumpAnalyzer {
      * same unit, so x is multiplied by [aspect] before any distance or angle is computed.
      * This is the only place the square-pixel assumption is handled.
      */
-    fun analyze(frames: List<Frame>, test: String, aspect: Float = 9f / 16f, view: View = View.AUTO): JumpMetrics =
-        analyzeWithLanding(frames, test, aspect, view).metrics
+    fun analyze(frames: List<Frame>, test: String, aspect: Float = 9f / 16f, view: View = View.AUTO,
+        takeoffMs: Long? = null, landingMs: Long? = null): JumpMetrics =
+        analyzeWithLanding(frames, test, aspect, view, takeoffMs, landingMs).metrics
 
-    internal data class Analysis(val metrics: JumpMetrics, val contactMs: Long?, val flightCount: Int,
-        val flightTimeMinMs: Long? = null, val flightTimeMaxMs: Long? = null)
+    data class Analysis(val metrics: JumpMetrics, val contactMs: Long?, val flightCount: Int,
+        val flightTimeMinMs: Long? = null, val flightTimeMaxMs: Long? = null, val takeoffMs: Long? = null)
 
-    internal fun analyzeWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f, view: View = View.AUTO): Analysis {
+    fun analyzeWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f, view: View = View.AUTO,
+        takeoffMs: Long? = null, landingMs: Long? = null): Analysis {
         require(test == "drop_jump" || test == "cmj") { "test must be drop_jump or cmj" }
         require(aspect > 0f) { "aspect must be positive" }
         require(frames.all { it.landmarks.size == LANDMARKS && it.worldLandmarks.size == LANDMARKS }) {
             "each frame needs $LANDMARKS image and $LANDMARKS world landmarks"
         }
         require(frames.zipWithNext().all { (a, b) -> b.tMs > a.tMs }) { "frame times must increase" }
+
+        require((takeoffMs == null) == (landingMs == null)) { "provide both flight edges or neither" }
+        val manual = takeoffMs != null
+        if (takeoffMs != null && landingMs != null) {
+            require(frames.any { it.tMs == takeoffMs } && frames.any { it.tMs == landingMs }) {
+                "flight edges must be frame times in the clip"
+            }
+            require(landingMs > takeoffMs && landingMs - takeoffMs in 1..MAX_FLIGHT_MS.toLong()) {
+                "flight must be positive and at most 1000 ms"
+            }
+        }
 
         val sideView = view == View.SIDE || (view == View.AUTO && isSideView(frames, aspect))
         // Profile views overlap the legs; the leg with more complete joint-and-foot observations is measured.
@@ -64,7 +77,7 @@ object JumpAnalyzer {
         fun angleUsable(f: Frame) = measuredLandmarks.all { f.landmarks[it].visibility >= MIN_VISIBILITY }
         require(frames.count(::angleUsable) >= MIN_USABLE_FRAMES) { "need at least $MIN_USABLE_FRAMES angle frames" }
         // Contact needs observed foot points; hidden knees must not erase a visible contact.
-        val usable = frames.filter { f ->
+        val usable = if (manual) frames.filter(::angleUsable) else frames.filter { f ->
             legs.all { leg -> listOf(leg.ankle + 2, leg.ankle + 4).any {
                 f.landmarks[it].visibility >= MIN_VISIBILITY } }
         }
@@ -79,7 +92,7 @@ object JumpAnalyzer {
         val rejected = BooleanArray(n)
 
         // Each foot has its own ground height: perspective can put planted feet at different image y values.
-        fun foot(leg: Leg) = poses.mapIndexed { index, p -> listOf(leg.ankle, leg.ankle + 2, leg.ankle + 4)
+        fun foot(leg: Leg) = if (manual) emptyList() else poses.mapIndexed { index, p -> listOf(leg.ankle, leg.ankle + 2, leg.ankle + 4)
             .filter { usable[index].landmarks[it].visibility >= MIN_VISIBILITY }.maxOf { p.y[it] } }
         val footL = foot(legs.first())
         val footR = if (legs.size == 1) footL else foot(RIGHT)
@@ -93,7 +106,7 @@ object JumpAnalyzer {
         val medianStepMs = median(frames.zipWithNext { a, b -> (b.tMs - a.tMs).toDouble() })
 
         data class Standing(val end: Int, val left: Double, val right: Double, val hip: Double, val leg: Double, val segments: List<Double>)
-        val standing = (0 until n).mapNotNull { end ->
+        val standing = if (manual) emptyList() else (0 until n).mapNotNull { end ->
             val start = (0..end).first { t[it] >= t[end] - WINDOW_MS / 2 }
             // A stance spans half the landing window (250 ms), allowing one frame of endpoint quantisation.
             if (end - start < 2 || t[end] - t[start] < WINDOW_MS / 2 - medianStepMs) return@mapNotNull null
@@ -116,7 +129,7 @@ object JumpAnalyzer {
         data class Flight(val firstAir: Int, val contact: Int, val lastAir: Int, val lastGround: Int)
         val candidates = mutableListOf<Flight>()
         var i = 0
-        while (i < n) {
+        while (!manual && i < n) {
             // Use the tallest stable stance within flight limit + landing window (1.5 s), excluding the approach.
             val recent = standing.filter { it.end < i && t[i] - t[it.end] <= MAX_FLIGHT_MS + WINDOW_MS }
             val latest = recent.lastOrNull()
@@ -167,22 +180,22 @@ object JumpAnalyzer {
 
         // Analyse the last verified airborne-to-ground transition; without one, retain the no-flight result.
         val landing = candidates.lastOrNull()
-        val contact = landing?.contact ?: 0
         val uncertainTiming = landing?.let { flight ->
             t[flight.firstAir] - t[flight.lastGround] > MAX_GAP_FACTOR * medianStepMs ||
                 t[flight.contact] - t[flight.lastAir] > MAX_GAP_FACTOR * medianStepMs
         } == true
         // With a missing take-off edge, use the last observed ground frame: this is an upper timing bound.
-        val flightMs = landing?.let { flight ->
-            val start = if (t[flight.firstAir] - t[flight.lastGround] > MAX_GAP_FACTOR * medianStepMs)
-                flight.lastGround else flight.firstAir
-            (t[flight.contact] - t[start]).toDouble()
+        val flightStart = takeoffMs ?: landing?.let { flight ->
+            t[if (t[flight.firstAir] - t[flight.lastGround] > MAX_GAP_FACTOR * medianStepMs)
+                flight.lastGround else flight.firstAir]
         }
+        val initialContact = landingMs ?: landing?.let { t[it.contact] }
+        val flightMs = flightStart?.let { (initialContact!! - it).toDouble() }
         // Observations bracket each edge; dropped frames and frame-rate quantisation do not imply exact contact.
         val flightMin = landing?.let { t[it.lastAir] - t[it.firstAir] }
         val flightMax = landing?.let { t[it.contact] - t[it.lastGround] }
         val rebound = landing != null && landing.firstAir > 0 && (test == "cmj" || candidates.indexOf(landing) > 0)
-        val heightCm = if (flightMs != null && rebound) G * (flightMs / 1000).pow(2) / 8 * 100 else null
+        val heightCm = if (flightMs != null && (manual || rebound)) G * (flightMs / 1000).pow(2) / 8 * 100 else null
 
         // Angles need hips, knees and ankles, regardless of heel or toe visibility.
         val rejectedTimes = rejected.indices.filter { rejected[it] }.map { t[it] }.toSet()
@@ -197,7 +210,7 @@ object JumpAnalyzer {
                 DoubleArray(LANDMARKS) { f.worldLandmarks[it].y.toDouble() },
                 DoubleArray(LANDMARKS) { f.worldLandmarks[it].z.toDouble() })
         })
-        val contactTime = if (landing != null) t[contact] else metricFrames.first().tMs
+        val contactTime = initialContact ?: metricFrames.first().tMs
         val window = metricFrames.indices.filter { metricFrames[it].tMs in contactTime..(contactTime + WINDOW_MS) }
         require(window.isNotEmpty()) { "no usable angles in landing window" }
         // Profile flexion lies in the image plane; frontal flexion needs the estimated world depth.
@@ -226,8 +239,9 @@ object JumpAnalyzer {
         val warnings = buildList {
             if (fps < LOW_FPS) add("low_fps")
             if (quality < LOW_QUALITY) add("low_visibility")
-            if (landing == null) add("no_flight_detected")
+            if (!manual && landing == null) add("no_flight_detected")
             if (uncertainTiming) add("uncertain_timing")
+            if (manual) add("manual_edges")
             if (legs.size == 1) add("single_leg_view")
         }
 
@@ -247,7 +261,7 @@ object JumpAnalyzer {
             quality = quality,
             warnings = warnings,
         )
-        return Analysis(metrics, landing?.let { t[it.contact] }, candidates.size, flightMin, flightMax)
+        return Analysis(metrics, initialContact, candidates.size, flightMin, flightMax, flightStart)
     }
 
     private fun isSideView(frames: List<Frame>, aspect: Float): Boolean {

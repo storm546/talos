@@ -30,7 +30,7 @@ Produced by `core`, shown by `app`, stored by `server`.
 | `knee_ankle_ratio` | number or null | knee separation / ankle separation at peak flexion; null in side view | 0–5 |
 | `flexion_asymmetry_pct` | number or null | `abs(l - r) / max(l, r) * 100` of peak flexion; null with one measured leg | 0–100 |
 | `quality` | number | mean landmark visibility of hips, knees, ankles over the landing window | 0–1 |
-| `warnings` | string[] | any of `low_fps`, `low_visibility`, `no_flight_detected`, `uncertain_timing` (tracking missing at a flight edge), `single_leg_view` (only the better-observed leg is measured) | max 5 items |
+| `warnings` | string[] | any of `low_fps`, `low_visibility`, `no_flight_detected`, `uncertain_timing` (tracking missing at a flight edge), `single_leg_view` (only the better-observed leg is measured), `manual_edges` (take-off and landing frames chosen by the user) | max 6 items |
 
 ## 2. core (Kotlin/JVM, package `jumpscan.core`)
 
@@ -46,10 +46,26 @@ fun JumpMetrics.toJson(): String                                 // snake_case k
 object JumpAnalyzer {
     enum class View { AUTO, FRONT, SIDE }
     fun analyze(frames: List<Frame>, test: String, aspect: Float = 9f / 16f,
-                view: View = View.AUTO): JumpMetrics
+                view: View = View.AUTO, takeoffMs: Long? = null, landingMs: Long? = null): JumpMetrics
+    data class Analysis(val metrics: JumpMetrics, val contactMs: Long?, val flightCount: Int,
+                        val flightTimeMinMs: Long? = null, val flightTimeMaxMs: Long? = null,
+                        val takeoffMs: Long? = null)
+    fun analyzeWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f,
+                           view: View = View.AUTO, takeoffMs: Long? = null, landingMs: Long? = null): Analysis
 }
 ```
 
+- `analyzeWithLanding` is the public entry point for metrics plus flight edges. `takeoffMs` in its
+  result is the frame where the reported flight starts, including the last ground frame when tracking
+  misses the automatic take-off edge. Automatic `contactMs` and `takeoffMs` are null without a flight.
+- Optional input edges must be supplied together, match input frame timestamps, have landing after
+  take-off, and span at most 1000 ms; otherwise `IllegalArgumentException` is thrown. They override
+  automatic detection, use landing as initial contact for the 500 ms metrics window, and calculate
+  height as `g * t^2 / 8` for both tests (a marked drop-jump flight is a rebound). Manual results add
+  `manual_edges` and omit `no_flight_detected` and `uncertain_timing`. Visibility, frame-rate and
+  single-leg warnings still apply, and at least ten usable angle frames are required. Manual results
+  have zero automatic flight candidates and null automatic timing bounds. Frame selection does not
+  remove frame-rate quantisation or validate physical timing.
 - Landmark indices used: hips 23/24, knees 25/26, ankles 27/28, heels 29/30, foot index 31/32.
 - Ground level: each foot supplies its own median floor height from 250 ms of planted feet
   (range <= 2.5% of local leg length), allowing one frame of endpoint quantisation. The hips may

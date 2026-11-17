@@ -132,3 +132,30 @@ tests), no skipped tests with the datasets installed. Running only `BenchmarkTes
 dataset environment variables set to absent paths also succeeds, with exactly two skipped tests.
 Both final batches reproduce step 4 counts. `git diff --check` passes. Side output nullability is
 a documented consumer integration requirement; no app/server changes are included here.
+
+## Manual flight edges — 17 November 2026
+
+The public `JumpAnalyzer.analyzeWithLanding` result now includes the take-off frame timestamp alongside
+initial contact. Both `analyze` and `analyzeWithLanding` accept optional take-off and landing timestamps.
+Manual input reuses the existing angle and landing-window calculation, replaces automatic flight timing,
+and records `manual_edges`. A marked drop-jump flight is a rebound and therefore receives a height.
+Automatic detection and its timing bounds retain their existing behavior.
+
+On `android-build-kit`, in `/work/jumpscan-app`, the following core task passed as part of the Android
+build, with one Gradle worker:
+
+```sh
+./gradlew --no-daemon --max-workers=1 :core:test :app:assembleDebug :app:assembleDebugAndroidTest
+```
+
+All 43 core tests passed with zero failures and zero skips. The existing 37 tests were unchanged,
+including the three private landmark fixtures and measured-data regression tests. Six new synthetic
+tests cover exact manual flight and height for both test types, the 1000 ms boundary, the selected
+landing's contact and peak angles, absent heel/toe observations, retained low-visibility warnings,
+missing or non-frame edges, out-of-clip edges, equal/reversed edges, flights over 1000 ms, and the
+reported automatic take-off timestamp. Default and explicit-null calls produce identical automatic
+results. Manual results use the marked contact even when there is no automatically detected flight.
+
+Manual frame marking does not establish sub-frame accuracy. Frame rate and visibility warnings remain,
+and at least ten usable angle frames plus a usable angle in the selected landing window are required.
+No detector accuracy or clinical claim follows from these synthetic checks.
