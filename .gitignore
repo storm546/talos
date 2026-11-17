@@ -9,3 +9,4 @@ logs/
 *.apk
 .idea/
 core/src/test/resources/private/
+docs/out/
