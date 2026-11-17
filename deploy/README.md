@@ -102,10 +102,11 @@ Synthetic data only — no real athlete is involved:
 docker compose exec jumpscan python -m server.seed
 ```
 
-Creates club "Demo Club" with `admin@demo.test`, `coach@demo.test`, `athlete1@demo.test`,
-`athlete2@demo.test`, and "Second Demo Club" with `coach2@demo.test`, `athlete3@demo.test`. Password for
-all of them: `demo1234`. Ten generated jumps per athlete, spread over the last ten days, so the trend
-view has something to show. Running it twice is safe; existing rows are left alone.
+Creates club "Демо клуб" with `admin@demo.test`, `coach@demo.test` and six athletes
+(`athlete1@demo.test`, `athlete2@demo.test`, `athlete4@demo.test` to `athlete7@demo.test`), and
+"Втори демо клуб" with `coach2@demo.test`, `athlete3@demo.test`. Password for all of them: `demo1234`.
+Ten generated jumps per athlete, four days apart over the last forty days, so the trend view has
+something to show. Running it twice is safe; existing rows are left alone.
 
 The rules ask for a test account for every role. Keep these, and give the credentials to the jury in the
 documentation pack. Treat them as public credentials.

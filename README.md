@@ -66,9 +66,10 @@ server/.venv/bin/uvicorn server.main:app --port 8000
 The dashboard is at `http://127.0.0.1:8000/`. The database path comes from `JUMPSCAN_DB` and defaults to
 `server/jumpscan.db`.
 
-Synthetic demo accounts (club "Demo Club", password `demo1234` for all): `admin@demo.test`,
-`coach@demo.test`, `athlete1@demo.test`, `athlete2@demo.test`, plus a second club with
-`coach2@demo.test` and `athlete3@demo.test`. Ten generated jumps per athlete.
+Synthetic demo accounts (club "Демо клуб", password `demo1234` for all): `admin@demo.test`,
+`coach@demo.test` and six athletes `athlete1@demo.test`, `athlete2@demo.test`, `athlete4@demo.test` to
+`athlete7@demo.test`, plus a second club with `coach2@demo.test` and `athlete3@demo.test`. Ten generated
+jumps per athlete, four days apart.
 
 ```sh
 server/.venv/bin/python -m server.seed

@@ -13,11 +13,11 @@ def seed(path=None):
     with database(path) as db:
         db.execute("BEGIN IMMEDIATE")
         for club_name, accounts in (
-            ("Demo Club", (("admin", "Demo Admin", "admin"), ("coach", "Демо треньор", "coach"),
+            ("Демо клуб", (("admin", "Демо администратор", "admin"), ("coach", "Демо треньор", "coach"),
                            ("athlete1", "Александра Иванова", "athlete"), ("athlete2", "Борис Петров", "athlete"),
                            ("athlete4", "Виктория Георгиева", "athlete"), ("athlete5", "Даниел Стоянов", "athlete"),
                            ("athlete6", "Елена Димитрова", "athlete"), ("athlete7", "Мартин Колев", "athlete"))),
-            ("Second Demo Club", (("coach2", "Second Demo Coach", "coach"), ("athlete3", "Second Demo Athlete", "athlete"))),
+            ("Втори демо клуб", (("coach2", "Втори демо треньор", "coach"), ("athlete3", "Иван Николов", "athlete"))),
         ):
             db.execute("INSERT OR IGNORE INTO clubs(name) VALUES (?)", (club_name,))
             club_id = db.execute("SELECT id FROM clubs WHERE name = ?", (club_name,)).fetchone()[0]
