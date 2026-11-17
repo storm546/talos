@@ -12,6 +12,7 @@ import jumpscan.core.Landmark
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.util.Locale
 
 /** Small platform-only checks; no test library is needed. */
 class AppChecks : Instrumentation() {
@@ -21,11 +22,31 @@ class AppChecks : Instrumentation() {
         try {
             queueChecks()
             previewChecks()
-            output.putString("stream", "Queue isolation, durability, failure retention, payload boundaries and preview checks passed.\n")
+            numberChecks()
+            output.putString("stream", "Queue isolation, durability, failure retention, payload boundaries, preview and number-format checks passed.\n")
             finish(Activity.RESULT_OK, output)
         } catch (e: Throwable) {
             output.putString("stream", "App checks failed: ${e.stackTraceToString()}\n")
             finish(Activity.RESULT_CANCELED, output)
+        }
+    }
+
+    private fun numberChecks() {
+        for ((locale, decimal) in listOf(Locale.ENGLISH to ".", Locale.forLanguageTag("bg") to ",")) {
+            check(metricNumber(280.0, "flight_time_ms", locale) == "280")
+            check(metricNumber(24.91, "fps", locale) == "25")
+            for (key in listOf("knee_ankle_ratio", "quality")) {
+                check(metricNumber(0.876, key, locale) == "0${decimal}88")
+                check(metricNumber(-0.001, key, locale) == "0${decimal}00")
+            }
+            for (key in listOf("jump_height_cm", "knee_flexion_contact_l", "knee_flexion_contact_r",
+                    "knee_flexion_peak_l", "knee_flexion_peak_r", "fppa_peak_l", "fppa_peak_r", "flexion_asymmetry_pct")) {
+                check(metricNumber(15.89, key, locale) == "15${decimal}9")
+                check(metricNumber(-0.01, key, locale) == "0${decimal}0")
+                check(metricNumber(-0.16, key, locale) == "-0${decimal}2")
+            }
+            check(metricNumber(-0.0, "jump_height_cm", locale) == "0${decimal}0")
+            check(metricNumber(-0.1, "fps", locale) == "0")
         }
     }
 

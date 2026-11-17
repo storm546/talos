@@ -2,7 +2,12 @@ package jumpscan.app
 
 import android.app.Activity
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
+import android.graphics.drawable.StateListDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -38,8 +43,10 @@ class MainActivity : Activity() {
     private var screen = "login"
     private var progress: ProgressBar? = null
     private var progressText: TextView? = null
-    private val green = Color.rgb(22, 102, 91)
-    private val ink = Color.rgb(23, 42, 37)
+    private val green by lazy { getColor(R.color.accent) }
+    private val ink by lazy { getColor(R.color.ink) }
+    private val muted by lazy { getColor(R.color.muted) }
+    private val warning by lazy { getColor(R.color.warning) }
     private val labels = linkedMapOf(
         "fps" to R.string.fps,
         "flight_time_ms" to R.string.flight_time_ms,
@@ -99,7 +106,10 @@ class MainActivity : Activity() {
         screen = name
         progress = null
         progressText = null
-        val scroll = ScrollView(this).apply { isFillViewport = true }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(getColor(R.color.paper))
+        }
         page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(18), dp(22), dp(18))
@@ -120,10 +130,10 @@ class MainActivity : Activity() {
         setContentView(scroll)
         scroll.requestApplyInsets()
         text(getString(R.string.brand), 12, green).apply { letterSpacing = 0.16f }
-        text(title, 28).apply { setPadding(0, dp(10), 0, dp(14)) }
+        text(title, 28).apply { setTypeface(null, Typeface.BOLD); setPadding(0, dp(10), 0, dp(18)) }
     }
 
-    private fun text(value: String, size: Int = 16, color: Int = ink): TextView = TextView(this).apply {
+    private fun text(value: String, size: Int = 16, color: Int = if (size <= 14) muted else ink): TextView = TextView(this).apply {
         text = value
         textSize = size.toFloat()
         setTextColor(color)
@@ -131,23 +141,51 @@ class MainActivity : Activity() {
         page.addView(this, LinearLayout.LayoutParams(-1, -2))
     }
 
-    private fun button(label: String, action: () -> Unit): Button = Button(this).apply {
+    private fun button(label: String, primary: Boolean = false, parent: LinearLayout = page,
+                       action: () -> Unit): Button = Button(this).apply {
         text = label
         isAllCaps = false
         minHeight = dp(48)
-        setTextColor(green)
+        minimumWidth = 0
+        setPadding(dp(12), dp(10), dp(12), dp(10))
+        setTypeface(null, Typeface.BOLD)
+        setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
+            intArrayOf(muted, if (primary) Color.WHITE else green)))
+        fun shape(fill: Int) = GradientDrawable().apply {
+            setColor(fill)
+            cornerRadius = dp(5).toFloat()
+            setStroke(dp(1), if (primary) fill else getColor(R.color.line))
+        }
+        val states = StateListDrawable().apply {
+            addState(intArrayOf(-android.R.attr.state_enabled), shape(getColor(R.color.hover)))
+            addState(intArrayOf(), shape(if (primary) green else Color.WHITE))
+        }
+        backgroundTintList = null
+        background = RippleDrawable(ColorStateList.valueOf(if (primary) getColor(R.color.accent_pressed)
+            else getColor(R.color.hover)), states, null)
+        stateListAnimator = null
         setOnClickListener { action() }
-        page.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
     }
 
     private fun field(label: String, value: String = "", type: Int = InputType.TYPE_CLASS_TEXT): EditText {
-        val caption = text(label, 14)
+        val caption = text(label, 14).apply { setPadding(0, dp(14), 0, dp(6)) }
         return EditText(this).apply {
             id = View.generateViewId()
             caption.labelFor = id
             inputType = type
             setSingleLine(true)
             setText(value)
+            setTextColor(ink)
+            setHintTextColor(muted)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            backgroundTintList = null
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = dp(5).toFloat()
+                setStroke(dp(1), ColorStateList(arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
+                    intArrayOf(green, getColor(R.color.line))))
+            }
             minHeight = dp(48)
             page.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
@@ -156,12 +194,12 @@ class MainActivity : Activity() {
     private fun login(message: String? = null) {
         layout(getString(R.string.sign_in), "login")
         text(getString(R.string.login_intro))
-        if (message != null) text(message, 15, Color.rgb(157, 45, 36))
+        if (message != null) text(message, 15, getColor(R.color.error))
         val url = field(getString(R.string.server_url), base(), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         val email = field(getString(R.string.email), type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
         val password = field(getString(R.string.password), type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
         password.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
-        button(getString(R.string.sign_in)) {
+        button(getString(R.string.sign_in), primary = true) {
             val address = try { serverUrl(url.text.toString()) } catch (e: IOException) {
                 Toast.makeText(this, errorMessage(e), Toast.LENGTH_LONG).show()
                 return@button
@@ -196,21 +234,23 @@ class MainActivity : Activity() {
 
     private fun home(message: String? = null) {
         layout(getString(R.string.home_title), "home")
-        if (message != null) text(message, 15, Color.rgb(157, 45, 36))
+        if (message != null) text(message, 15, getColor(R.color.error))
         text(getString(R.string.guide_short))
-        text(getString(R.string.choose_test), 18)
+        text(getString(R.string.choose_test), 18).setPadding(0, dp(20), 0, dp(8))
         val types = RadioGroup(this)
         listOf("cmj" to R.string.cmj, "drop_jump" to R.string.drop_jump).forEach { (value, label) ->
             types.addView(RadioButton(this).apply {
                 id = View.generateViewId()
                 text = getString(label)
+                setTextColor(ink)
+                buttonTintList = ColorStateList.valueOf(green)
                 minHeight = dp(48)
                 isChecked = test == value
                 setOnClickListener { test = value }
             })
         }
         page.addView(types)
-        button(getString(R.string.record)) {
+        button(getString(R.string.record), primary = true) {
             filmingGuide { launchVideo(Intent(MediaStore.ACTION_VIDEO_CAPTURE).putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1), 10) }
         }
         button(getString(R.string.pick_video)) {
@@ -247,7 +287,7 @@ class MainActivity : Activity() {
                 R.string.guide_fps, R.string.guide_slow_motion, R.string.guide_still, R.string.guide_light)) {
             text(getString(line)).setPadding(0, dp(8), 0, dp(8))
         }
-        button(getString(R.string.continue_video), continueAction)
+        button(getString(R.string.continue_video), action = continueAction)
         button(getString(R.string.cancel)) { home() }
     }
 
@@ -321,9 +361,9 @@ class MainActivity : Activity() {
             })
         }
         page.addView(legend)
-        if (current.previewUnclear) text(getString(R.string.preview_unclear), 14, Color.rgb(133, 80, 12))
+        if (current.previewUnclear) text(getString(R.string.preview_unclear), 14, warning)
         metricRows(JSONObject(current.metrics.toJson()), showNoWarnings = !current.previewUnclear)
-        if (uploadedId == null && queuedId == null) button(if (token().isEmpty()) getString(R.string.sign_in_upload) else getString(R.string.upload)) {
+        if (uploadedId == null && queuedId == null) button(if (token().isEmpty()) getString(R.string.sign_in_upload) else getString(R.string.upload), primary = true) {
             if (token().isEmpty()) login() else {
                 val savedToken = token()
                 val savedBase = base()
@@ -342,7 +382,7 @@ class MainActivity : Activity() {
                         }
                     }
                 }, { (id, pendingId) -> uploadedId = id; queuedId = pendingId; result() },
-                    { result(); text(it, 15, Color.rgb(157, 45, 36)) })
+                    { result(); text(it, 15, getColor(R.color.error)) })
             }
         }
         if (uploadedId != null) text(getString(R.string.uploaded, uploadedId), 16, green)
@@ -363,7 +403,7 @@ class MainActivity : Activity() {
         val selection = edits ?: return result()
         layout(getString(R.string.check_frames), "frames")
         text(getString(R.string.frame_instructions), 14)
-        if (message != null) text(message, 15, Color.rgb(157, 45, 36)).apply {
+        if (message != null) text(message, 15, getColor(R.color.error)).apply {
             post { announceForAccessibility(message) }
         }
         val image = ImageView(this).apply {
@@ -398,7 +438,7 @@ class MainActivity : Activity() {
             selection.landingMs = current.timesUs[selection.index] / 1000
             updateEdges()
         }
-        apply = button(getString(R.string.apply_frames)) {
+        apply = button(getString(R.string.apply_frames), primary = true) {
             work(getString(R.string.applying_frames), {
                 try { applyEdges(this, current, selection.takeoffMs!!, selection.landingMs!!) }
                 catch (_: IllegalArgumentException) { throw AppError(R.string.manual_analysis_error) }
@@ -439,14 +479,15 @@ class MainActivity : Activity() {
             }
         }
         for (step in listOf(-5, -1, 1, 5)) {
-            val control = Button(this).apply {
-                text = if (step > 0) "+$step" else step.toString()
+            val control = button(if (step > 0) "+$step" else step.toString(), parent = steps) {
+                selection.index += step; showFrame()
+            }.apply {
                 contentDescription = getString(if (step > 0) R.string.frames_forward else R.string.frames_back, kotlin.math.abs(step))
-                minHeight = dp(48)
-                setTextColor(green)
-                setOnClickListener { selection.index += step; showFrame() }
+                layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    topMargin = dp(10)
+                    if (step != -5) marginStart = dp(8)
+                }
             }
-            steps.addView(control, LinearLayout.LayoutParams(0, -2, 1f))
             stepButtons += step to control
         }
         updateEdges()
@@ -456,7 +497,7 @@ class MainActivity : Activity() {
     private fun pendingControls() {
         val count = if (token().isNotEmpty()) pending().count() else
             pendingRoot.walkTopDown().count { it.isFile && it.name.endsWith(".json") }
-        text(getString(R.string.pending_count, count), 14)
+        text(getString(R.string.pending_count, count), 14).setPadding(0, dp(18), 0, dp(8))
         if (count > 0) {
             if (token().isEmpty()) text(getString(R.string.pending_sign_in), 14)
             else button(getString(if (queueSending) R.string.sending_pending else R.string.send_pending)) {
@@ -508,14 +549,14 @@ class MainActivity : Activity() {
             Triple(R.string.group_sides, R.string.explain_sides, listOf("knee_ankle_ratio", "flexion_asymmetry_pct", "quality"))
         )
         for ((heading, explanation, keys) in groups) {
-            text(getString(heading), 21).setPadding(0, dp(20), 0, dp(4))
+            text(getString(heading), 21).apply { setTypeface(null, Typeface.BOLD); setPadding(0, dp(24), 0, dp(6)) }
             text(getString(explanation), 14)
             for (key in keys) {
             val label = labels.getValue(key)
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dp(3), 0, dp(3))
+                setPadding(0, dp(7), 0, dp(7))
             }
             val caption = TextView(this).apply { text = getString(label); textSize = 14f; setTextColor(ink) }
             row.addView(caption, LinearLayout.LayoutParams(0, -2, 1f))
@@ -539,11 +580,11 @@ class MainActivity : Activity() {
             "low_visibility" -> getString(R.string.low_visibility)
             "no_flight_detected" -> getString(R.string.no_flight_detected)
             else -> getString(R.string.unknown_warning)
-        }, 14, Color.rgb(133, 80, 12))
+        }, 14, warning)
     }
 
     private fun number(json: JSONObject, key: String): String = if (json.isNull(key)) getString(R.string.not_available)
-        else String.format(Locale.getDefault(), "%.2f", json.getDouble(key))
+        else metricNumber(json.getDouble(key), key, resources.configuration.locales[0])
 
     private fun history() {
         if (token().isEmpty()) return login()
@@ -580,6 +621,8 @@ class MainActivity : Activity() {
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             isIndeterminate = true
+            progressTintList = ColorStateList.valueOf(green)
+            indeterminateTintList = ColorStateList.valueOf(green)
             page.addView(this, LinearLayout.LayoutParams(-1, dp(16)))
         }
         progressText = text(getString(R.string.please_wait), 14)
@@ -635,4 +678,16 @@ class MainActivity : Activity() {
         executor.shutdownNow()
         super.onDestroy()
     }
+}
+
+/** Dashboard DIGITS precision, without a rounded negative zero. */
+internal fun metricNumber(value: Double, key: String, locale: Locale): String {
+    val digits = when (key) {
+        "flight_time_ms", "fps" -> 0
+        "knee_ankle_ratio", "quality" -> 2
+        else -> 1
+    }
+    val format = "%.${digits}f"
+    val result = String.format(locale, format, value)
+    return if (result == String.format(locale, format, -0.0)) String.format(locale, format, 0.0) else result
 }

@@ -1,0 +1,11 @@
+<resources>
+    <color name="paper">#F2F4EF</color>
+    <color name="ink">#20382F</color>
+    <color name="muted">#53645B</color>
+    <color name="line">#CBD4CB</color>
+    <color name="accent">#176148</color>
+    <color name="accent_pressed">#104C37</color>
+    <color name="hover">#E6EEE7</color>
+    <color name="warning">#85421D</color>
+    <color name="error">#8A3428</color>
+</resources>

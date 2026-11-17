@@ -234,3 +234,113 @@ stock/visibility CSVs were removed from the kit. The mock API was stopped using 
 PID, and the emulator was stopped with `adb emu kill`. Final checks found no adb device or worker qemu
 process, and connection to mock port 8765 was refused. The original private video on the kit was not
 modified or copied into the repository. No deployment, publication, push or service restart occurred.
+
+
+## Visual polish — 17 November 2026
+
+The Android Views now use the coach dashboard's paper (`#F2F4EF`), ink (`#20382F`),
+muted text (`#53645B`), accent (`#176148`), line (`#CBD4CB`) and hover (`#E6EEE7`)
+colors. The shared button helper supplies primary and secondary styles, including the
+frame-step controls. Buttons have a minimum 48 dp height, 5 dp corners, native ripple/focus
+feedback and readable disabled states. Record, Upload, Sign in and Apply are primary actions.
+Fields use white surfaces and a visible accent border when focused. Section spacing and
+heading weights separate the result groups without changing the frame-confirm workflow.
+The default Android launcher icon is replaced by an adaptive vector icon using the dashboard
+favicon's white upward chevron on the accent background. No library or dependency was added.
+
+The shared metric formatter uses the active app locale: flight time and fps have zero decimal
+places, knee/ankle separation and visibility have two, and all other metrics have one. Rounded
+negative zero is normalized to zero. Result, queued result, history summary and history detail
+reuse this formatter; the editor's height summary also uses one decimal place. The precision
+matches the dashboard's DIGITS map. Fixed trailing decimal places follow this task's request.
+Metric values, queue JSON and upload payloads are unchanged.
+
+### Text contrast
+
+Ratios below were calculated from the actual opaque sRGB colors using WCAG relative luminance.
+All exceed the 4.5:1 AA requirement for normal text. The white and hover columns also check
+field, button and interaction backgrounds; some combinations are conservative checks beyond
+where a text color currently appears. Disabled buttons use muted text on hover, without opacity
+that would reduce contrast. Primary pressed feedback uses the dashboard's `#104C37` green.
+
+| Text color | Paper | White | Hover |
+| --- | ---: | ---: | ---: |
+| Ink `#20382F` | 11.37:1 | 12.59:1 | 10.64:1 |
+| Muted `#53645B` | 5.67:1 | 6.28:1 | 5.31:1 |
+| Accent `#176148` | 6.68:1 | 7.40:1 | 6.25:1 |
+| Warning `#85421D` | 6.79:1 | 7.52:1 | 6.35:1 |
+| Error `#8A3428` | 7.29:1 | 8.07:1 | 6.82:1 |
+| Left legend `#004EA2` | 7.26:1 | 8.04:1 | 6.80:1 |
+| Right legend `#8B4C00` | 6.06:1 | 6.71:1 | 5.67:1 |
+
+White text is 7.40:1 on the primary accent and 9.95:1 on pressed green. The existing blue/orange
+skeleton colors retain their leg-identification behavior; their darker text legend colors are
+listed above. Evidence calculations are in `logs/polish/contrast.json`, outside version control.
+
+### Build and instrumentation
+
+Sources were synced to `/work/jumpscan-app` on `android-build-kit` as `builder`, using
+`rsync --exclude local.properties` and excluding build products, logs, Git data and local
+environments. The following commands passed:
+
+```sh
+ssh android-build-kit 'cd /work/jumpscan-app && timeout 900 ./gradlew --no-daemon --max-workers=1 :core:test :app:assembleDebug :app:assembleDebugAndroidTest'
+ssh android-build-kit '/opt/android-sdk/platform-tools/adb install -r /work/jumpscan-app/app/build/outputs/apk/debug/app-debug.apk'
+ssh android-build-kit '/opt/android-sdk/platform-tools/adb install -r /work/jumpscan-app/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'
+ssh android-build-kit '/opt/android-sdk/platform-tools/adb shell am instrument -w jumpscan.app.test/jumpscan.app.AppChecks'
+python3 app/tools/check_resources.py
+```
+
+The build reported success in 51 seconds. `:core:test` was up to date; the existing reports contain
+43 tests with zero failures, errors or skips. Both APK installs succeeded. Instrumentation executed
+and passed queue isolation, persistence, failure retention, metric-only payload boundaries, preview
+checks and the new number-format checks. Those checks exercise every metric's precision in English
+and Bulgarian, including whole-number rounding, two-decimal rounding, small negative values,
+negative zero and preserved nonzero negative values. All 146 bilingual resource keys and format
+arguments matched. The mechanical design scan reported no findings; rendered screenshots were
+reviewed separately.
+
+Memory was checked with `free -g` before the build and each emulator launch; starts had at least
+3 GB available, and starts below that threshold were deferred. Builds were sequential with one
+Gradle worker. Only one headless `jumpscan-worker-a` emulator ran at a time. Early GPU-off and
+small-memory configurations did not render reliably. The final API 34 configuration used two cores,
+SwiftShader with Vulkan disabled, a 540 × 1140 display at 220 dpi, and 1280 MB guest RAM passed through
+QEMU. This represents a phone approximately 393 dp wide. The initial install attempted before Android
+had finished booting failed; installation after boot succeeded. A startup System UI ANR was dismissed
+with Wait before the successful captures. Shared host memory fell below 3 GB while the emulator ran;
+no new Gradle build or full model inference was started in that state. No unrelated workload or service
+was stopped, and no host package was installed.
+
+### Visual evidence and scope
+
+Screenshots, UI XML, test logs, replay metadata and contrast measurements are under
+`/root/jumpscan/logs/polish/`, outside version control. Screenshot helpers were copied into that
+directory only to change their evidence path and adapt swipe coordinates to this emulator.
+
+The result uses `/work/jumpscan-samples/private/jump1.mp4`, copied only to temporary and app-private
+device storage, with the existing reviewed `jump1.csv` through the retained debug replay path.
+Replay produced 232 frames, take-off at 3747 ms, contact at 4027 ms, flight 280 ms and height 9.61 cm.
+This task does not claim a fresh heavy-model inference run. The result displays 280 ms, 25 fps,
+9.6 cm, ratio 0.61 and visibility 0.87 in English, with Bulgarian commas for fractional values.
+The exact contact preview and the existing unclear-joints warning remain visible.
+
+History and its detail view show a mock-server record as 240 ms, 7.1 cm, ratio 1.89 and visibility
+0.87 in English, and 240 ms, 7,1 cm, 1,89 and 0,87 in Bulgarian. The pending queue was empty after
+delivery. Login, home, filming guide, result, frame editor, history, history detail and the launcher
+icon were captured in both languages and reviewed visually; no clipped text, overlaps or unreadable
+colors remained. The launcher icon shows the accent fill and white chevron in the app drawer; on the
+home screen the Pixel launcher adds its own light suggestion ring around the hotseat icon, which is
+launcher styling, not part of the app icon. Additional checks: with system night mode on, the app kept its light paper
+background; at font scale 1.3 the Bulgarian history detail kept its formatted values and stayed
+scrollable; in landscape (1140 × 540) the result and frame editor rendered without clipping and
+Apply and Cancel remained reachable by scrolling.
+
+### Cleanup
+
+Font scale, rotation and night mode were restored to their recorded values. `pm clear` removed app
+and test-app data, including the test login, pending storage and the private video copy; the app
+data directory was empty afterward. The temporary video, replay CSV and UI dump were removed from
+`/data/local/tmp` and `/sdcard`. Older sample videos and screenshots under `/sdcard` predate this
+task and were left untouched. The mock API was stopped by its recorded PID and the emulator with
+`adb emu kill`. A final check found no adb device, no qemu or mock process, and port 8765 refused
+connections. No deployment, publication, push or service restart occurred.

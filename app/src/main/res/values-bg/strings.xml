@@ -135,7 +135,7 @@
     <string name="frame_instructions">Задай първия кадър с ходилата във въздуха, после първия кадър с допир до земята. При скок от платформа задай отскока след първото приземяване.</string>
     <string name="frame_time">%1$d мс</string>
     <string name="edge_times">Отскок: %1$s\nПриземяване: %2$s</string>
-    <string name="manual_flight">Полет: %1$d мс · Височина: %2$.2f см</string>
+    <string name="manual_flight">Полет: %1$d мс · Височина: %2$.1f см</string>
     <string name="edge_error">Задай двата кадъра. Приземяването трябва да е след отскока, до 1000 мс по-късно.</string>
     <string name="set_takeoff">Задай отскок</string>
     <string name="set_landing">Задай приземяване</string>
