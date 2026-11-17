@@ -134,6 +134,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/jumpscan.example.com/privkey.pem;
 
     client_max_body_size 64k;          # the API caps requests at 16 KB
+    add_header Strict-Transport-Security "max-age=31536000" always;   # browsers stay on HTTPS
 
     location / {
         proxy_pass http://127.0.0.1:8171;
@@ -160,7 +161,7 @@ Point the app at `https://jumpscan.example.com`. Release builds of the app only 
    and port `8000`. If NPM runs with host networking, use `127.0.0.1` and port `8171` (the port compose
    publishes). The container itself always listens on `8000`.
 4. Enable "Block Common Exploits".
-5. SSL tab: request a new Let's Encrypt certificate, enable Force SSL and HTTP/2.
+5. SSL tab: request a new Let's Encrypt certificate, enable Force SSL, HTTP/2 and HSTS.
 
 NPM running in a normal container cannot reach the host's `127.0.0.1:8171`; use a shared Docker network
 (`docker network connect`) and proxy to `jumpscan:8000`, or run NPM with host networking.
