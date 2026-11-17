@@ -115,11 +115,14 @@ Accuracy is measured against laboratory reference data, not asserted. The full w
 
 | What | Reference | Result | Details |
 |---|---|---|---|
-| Flight time, jump height | Force plate, lab dataset (40 jumps, 4 subjects) | 17 ms mean error (0.56 of a frame); 1.4 cm at a jump of about 17 cm | `docs/validacia.md` |
-| Knee flexion curve | Optical motion capture, same dataset | front view RMSE 16–17°, correlation 0.91–0.93; peaks about 12° low | `docs/validacia.md` |
-| Detection rate | Lab clips | right jump found in 28 of 40 (front, no spurious results) and 20 of 40 (side) | `docs/validacia.md` |
+| Detection | Force plate, Twente lab dataset (91 jumps, 9 subjects, filmed front and side) | right jump found in 71 of 91 from the front and 60 of 91 from the side; no spurious result | `docs/validacia.md` 4.8 |
+| Flight time, jump height | Same force plate | front: mean error 32 ms, about one frame at 33 fps (about 3 cm of height at a 15 cm jump); side: flight about 87 ms too long | `docs/validacia.md` 4.8 |
+| Knee flexion curve | Lab motion capture (OpenSim inverse kinematics), same dataset | RMSE front 17.3° (range compressed, slope 0.65), side in the image plane 10.0° | `docs/validacia.md` 3, 4.8 |
 | False alarms | 400 public webcam clips without a jump | 3–7 % | `docs/validacia.md` |
 | Own filmed jumps | Manual frame labelling | all three found; landing within one frame | `docs/validacia.md` |
+
+Datasets: University of Twente, Zenodo 10.5281/zenodo.6644593 and 10.5281/zenodo.7422031 (Huawei Wang,
+CC BY 4.0); Gesture Video Dataset for Jump Classification on Kaggle (daffasesarabbani, CC BY 4.0).
 
 The honest reading: the numbers are good for comparing an athlete with themselves over time, not for
 absolute angles; in side view one leg is measured and flight timing is only indicative.
