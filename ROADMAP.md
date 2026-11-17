@@ -21,7 +21,7 @@ not as a medical measurement.
 | Client and server technology, security, confidentiality, interoperability (category focus) | Android client with on-device ML, REST API with roles, token auth, rate limits, audit log, consent records, data export, OpenAPI description |
 | Architecture, UI separated from logic (Design) | Three parts with written contracts: `core` (pure maths, tested), `app`, `server`; the same analyzer runs on the phone and in the batch validator |
 | Code quality, tests, version control, error handling, attack protection (Implementation) | 250+ server tests, 37 core tests including real-video fixtures, CI on every push, security review with fixes recorded |
-| Evidence of testing (Presentation) | Accuracy table against the University of Twente lab dataset (40 jumps, 4 subjects), detection rates on 1000 public clips, own filmed jumps |
+| Evidence of testing (Presentation) | Accuracy table against the University of Twente lab dataset (91 jumps, 9 subjects), detection rates on 1000 public clips, own filmed jumps |
 | Language norms, UI (Implementation) | Bulgarian and English interface in app and dashboard |
 
 The strongest single asset is the validation: most school projects cannot say how wrong they are. Ours can.
