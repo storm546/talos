@@ -31,7 +31,7 @@ Login, result upload, history and queue delivery were checked against `app/tools
 
 Screenshots are under `/root/jumpscan/logs/app2/`, outside version control. English and Bulgarian captures cover login, home, analysis, result overlay, grouped numbers, filming guide, queued result, history and history detail. The captures were opened and inspected for wrapping and skeleton placement. Current captures use the `verified-` prefix; the owner contact images explicitly show the framing warning when leg chains are uncertain. The filming guide's Continue action was seen opening the system video picker. A replay of the committed stock squat fixture verified the no-landing peak-flexion preview and warning wording in both languages, with the skeleton over the body.
 
-## Analysis speed experiment
+## Analysis speed experiment (historical; removed 17 November 2026)
 
 Full analysis remains the production default. Alternative modes require an explicit debug intent extra; release builds ignore it. The lite model is bundled only in debug assets. No coarse landmarks are mixed into the final metrics.
 
@@ -55,7 +55,7 @@ The baseline, sparse-window exports and displayed JSON were compared through the
 
 Debug exports now use `files/landmarks.csv`, `files/coarse.csv` and `files/metrics.json` inside app-private storage. The previous external-files location could not be read through the shell on this emulator. These files are developer fixtures, not queue entries, and export code is guarded by `BuildConfig.DEBUG`.
 
-Reproduction helpers:
+Historical reproduction commands (the rejected modes and comparison helper have since been removed):
 
 ```sh
 python3 app/tools/emulator.py 1 --tag full --mode full
@@ -124,3 +124,113 @@ A fifth mock row was seeded directly as a synthetic single-leg history fixture, 
 Evidence is retained outside version control under `/root/jumpscan/logs/appcheck/`: build and instrumentation logs, `merge-full-jump1..3` logs/CSV/JSON/XML/screenshots, the complete comparison, queue payloads, received mock rows, and 25 screenshots. All saved screenshots were opened and inspected, including the before/after nullable history rows. The original API 26 and real-phone validation limits still apply.
 
 Cleanup completed: both radios were enabled, app locale was returned to the system default, and `pm clear` removed both app and test-app data, including the test login, pending storage, private video and debug landmark exports. The app data directory was empty afterward. Temporary video, replay and UI-dump files were removed from the device; `/data/local/tmp` retained only the existing Dalvik cache. The mock API was stopped using its recorded PID, and the emulator was stopped with `adb emu kill`. A subsequent check found no qemu process, no mock API process or listener on port 8765, and no adb device. No service was restarted or production endpoint used.
+
+## Manual frame confirmation — 17 November 2026
+
+The result now exposes take-off and landing timestamps and opens a bilingual frame editor. The editor
+steps through the clip's real presentation timestamps by one or five frames, decodes one frame at a
+time at a maximum 720-pixel long side, and reuses the existing visibility-filtered skeleton overlay.
+Analysed landmarks, timestamps, source URI, preview and selected edges stay in the retained result
+across rotation. Apply calls the public core analysis API and returns the selected landing preview and
+`manual_edges` result. Existing uploaded or queued entries are retained; applying an edit creates a new,
+unsent local result rather than modifying a previously stored jump.
+
+No-flight results explicitly offer frame marking or filming again. The editor starts at the peak-flexion
+frame when there is no automatic take-off. Low visibility suggests filming again with the whole body
+in frame. The filming guide adds the requested 60 fps or slow-motion instruction in both languages.
+The rejected lite/sparse paths, lite asset, Java bridge and experiment-only comparison helper are gone;
+full heavy analysis and debug replay remain. The staged deletions were included by a concurrent README
+commit, `b52a77e29d8e59450c7ed51822c198d3e4f5fc52`; that history was preserved.
+
+### Build and automated checks
+
+Work ran as `builder` on `android-build-kit`, in `/work/jumpscan-app`. Sources were synced with
+`rsync --exclude local.properties`, also excluding build products, logs and local environments. Memory
+was checked before builds and emulator launches; 4 GB or more was available at those starts. Builds
+were sequential with one Gradle worker. No other workload or service was stopped, and no package was
+installed on the kit.
+
+```sh
+ssh android-build-kit 'cd /work/jumpscan-app && timeout 900 ./gradlew --no-daemon --max-workers=1 :core:test :app:assembleDebug :app:assembleDebugAndroidTest'
+ssh android-build-kit '/opt/android-sdk/platform-tools/adb shell am instrument -w jumpscan.app.test/jumpscan.app.AppChecks'
+python3 app/tools/check_resources.py
+```
+
+The final build passed. All 43 core tests passed with no failures or skips, including six new manual-edge
+tests and all 37 unchanged existing tests. Both APKs were installed and final instrumentation passed:
+queue isolation, durability, failure retention, metric-only payload boundaries and preview checks,
+including the public core call and the peak-flexion fallback with only one visible leg. All 146
+English/Bulgarian resource keys and format arguments matched. The first build failed because rsync had
+left the deleted Java bridge on the kit; removing that obsolete remote file resolved the compile error.
+
+Server checks ran only on `openclaw`, using its existing virtual environment and the requested cap:
+
+```sh
+PATH=/root/jumpscan/server/.venv/bin:$PATH systemd-run --scope -q -p MemoryMax=800M -p MemorySwapMax=0 nice python3 -m pytest server -q -p no:cacheprovider
+```
+
+All 254 server tests passed, with two dependency warnings. New checks cover acceptance and preservation
+of six warning entries, `manual_edges` in history and CSV, and both dashboard labels. The system Python
+lacked pytest; the existing environment was used without installing dependencies.
+
+### Observed emulator behavior and validation limit
+
+Only one `jumpscan-worker-a` emulator ran at any time, headless, API 34, with two cores. The emulator
+raised requested guest RAM values of 2048 and 1536 MB to its 2560 MB minimum. A later launch used
+SwiftShader with Vulkan disabled; the same guest RAM minimum still applied.
+
+An ordinary, fresh heavy-model run of `/work/jumpscan-samples/private/jump1.mp4` started on all 232
+frames at 720 pixels. It failed partway through with `FrameDecoder: failed to get video frame (err -11)`
+and `StagefrightMetadataRetriever: all codecs failed to extract a frame`. The app showed its translated
+decode error and produced no result. The cause was not isolated. While the emulator was running, shared
+host memory remained below 3 GB available, so a further heavy inference run was not started. Fresh
+end-to-end video inference therefore remains unverified in this task; the following successful editor
+checks used the retained debug replay path, not fresh model inference. No decoder fix or speed/accuracy
+claim is made.
+
+Owner replay used the reviewed private `jump1.csv` already installed on the kit, together with the
+original owner video copied only to app-private device storage. Core proposed 3747 / 4027 ms and
+280 ms / 9.61 cm. All four step controls were exercised, and the exact timestamp sequence was recorded.
+The user marks were set to 3747 / 4067 ms. The editor showed 320 ms / 12.56 cm. Portrait-to-landscape-to-
+portrait rotation preserved the selection; a language change recreated the activity and retained both
+edges and the selected 4067 ms frame. Apply returned a manually marked result with the selected contact
+preview. The owner contact preview retained its existing unclear-joints warning and omitted uncertain
+leg chains.
+
+The no-flight check used `/work/jumpscan-samples/one-person.mp4` and the committed
+`squat_jumps_one_person.csv.gz` landmarks through replay. English and Bulgarian results showed the
+no-flight explanation and both recovery choices. The editor started at the expected 166 ms peak frame.
+Equal edges disabled Apply. Source timestamps stepped through 333, 500, 533 and 567 ms, including the
+real 33/34 ms intervals. Arbitrary test marks at 166 / 567 ms produced 401 ms / 19.72 cm and
+`manual_edges` after Apply. These were UI-test marks on a planted-foot squat fixture, not a measured jump
+or evidence of timing accuracy.
+
+The loopback-only mock API received both app uploads, one owner result and one squat UI-test result.
+Their payloads contained exactly the 14 metric fields, with flight/height 320 / 12.56 and 401 / 19.72,
+and `warnings: ["manual_edges"]`. No video, landmarks or edge timestamps entered the upload. Both
+filming-guide hints were opened and inspected in English and Bulgarian.
+
+A synthetic visibility fixture retained the squat geometry and timestamps, set visible leg points to
+0.6, and hid them from 560 through 1120 ms. It verified the whole-body re-filming hint in both languages.
+Applying a 567 ms landing with no usable angles in its landing window exercised the recovery path.
+A fresh UI review found that this error could appear below the viewport; it was moved above the image
+and given an accessibility announcement. The APKs were rebuilt, instrumentation passed again, and the
+actual failure screen was opened and inspected. The reviewer scored that specific recovery fix resolved.
+
+Evidence is outside version control in `/root/jumpscan/logs/confirm/`: build/test logs, received mock
+payloads, timestamp steps, UI XML, decoder failure log and 18 screenshots. Every screenshot was opened
+and inspected, including the failed decode, loading state, editor, applied result, no-flight recovery,
+visibility hints, guide text and final Apply error. The native interface retains the existing palette,
+typography and controls. No new design-system files were introduced. API 26 execution and real-phone
+performance remain untested; the existing compatibility path is compiled.
+
+### Cleanup
+
+App language selection was reset to the system default, portrait/automatic rotation was restored,
+and `pm clear` removed both app and test-app data. The app data directory was empty afterward, removing
+test login, private video, replay landmarks and pending storage. The test video, replay CSV and UI dump
+were removed from the device; `/data/local/tmp` retained only its pre-existing Dalvik cache. Temporary
+stock/visibility CSVs were removed from the kit. The mock API was stopped using its recorded, verified
+PID, and the emulator was stopped with `adb emu kill`. Final checks found no adb device or worker qemu
+process, and connection to mock port 8765 was refused. The original private video on the kit was not
+modified or copied into the repository. No deployment, publication, push or service restart occurred.

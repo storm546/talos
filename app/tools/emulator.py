@@ -22,7 +22,7 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('clip', type=int, choices=[1, 2, 3])
     p.add_argument('--tag', default='full')
-    p.add_argument('--mode', default='full')
+    p.add_argument('--mode', choices=['full', 'default', 'replay'], default='full')
     p.add_argument('--skip-export', action='store_true')
     p.add_argument('--resume', action='store_true')
     a = p.parse_args()

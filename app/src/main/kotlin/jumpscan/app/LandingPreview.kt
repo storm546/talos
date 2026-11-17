@@ -51,7 +51,8 @@ internal fun landingPreview(raw: Bitmap, frame: Frame): Bitmap {
 }
 
 internal fun peakFlexionFrame(frames: List<Frame>): Frame {
-    val usable = frames.filter { f -> (23..28).all { f.landmarks[it].visibility >= 0.5f } }
+    fun visible(frame: Frame, side: Int) = listOf(23, 25, 27).all { frame.landmarks[it + side].visibility >= 0.5f }
+    val usable = frames.filter { f -> (0..1).any { visible(f, it) } }
     fun flexion(points: List<Landmark>, side: Int): Double {
         val hip = points[23 + side]; val knee = points[25 + side]; val ankle = points[27 + side]
         val a = doubleArrayOf((hip.x - knee.x).toDouble(), (hip.y - knee.y).toDouble(), (hip.z - knee.z).toDouble())
@@ -59,5 +60,5 @@ internal fun peakFlexionFrame(frames: List<Frame>): Frame {
         val norm = sqrt(a.sumOf { it * it } * b.sumOf { it * it })
         return if (norm < 1e-12) 0.0 else 180 - Math.toDegrees(acos((a.indices.sumOf { a[it] * b[it] } / norm).coerceIn(-1.0, 1.0)))
     }
-    return usable.maxBy { flexion(it.worldLandmarks, 0) + flexion(it.worldLandmarks, 1) }
+    return usable.maxBy { frame -> (0..1).sumOf { if (visible(frame, it)) flexion(frame.worldLandmarks, it) else 0.0 } }
 }

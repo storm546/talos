@@ -127,4 +127,23 @@
     <string name="pending_unreadable">A saved result could not be read. It is still on this device.</string>
     <string name="pending_remove_failed">A result was sent but its local copy could not be removed. Do not retry until storage is available.</string>
     <string name="preview_unclear">Unclear joints are hidden in this frame. Keep your whole body visible and use good light.</string>
+    <string name="check_frames">Check frames</string>
+    <string name="manual_edges">Frames set by hand.</string>
+    <string name="no_flight_help">No flight was found automatically. Check the frames to mark take-off and landing, or film again.</string>
+    <string name="visibility_help">Try filming again with the whole body in frame and space above the head.</string>
+    <string name="film_again">Film again</string>
+    <string name="frame_instructions">Mark the first frame with the feet off the ground, then the first frame touching the ground. For a drop jump, mark the rebound take-off.</string>
+    <string name="frame_time">%1$d ms</string>
+    <string name="edge_times">Take-off: %1$s\nLanding: %2$s</string>
+    <string name="manual_flight">Flight: %1$d ms · Height: %2$.2f cm</string>
+    <string name="edge_error">Set both frames. Landing must follow take-off by at most 1000 ms.</string>
+    <string name="set_takeoff">Set take-off</string>
+    <string name="set_landing">Set landing</string>
+    <string name="apply_frames">Apply</string>
+    <string name="applying_frames">Applying frames…</string>
+    <string name="loading_frame">Loading frame…</string>
+    <string name="frames_forward">Forward %1$d frames</string>
+    <string name="frames_back">Back %1$d frames</string>
+    <string name="manual_analysis_error">Not enough clear knee frames near this landing. Choose another landing or film again.</string>
+    <string name="guide_slow_motion">Use 60 fps or slow motion if your camera offers it, then pick the video.</string>
 </resources>

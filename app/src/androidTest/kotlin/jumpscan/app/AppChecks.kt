@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.os.Bundle
 import jumpscan.core.Frame
 import jumpscan.core.JumpMetrics
+import jumpscan.core.JumpAnalyzer
 import jumpscan.core.Landmark
 import org.json.JSONObject
 import java.io.File
@@ -76,8 +77,12 @@ class AppChecks : Instrumentation() {
         val hiddenPreview = landingPreview(raw, hidden)
         check(hiddenPreview.getPixel(40, 50) == Color.WHITE)
         val frames = List(15) { frame.copy(tMs = it * 40L) }
-        check(CoreLanding(frames, "cmj", 1f).contactMs == null)
+        check(JumpAnalyzer.analyzeWithLanding(frames, "cmj", 1f).contactMs == null)
         check(peakFlexionFrame(frames) in frames)
+        val profile = frames.map { f -> f.copy(landmarks = f.landmarks.mapIndexed { i, point ->
+            if (i in listOf(24, 26, 28, 30, 32)) point.copy(visibility = 0f) else point
+        }) }
+        check(peakFlexionFrame(profile) in profile)
         check(!unclearPreview(frame) && unclearPreview(hidden))
         check(hiddenPreview.getPixel(40, 70) == Color.WHITE) { "An unclear leg must not leave floating ankle markers" }
         raw.recycle(); preview.recycle(); hiddenPreview.recycle()

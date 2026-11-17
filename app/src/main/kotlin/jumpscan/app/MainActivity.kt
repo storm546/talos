@@ -26,6 +26,8 @@ class MainActivity : Activity() {
     private var generation = 0
     private val prefs by lazy { getSharedPreferences("account", MODE_PRIVATE) }
     private var analysis: Analysis? = null
+    private data class FrameEdits(var index: Int, var takeoffMs: Long?, var landingMs: Long?)
+    private var edits: FrameEdits? = null
     private var uploadedId: Long? = null
     private var queuedId: String? = null
     private var queueSending = false
@@ -56,17 +58,17 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val retained = lastNonConfigurationInstance as? RetainedResult
-        if (retained != null) { analysis = retained.analysis; uploadedId = retained.uploadedId; test = retained.test; queuedId = retained.queuedId }
-        if (analysis != null) result() else if (!openVideo(intent)) {
+        if (retained != null) { analysis = retained.analysis; uploadedId = retained.uploadedId; test = retained.test; queuedId = retained.queuedId; edits = retained.edits }
+        if (analysis != null) { if (edits != null) frameEditor() else result() } else if (!openVideo(intent)) {
             if (token().isEmpty()) login() else home()
         }
         sendPending(automatic = true)
     }
 
-    private data class RetainedResult(val analysis: Analysis?, val uploadedId: Long?, val test: String, val queuedId: String?)
+    private data class RetainedResult(val analysis: Analysis?, val uploadedId: Long?, val test: String, val queuedId: String?, val edits: FrameEdits?)
 
     @Deprecated("Uses the platform non-configuration state API")
-    override fun onRetainNonConfigurationInstance(): Any = RetainedResult(analysis, uploadedId, test, queuedId)
+    override fun onRetainNonConfigurationInstance(): Any = RetainedResult(analysis, uploadedId, test, queuedId, edits)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -242,7 +244,7 @@ class MainActivity : Activity() {
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(-1, dp(140)))
         for (line in listOf(R.string.guide_phone, R.string.guide_body, R.string.guide_face,
-                R.string.guide_fps, R.string.guide_still, R.string.guide_light)) {
+                R.string.guide_fps, R.string.guide_slow_motion, R.string.guide_still, R.string.guide_light)) {
             text(getString(line)).setPadding(0, dp(8), 0, dp(8))
         }
         button(getString(R.string.continue_video), continueAction)
@@ -266,6 +268,7 @@ class MainActivity : Activity() {
 
     private fun startAnalysis(uri: Uri, mode: String = "full") {
         analysis = null
+        edits = null
         uploadedId = null
         queuedId = null
         val expectedGeneration = generation + 1
@@ -288,6 +291,19 @@ class MainActivity : Activity() {
         text(if (current.metrics.test == "cmj") getString(R.string.cmj) else getString(R.string.drop_jump), 18)
         if (current.truncated) text(getString(R.string.truncated), 14)
         text(getString(R.string.depth_note), 14)
+        text(edgeTimes(current.landing.takeoffMs, current.landing.contactMs), 16)
+        if ("manual_edges" in current.metrics.warnings) text(getString(R.string.manual_edges), 16, green)
+        if ("no_flight_detected" in current.metrics.warnings) {
+            text(getString(R.string.no_flight_help), 16)
+            button(getString(R.string.film_again)) { home() }
+        }
+        if ("low_visibility" in current.metrics.warnings) text(getString(R.string.visibility_help), 16)
+        button(getString(R.string.check_frames)) {
+            val start = current.landing.takeoffMs ?: peakFlexionFrame(current.frames).tMs
+            edits = FrameEdits(current.timesUs.indexOfFirst { it / 1000 == start }.coerceAtLeast(0),
+                current.landing.takeoffMs, current.landing.contactMs)
+            frameEditor()
+        }
         text(getString(if (current.contactFound) R.string.landing_frame else R.string.peak_frame), 18)
         page.addView(ImageView(this).apply {
             setImageBitmap(current.preview)
@@ -335,6 +351,106 @@ class MainActivity : Activity() {
         if (token().isNotEmpty()) button(getString(R.string.history)) { history() }
         button(getString(R.string.home)) { home() }
         text(getString(R.string.no_video_upload), 13)
+    }
+
+    private fun edgeTimes(takeoff: Long?, landing: Long?): String {
+        fun time(value: Long?) = value?.let { getString(R.string.frame_time, it) } ?: getString(R.string.not_available)
+        return getString(R.string.edge_times, time(takeoff), time(landing))
+    }
+
+    private fun frameEditor(message: String? = null) {
+        val current = analysis ?: return home()
+        val selection = edits ?: return result()
+        layout(getString(R.string.check_frames), "frames")
+        text(getString(R.string.frame_instructions), 14)
+        if (message != null) text(message, 15, Color.rgb(157, 45, 36)).apply {
+            post { announceForAccessibility(message) }
+        }
+        val image = ImageView(this).apply {
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = getString(R.string.skeleton_description)
+        }
+        page.addView(image, LinearLayout.LayoutParams(-1, dp(230)))
+        val timestamp = text("", 18)
+        timestamp.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        val loading = text("", 14)
+        val steps = LinearLayout(this)
+        page.addView(steps)
+        val stepButtons = mutableListOf<Pair<Int, Button>>()
+        val edges = text(edgeTimes(selection.takeoffMs, selection.landingMs), 16)
+        val flight = text("", 16)
+        flight.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        lateinit var apply: Button
+        fun updateEdges() {
+            edges.text = edgeTimes(selection.takeoffMs, selection.landingMs)
+            val duration = selection.landingMs?.let { end -> selection.takeoffMs?.let { end - it } }
+            val valid = duration != null && duration in 1..1000
+            flight.text = if (valid) getString(R.string.manual_flight, duration,
+                9.81 * duration!!.toDouble() * duration / 1_000_000 / 8 * 100) else getString(R.string.edge_error)
+            apply.isEnabled = valid
+        }
+        val takeoff = button(getString(R.string.set_takeoff)) {
+            selection.takeoffMs = current.timesUs[selection.index] / 1000
+            updateEdges()
+        }
+        val landing = button(getString(R.string.set_landing)) {
+            selection.landingMs = current.timesUs[selection.index] / 1000
+            updateEdges()
+        }
+        apply = button(getString(R.string.apply_frames)) {
+            work(getString(R.string.applying_frames), {
+                try { applyEdges(this, current, selection.takeoffMs!!, selection.landingMs!!) }
+                catch (_: IllegalArgumentException) { throw AppError(R.string.manual_analysis_error) }
+            }, {
+                analysis = it
+                edits = null
+                uploadedId = null
+                queuedId = null
+                result()
+            }, { frameEditor(it) })
+        }
+        button(getString(R.string.cancel)) { cancelWork(); edits = null; result() }
+        fun showFrame() {
+            task?.cancel(true)
+            val expected = ++generation
+            val index = selection.index
+            takeoff.isEnabled = false
+            landing.isEnabled = false
+            image.setImageDrawable(null)
+            timestamp.text = getString(R.string.frame_time, current.timesUs[index] / 1000)
+            loading.text = getString(R.string.loading_frame)
+            stepButtons.forEach { (step, button) -> button.isEnabled = index + step in current.timesUs.indices }
+            task = executor.submit {
+                try {
+                    val bitmap = framePreview(this, current, index)
+                    runOnUiThread {
+                        if (!isDestroyed && screen == "frames" && generation == expected) {
+                            image.setImageBitmap(bitmap)
+                            takeoff.isEnabled = true
+                            landing.isEnabled = true
+                            loading.text = ""
+                        } else bitmap.recycle()
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread { if (!isDestroyed && screen == "frames" && generation == expected)
+                        loading.text = errorMessage(e) }
+                }
+            }
+        }
+        for (step in listOf(-5, -1, 1, 5)) {
+            val control = Button(this).apply {
+                text = if (step > 0) "+$step" else step.toString()
+                contentDescription = getString(if (step > 0) R.string.frames_forward else R.string.frames_back, kotlin.math.abs(step))
+                minHeight = dp(48)
+                setTextColor(green)
+                setOnClickListener { selection.index += step; showFrame() }
+            }
+            steps.addView(control, LinearLayout.LayoutParams(0, -2, 1f))
+            stepButtons += step to control
+        }
+        updateEdges()
+        showFrame()
     }
 
     private fun pendingControls() {
@@ -419,6 +535,7 @@ class MainActivity : Activity() {
             "low_fps" -> getString(R.string.low_fps)
             "uncertain_timing" -> getString(R.string.uncertain_timing)
             "single_leg_view" -> getString(R.string.single_leg_view)
+            "manual_edges" -> getString(R.string.manual_edges)
             "low_visibility" -> getString(R.string.low_visibility)
             "no_flight_detected" -> getString(R.string.no_flight_detected)
             else -> getString(R.string.unknown_warning)
@@ -507,6 +624,7 @@ class MainActivity : Activity() {
         when (screen) {
             "home" -> super.onBackPressed()
             "busy" -> { cancelWork(); home() }
+            "frames" -> { cancelWork(); edits = null; result() }
             "login" -> if (analysis != null) result() else home()
             else -> home()
         }

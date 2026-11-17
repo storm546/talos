@@ -127,4 +127,23 @@
     <string name="pending_unreadable">Запазен резултат не може да бъде прочетен. Той остава на устройството.</string>
     <string name="pending_remove_failed">Резултатът е изпратен, но локалното копие не може да бъде изтрито. Не изпращайте отново, докато не освободите място.</string>
     <string name="preview_unclear">Неясно проследените точки не са показани в този кадър. Заснемете цялото тяло при добра светлина.</string>
+    <string name="check_frames">Провери кадрите</string>
+    <string name="manual_edges">Кадрите са избрани ръчно.</string>
+    <string name="no_flight_help">Не е намерен полет автоматично. Провери кадрите и задай отскок и приземяване или заснеми отново.</string>
+    <string name="visibility_help">Заснеми отново с цялото тяло в кадър и място над главата.</string>
+    <string name="film_again">Заснеми отново</string>
+    <string name="frame_instructions">Задай първия кадър с ходилата във въздуха, после първия кадър с допир до земята. При скок от платформа задай отскока след първото приземяване.</string>
+    <string name="frame_time">%1$d мс</string>
+    <string name="edge_times">Отскок: %1$s\nПриземяване: %2$s</string>
+    <string name="manual_flight">Полет: %1$d мс · Височина: %2$.2f см</string>
+    <string name="edge_error">Задай двата кадъра. Приземяването трябва да е след отскока, до 1000 мс по-късно.</string>
+    <string name="set_takeoff">Задай отскок</string>
+    <string name="set_landing">Задай приземяване</string>
+    <string name="apply_frames">Приложи</string>
+    <string name="applying_frames">Прилагане на кадрите…</string>
+    <string name="loading_frame">Зареждане на кадъра…</string>
+    <string name="frames_forward">Напред с %1$d кадъра</string>
+    <string name="frames_back">Назад с %1$d кадъра</string>
+    <string name="manual_analysis_error">Няма достатъчно ясни кадри на коленете около това приземяване. Избери друго приземяване или заснеми отново.</string>
+    <string name="guide_slow_motion">Използвай 60 кадъра/сек или забавен каданс, ако камерата го предлага, после избери видеото.</string>
 </resources>
