@@ -88,7 +88,15 @@ private fun parabola(t0: Double, flight: Double, metresPerImageHeight: Double = 
     if (s < 0 || s > flight) 0.0 else 9.81 * s * (flight - s) / 2 / metresPerImageHeight
 }
 
+/** Rule-detector invariants remain independent of the learned proposal used by the public entry point. */
 class JumpAnalyzerTest {
+    private fun analyzeWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f,
+        view: JumpAnalyzer.View = JumpAnalyzer.View.AUTO) =
+        JumpAnalyzer.analyzeRulesWithLanding(frames, test, aspect, view)
+
+    private fun analyze(frames: List<Frame>, test: String, aspect: Float = 9f / 16f,
+        view: JumpAnalyzer.View = JumpAnalyzer.View.AUTO) = analyzeWithLanding(frames, test, aspect, view).metrics
+
     private fun profileClip(rightVisible: Boolean): List<Frame> =
         clip(60, 2.0, parabola(0.3, 0.4), devL = landingDev(0.7, 60.0), flexL = { 15.0 }).map { f ->
             val near = if (rightVisible) 24 else 23
@@ -108,7 +116,7 @@ class JumpAnalyzerTest {
     @Test
     fun profileMeasuresOnlyTheVisibleLegInTheImagePlane() {
         for (right in listOf(false, true)) {
-            val m = JumpAnalyzer.analyze(profileClip(right), "cmj")
+            val m = analyze(profileClip(right), "cmj")
             assertEquals(400.0, m.flightTimeMs!!, 40.0)
             assertEquals(listOf("single_leg_view"), m.warnings)
             assertEquals(60.0, (if (right) m.kneeFlexionPeakR else m.kneeFlexionPeakL)!!, 1.0)
@@ -131,29 +139,29 @@ class JumpAnalyzerTest {
             point.copy(x = (point.x * ASPECT / wideAspect).toFloat(),
                 visibility = if (index in 11..12 || index == 24) 0f else point.visibility)
         }) }
-        val m = JumpAnalyzer.analyze(wide, "cmj", wideAspect, JumpAnalyzer.View.SIDE)
+        val m = analyze(wide, "cmj", wideAspect, JumpAnalyzer.View.SIDE)
         assertEquals(60.0, m.kneeFlexionPeakL!!, 1.0)
         assertTrue("single_leg_view" in m.warnings)
         assertThrows<IllegalArgumentException> {
-            JumpAnalyzer.analyze(frames, "cmj", view = JumpAnalyzer.View.FRONT)
+            analyze(frames, "cmj", view = JumpAnalyzer.View.FRONT)
         }
     }
 
     @Test
     fun explicitViewChoosesKneePlaneWithoutChangingFrontMetrics() {
         val frames = clip(60, 2.0, parabola(0.3, 0.4), devL = { 60.0 }, flexL = { 15.0 })
-        val auto = JumpAnalyzer.analyze(frames, "cmj")
-        val front = JumpAnalyzer.analyze(frames, "cmj", view = JumpAnalyzer.View.FRONT)
+        val auto = analyze(frames, "cmj")
+        val front = analyze(frames, "cmj", view = JumpAnalyzer.View.FRONT)
         assertEquals(front, auto)
         assertEquals(15.0, front.kneeFlexionPeakL!!, 1.0)
-        val side = JumpAnalyzer.analyze(frames, "cmj", view = JumpAnalyzer.View.SIDE)
+        val side = analyze(frames, "cmj", view = JumpAnalyzer.View.SIDE)
         assertEquals(60.0, side.kneeFlexionPeakL!!, 1.0)
         assertNull(side.kneeFlexionPeakR)
     }
 
     @Test
     fun knownFlightTimeGivesHeight() {
-        val m = JumpAnalyzer.analyze(clip(120, 2.0, parabola(0.8, 0.5)), "cmj")
+        val m = analyze(clip(120, 2.0, parabola(0.8, 0.5)), "cmj")
         val expectedCm = 9.81 * 0.5 * 0.5 / 8 * 100   // 30.66
         assertEquals(500.0, m.flightTimeMs!!, 40.0)
         assertEquals(expectedCm, m.jumpHeightCm!!, 4.0)
@@ -166,7 +174,7 @@ class JumpAnalyzerTest {
     fun medialKneeGivesPositiveFppaIndependentOfFlexion() {
         // From landing at t = 0.7 (jump 0.3 s + 0.4 s flight) for 0.4 s: 20 degrees frontal deviation, 45 degrees 3D flexion
         val held: (Double) -> (Double) -> Double = { v -> { t -> if (t >= 0.7 && t < 1.1) v else 0.0 } }
-        val m = JumpAnalyzer.analyze(clip(60, 2.0, parabola(0.3, 0.4), held(20.0), flexL = held(45.0)), "cmj")
+        val m = analyze(clip(60, 2.0, parabola(0.3, 0.4), held(20.0), flexL = held(45.0)), "cmj")
         assertEquals(45.0, m.kneeFlexionPeakL!!, 1.0)
         assertEquals(45.0, m.kneeFlexionPeakR!!, 1.0)
         assertEquals(20.0, m.fppaPeakL!!, 1.0)
@@ -180,7 +188,7 @@ class JumpAnalyzerTest {
     fun lateralKneeGivesNegativeFppa() {
         val dev: (Double) -> Double = { t -> if (t >= 0.7 && t < 1.1) -11.0 else 0.0 }
         val flex: (Double) -> Double = { t -> if (t >= 0.7 && t < 1.1) 30.0 else 0.0 }
-        val m = JumpAnalyzer.analyze(clip(60, 2.0, parabola(0.3, 0.4), dev, flexL = flex), "cmj")
+        val m = analyze(clip(60, 2.0, parabola(0.3, 0.4), dev, flexL = flex), "cmj")
         assertEquals(30.0, m.kneeFlexionPeakL!!, 1.0)
         assertEquals(-11.0, m.fppaPeakL!!, 1.0)
         assertEquals(-11.0, m.fppaPeakR!!, 1.0)
@@ -189,20 +197,20 @@ class JumpAnalyzerTest {
 
     @Test
     fun peakFlexionIsFoundWithinWindowAfterContact() {
-        val m = JumpAnalyzer.analyze(clip(60, 2.0, parabola(0.3, 0.4), flexL = landingDev(0.7, 60.0)), "cmj")
+        val m = analyze(clip(60, 2.0, parabola(0.3, 0.4), flexL = landingDev(0.7, 60.0)), "cmj")
         assertEquals(60.0, m.kneeFlexionPeakL!!, 1.5)
         assertTrue(m.kneeFlexionContactL!! < 10.0)
     }
 
     @Test
     fun symmetricInputGivesZeroAsymmetry() {
-        val m = JumpAnalyzer.analyze(clip(60, 2.0, parabola(0.3, 0.4), flexL = landingDev(0.7, 50.0)), "cmj")
+        val m = analyze(clip(60, 2.0, parabola(0.3, 0.4), flexL = landingDev(0.7, 50.0)), "cmj")
         assertEquals(0.0, m.flexionAsymmetryPct!!, 0.5)
     }
 
     @Test
     fun differentLegsGiveAsymmetry() {
-        val m = JumpAnalyzer.analyze(
+        val m = analyze(
             clip(60, 2.0, parabola(0.3, 0.4), flexL = landingDev(0.7, 60.0), flexR = landingDev(0.7, 30.0)), "cmj",
         )
         assertEquals(50.0, m.flexionAsymmetryPct!!, 4.0)
@@ -210,7 +218,7 @@ class JumpAnalyzerTest {
 
     @Test
     fun noisyInputStaysWithinTolerance() {
-        val m = JumpAnalyzer.analyze(
+        val m = analyze(
             clip(60, 2.0, parabola(0.8, 0.5), flexL = landingDev(1.3, 50.0), noise = 0.002), "cmj",
         )
         assertEquals(500.0, m.flightTimeMs!!, 50.0)
@@ -222,7 +230,7 @@ class JumpAnalyzerTest {
 
     @Test
     fun clipWithoutJumpWarnsNoFlight() {
-        val m = JumpAnalyzer.analyze(clip(60, 2.0, { 0.0 }, noise = 0.001), "cmj")
+        val m = analyze(clip(60, 2.0, { 0.0 }, noise = 0.001), "cmj")
         assertTrue("no_flight_detected" in m.warnings)
         assertNull(m.flightTimeMs)
         assertNull(m.jumpHeightCm)
@@ -230,14 +238,14 @@ class JumpAnalyzerTest {
 
     @Test
     fun lowFpsWarns() {
-        val m = JumpAnalyzer.analyze(clip(15, 3.0, parabola(1.0, 0.5)), "cmj")
+        val m = analyze(clip(15, 3.0, parabola(1.0, 0.5)), "cmj")
         assertTrue("low_fps" in m.warnings)
         assertEquals(15.0, m.fps, 0.5)
     }
 
     @Test
     fun lowVisibilityWarnsAndSetsQuality() {
-        val m = JumpAnalyzer.analyze(clip(60, 2.0, parabola(0.8, 0.5), visibility = 0.6f), "cmj")
+        val m = analyze(clip(60, 2.0, parabola(0.8, 0.5), visibility = 0.6f), "cmj")
         assertTrue("low_visibility" in m.warnings)
         assertEquals(0.6, m.quality, 0.01)
     }
@@ -246,8 +254,8 @@ class JumpAnalyzerTest {
     fun clipStartingAboveFutureGroundDoesNotInventTakeoff() {
         // A gradual image drift can look like a landing when the floor is estimated from future frames.
         val frames = clip(30, 1.5, { t -> maxOf(0.0, 0.03 * (1 - t)) })
-        assertNull(JumpAnalyzer.analyze(frames, "cmj").flightTimeMs)
-        val drop = JumpAnalyzer.analyze(frames, "drop_jump")
+        assertNull(analyze(frames, "cmj").flightTimeMs)
+        val drop = analyze(frames, "drop_jump")
         assertNotNull(drop.flightTimeMs)
         assertNull(drop.jumpHeightCm)
     }
@@ -257,11 +265,11 @@ class JumpAnalyzerTest {
         // Start on a 0.15 high box, step off (feet reach the ground at 0.6 s), rebound 0.9 s to 1.3 s.
         val box: (Double) -> Double = { t -> if (t < 0.4) 0.15 else if (t < 0.6) 0.15 * (0.6 - t) / 0.2 else 0.0 }
         val rebound = parabola(0.9, 0.4)
-        val withRebound = JumpAnalyzer.analyze(clip(120, 2.0, { box(it) + rebound(it) }), "drop_jump")
+        val withRebound = analyze(clip(120, 2.0, { box(it) + rebound(it) }), "drop_jump")
         assertEquals(400.0, withRebound.flightTimeMs!!, 40.0)
         assertEquals(9.81 * 0.4 * 0.4 / 8 * 100, withRebound.jumpHeightCm!!, 3.0)
 
-        val dropOnly = JumpAnalyzer.analyze(clip(120, 2.0, box), "drop_jump")
+        val dropOnly = analyze(clip(120, 2.0, box), "drop_jump")
         assertNotNull(dropOnly.flightTimeMs)
         assertNull(dropOnly.jumpHeightCm)
         assertTrue(dropOnly.warnings.isEmpty())
@@ -272,7 +280,7 @@ class JumpAnalyzerTest {
         val frames = clip(60, 2.0, parabola(0.8, 0.5)).map { f ->
             if (f.tMs in 1000..1099) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0f) }) else f
         }
-        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        val result = analyzeWithLanding(frames, "cmj")
         assertEquals(1, result.flightCount)
         assertEquals(500.0, result.metrics.flightTimeMs!!, 40.0)
         assertTrue("uncertain_timing" !in result.metrics.warnings)
@@ -285,7 +293,7 @@ class JumpAnalyzerTest {
             val frames = good.map { f ->
                 if (f.tMs in gap) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0f) }) else f
             }
-            val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+            val result = analyzeWithLanding(frames, "cmj")
             assertEquals(1, result.flightCount)
             assertTrue("uncertain_timing" in result.metrics.warnings)
             val minMs = result.flightTimeMinMs!!
@@ -300,7 +308,7 @@ class JumpAnalyzerTest {
         val frames = clip(60, 2.0, parabola(0.8, 0.5)).map { f ->
             if (f.tMs in 1000..1210) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0f) }) else f
         }
-        val metrics = JumpAnalyzer.analyze(frames, "cmj")
+        val metrics = analyze(frames, "cmj")
         assertNull(metrics.flightTimeMs)
         assertTrue("no_flight_detected" in metrics.warnings)
     }
@@ -316,7 +324,7 @@ class JumpAnalyzerTest {
                 }
             })
         }
-        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        val result = analyzeWithLanding(frames, "cmj")
         assertEquals(0, result.flightCount)
         assertNull(result.metrics.flightTimeMs)
     }
@@ -329,7 +337,7 @@ class JumpAnalyzerTest {
                 if (index in 25..26) point.copy(x = point.x + 2f) else point
             })
         }
-        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        val result = analyzeWithLanding(frames, "cmj")
         assertEquals(1, result.flightCount)
         assertEquals(500.0, result.metrics.flightTimeMs!!, 40.0)
     }
@@ -343,14 +351,14 @@ class JumpAnalyzerTest {
                 if (index in 25..26) point.copy(visibility = 0f) else point
             })
         }
-        assertEquals(500.0, JumpAnalyzer.analyze(hiddenKnees, "cmj").flightTimeMs!!, 40.0)
+        assertEquals(500.0, analyze(hiddenKnees, "cmj").flightTimeMs!!, 40.0)
         // Hidden toes and heels after contact do not remove visible joint-angle measurements.
         val hiddenFeet = good.map { f ->
             if (f.tMs < 1320) f else f.copy(landmarks = f.landmarks.mapIndexed { index, point ->
                 if (index in 29..32) point.copy(visibility = 0f) else point
             })
         }
-        assertEquals(50.0, JumpAnalyzer.analyze(hiddenFeet, "cmj").kneeFlexionPeakL!!, 1.0)
+        assertEquals(50.0, analyze(hiddenFeet, "cmj").kneeFlexionPeakL!!, 1.0)
     }
 
     @Test
@@ -363,7 +371,7 @@ class JumpAnalyzerTest {
             f.copy(landmarks = if (inPhase && !visible) lms.map { it.copy(visibility = 0.1f) } else lms)
         }
         for (visible in listOf(true, false)) {
-            val m = JumpAnalyzer.analyze(pushUp(visible), "cmj")
+            val m = analyze(pushUp(visible), "cmj")
             assertEquals(400.0, m.flightTimeMs!!, 40.0)
             assertTrue(m.warnings.isEmpty())
         }
@@ -371,7 +379,7 @@ class JumpAnalyzerTest {
 
     @Test
     fun tooLongFlightIsRejectedWithWarning() {
-        val m = JumpAnalyzer.analyze(clip(60, 3.0, parabola(0.5, 1.2, metresPerImageHeight = 6.0)), "cmj")
+        val m = analyze(clip(60, 3.0, parabola(0.5, 1.2, metresPerImageHeight = 6.0)), "cmj")
         assertNull(m.flightTimeMs)
         assertNull(m.jumpHeightCm)
         assertTrue("no_flight_detected" in m.warnings)
@@ -384,15 +392,15 @@ class JumpAnalyzerTest {
             // every 4th frame hidden, but not during the flight (0.8-1.3 s): a gap there would reject the run
             if (i % 4 == 1 && (f.tMs < 700 || f.tMs > 1400)) f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0.1f) }) else f
         }
-        val m = JumpAnalyzer.analyze(bad, "cmj")
+        val m = analyze(bad, "cmj")
         assertEquals(500.0, m.flightTimeMs!!, 60.0)
     }
 
     @Test
     fun tooFewUsableFramesThrows() {
-        assertThrows<IllegalArgumentException> { JumpAnalyzer.analyze(clip(60, 0.1, { 0.0 }), "cmj") }
+        assertThrows<IllegalArgumentException> { analyze(clip(60, 0.1, { 0.0 }), "cmj") }
         val hidden = clip(60, 2.0, { 0.0 }).map { f -> f.copy(landmarks = f.landmarks.map { it.copy(visibility = 0.1f) }) }
-        assertThrows<IllegalArgumentException> { JumpAnalyzer.analyze(hidden, "cmj") }
+        assertThrows<IllegalArgumentException> { analyze(hidden, "cmj") }
     }
 
     @Test
@@ -403,7 +411,7 @@ class JumpAnalyzerTest {
                 point.copy(x = 0.5f + (point.x - 0.5f) * 1.3f, y = point.y * 1.3f - 0.1f)
             })
         }
-        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        val result = analyzeWithLanding(frames, "cmj")
         assertEquals(1, result.flightCount)
         assertEquals(1740.0, result.contactMs!!.toDouble(), 80.0)
         assertEquals(240.0, result.metrics.flightTimeMs!!, 80.0)
@@ -417,7 +425,7 @@ class JumpAnalyzerTest {
                     if (i < 23 || i == 29 || i == 30) point.copy(visibility = 0f) else point
                 })
         }
-        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        val result = analyzeWithLanding(frames, "cmj")
         assertEquals(1, result.flightCount)
         assertEquals(1400.0, result.contactMs!!.toDouble(), 80.0)
         assertEquals(400.0, result.metrics.flightTimeMs!!, 80.0)
@@ -435,7 +443,7 @@ class JumpAnalyzerTest {
                     point.copy(y = (point.y + leftLift(t) - rightLift(t)).toFloat()) else point
             })
         }
-        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        val result = analyzeWithLanding(frames, "cmj")
         assertEquals(1300.0, result.contactMs!!.toDouble(), 1000.0 / 60)
         assertEquals(500.0, result.metrics.flightTimeMs!!, 40.0)
     }
@@ -446,7 +454,7 @@ class JumpAnalyzerTest {
         val frames = clip(60, 1.5, parabola(0.5, 0.4), devL = { t ->
             if (t < 0.5) 30 + 90 * t / 0.5 else 0.0
         })
-        val result = JumpAnalyzer.analyzeWithLanding(frames, "cmj")
+        val result = analyzeWithLanding(frames, "cmj")
         assertEquals(1, result.flightCount)
         assertEquals(400.0, result.metrics.flightTimeMs!!, 40.0)
     }
@@ -460,21 +468,21 @@ class JumpAnalyzerTest {
                     if (f.tMs in 800..1280) 0.02 else 0.0).toFloat()) else point
             })
         }
-        assertNull(JumpAnalyzer.analyze(frames, "cmj").flightTimeMs)
+        assertNull(analyze(frames, "cmj").flightTimeMs)
     }
 
     @Test
     fun invalidInputThrows() {
         val frames = clip(60, 2.0, { 0.0 })
-        assertThrows<IllegalArgumentException> { JumpAnalyzer.analyze(frames, "squat") }
-        assertThrows<IllegalArgumentException> { JumpAnalyzer.analyze(frames.map { it.copy(landmarks = it.landmarks.drop(1)) }, "cmj") }
-        assertThrows<IllegalArgumentException> { JumpAnalyzer.analyze(frames.map { it.copy(worldLandmarks = it.worldLandmarks.drop(1)) }, "cmj") }
-        assertThrows<IllegalArgumentException> { JumpAnalyzer.analyze(frames.reversed(), "cmj") }
+        assertThrows<IllegalArgumentException> { analyze(frames, "squat") }
+        assertThrows<IllegalArgumentException> { analyze(frames.map { it.copy(landmarks = it.landmarks.drop(1)) }, "cmj") }
+        assertThrows<IllegalArgumentException> { analyze(frames.map { it.copy(worldLandmarks = it.worldLandmarks.drop(1)) }, "cmj") }
+        assertThrows<IllegalArgumentException> { analyze(frames.reversed(), "cmj") }
     }
 
     @Test
     fun jsonUsesSpecKeysAndNulls() {
-        val m = JumpAnalyzer.analyze(clip(60, 2.0, { 0.0 }), "cmj")
+        val m = analyze(clip(60, 2.0, { 0.0 }), "cmj")
         val json = m.toJson()
         val keys = Regex("\"([a-z_]+)\":").findAll(json).map { it.groupValues[1] }.toList()
         assertEquals(

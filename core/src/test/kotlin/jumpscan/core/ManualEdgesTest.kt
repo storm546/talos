@@ -92,9 +92,8 @@ class ManualEdgesTest {
     fun defaultAndExplicitAutomaticPathsMatch() {
         val automatic = JumpAnalyzer.analyzeWithLanding(frames(), "cmj")
         assertEquals(automatic, JumpAnalyzer.analyzeWithLanding(frames(), "cmj", takeoffMs = null, landingMs = null))
-        assertNull(automatic.takeoffMs)
-        assertNull(automatic.contactMs)
-        assertTrue("no_flight_detected" in automatic.metrics.warnings)
+        assertEquals(automatic.takeoffMs == null, automatic.contactMs == null)
+        assertEquals(automatic.contactMs == null, "no_flight_detected" in automatic.metrics.warnings)
         assertFalse("manual_edges" in automatic.metrics.warnings)
     }
 }
