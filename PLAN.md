@@ -117,6 +117,29 @@ Open:
 - The owner's list in `ROADMAP.md` section G is unchanged, as is the question about the 17.8 GB Twente archive on the kit.
 - Codex is out of quota until 2026-11-17 01:34.
 
+## Update on 2026-11-17, evening
+
+- The night queue never ran (its waiting process died before 01:37). It was restarted at 19:30 on Codex
+  (Fable was tried first and refused: it needs usage credits). Queue: `logs/run-day.sh` (RTMPose, then
+  YouTube benchmark, then learned detector, after twente9 and appcheck) and `logs/run-confirm.sh`
+  (frame-confirm step `logs/task-confirm.txt`, then app polish `logs/task-apppolish.txt`, after appcheck).
+- Nine Twente subjects, current analyzer, no tuning (`logs/twente9/REPORT.md`): front 71 of 91 right,
+  0 spurious, MAE 32 ms; side 60 of 91, 0 spurious, MAE 88 ms (systematically about 87 ms long).
+  Knee RMSE four to nine subjects: front world 16.5 to 17.3, side world 14.4 to 13.8, side image 10.3
+  to 10.0 degrees. Recorded in `docs/validacia.md` 4.8.
+- Front flight error is mostly random (bias +6 ms, SD 32 ms on the four subjects); 33 fps quantisation
+  explains about 12 ms of it, so R6 (sub-frame edges) was dropped. Only 2 front misses lack a stance
+  (Subj07), so R2 is low value; the misses are Subj06 lost pose (R1) and side landing lag (R10).
+- CI checked from a fresh clone: server job 252 tests pass on Python 3.13 with the pinned versions; the
+  core job waits for the kit (no JDK 17 here). The container's start command runs and serves the
+  dashboard, OpenAPI and docs; the image build itself still cannot run here. A systemd unit
+  (`deploy/jumpscan.service`) and a no-Docker section in `deploy/README.md` were added.
+- Dashboard: per-metric precision, test names as in the app, Bulgarian demo names throughout, favicon,
+  phone-width check (no horizontal scroll), back-button spacing. Test account sheet matches the seed.
+- Documents: `node docs/build.cjs` renders A4 PDFs (Times-compatible 12 pt, 1.5 spacing) to `docs/out/`.
+  Documentation is 5 pages with the architecture diagram and screenshots; flyer `docs/listovka-a4.html`
+  is one A4 page. DOIs of the dataset and both cited papers were checked against Zenodo and Crossref.
+
 ## Update on 2026-11-16, 23:20
 
 - Fixed a contract gap left by the detector merge: side-view results (one measured leg, warning `single_leg_view`, null metrics for the other leg) were rejected by the server. Server, dashboard and app now accept and label them; 252 server tests pass and the app builds.
