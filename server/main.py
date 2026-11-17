@@ -176,7 +176,7 @@ class Jump(StrictModel):
     knee_ankle_ratio: float | None = Field(ge=0, le=5)
     flexion_asymmetry_pct: float | None = Field(ge=0, le=100)
     quality: float = Field(ge=0, le=1)
-    warnings: list[Literal["low_fps", "low_visibility", "no_flight_detected", "uncertain_timing", "single_leg_view"]] = Field(max_length=5)
+    warnings: list[Literal["low_fps", "low_visibility", "no_flight_detected", "uncertain_timing", "single_leg_view", "manual_edges"]] = Field(max_length=6)
 
 
 def get_db(request: Request):

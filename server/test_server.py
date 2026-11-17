@@ -586,7 +586,7 @@ def test_numeric_ranges_reject_outside_and_accept_bounds(api, auth, field, low, 
 
 @pytest.mark.parametrize("changes", [
     {"test": "other"}, {"fps": "60"}, {"fps": True}, {"quality": None},
-    {"warnings": ["unknown"]}, {"warnings": ["low_fps"] * 6}, {"warnings": "low_fps"},
+    {"warnings": ["unknown"]}, {"warnings": ["low_fps"] * 7}, {"warnings": "low_fps"},
     {"athlete_id": 2}, {"landmarks": []}, {"video": "data"}, {"image": "data"},
 ])
 def test_jump_validation_rejects_invalid_payloads(api, auth, changes):
@@ -686,3 +686,27 @@ def test_uncertain_timing_warning_is_accepted_and_preserved(api, auth):
     saved = next(jump for jump in client.get("/api/jumps", headers=auth("athlete1")).json()
                  if jump["id"] == response.json()["id"])
     assert saved["warnings"] == ["uncertain_timing"]
+
+
+def test_manual_edges_warning_is_preserved_in_history_and_csv(api, auth):
+    import csv
+    import io
+    client, _ = api
+    headers = auth("athlete1")
+    warnings = ["low_fps", "low_visibility", "no_flight_detected", "uncertain_timing", "single_leg_view", "manual_edges"]
+    response = client.post("/api/jumps", json={**METRICS, "warnings": warnings}, headers=headers)
+    assert response.status_code == 201
+    saved = client.get("/api/jumps", headers=headers).json()[0]
+    assert saved["warnings"] == warnings
+    athlete_id = client.get("/api/me", headers=headers).json()["id"]
+    exported = client.get(f"/api/athletes/{athlete_id}/export.csv", headers=auth("coach"))
+    assert exported.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(exported.text)))
+    assert json.loads(rows[-1]["warnings"]) == warnings
+
+
+def test_manual_edges_dashboard_labels(api):
+    client, _ = api
+    script = client.get("/static/dashboard.js").text
+    assert "manual_edges:'кадрите са избрани ръчно'" in script
+    assert "manual_edges:'frames set by hand'" in script
