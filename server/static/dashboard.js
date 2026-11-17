@@ -238,7 +238,7 @@ async function download(path,filename) {
 }
 function history(content) {
   const own=state.user.role==='athlete';const athlete=own?state.user:state.selected;
-  if(!own)content.append(button('back',()=>load('team')));
+  if(!own)content.append(button('back',()=>load('team'),'secondary back'));
   const head=heading(athlete.name,t('history')+' · '+format(state.summary.jump_count)+' · '+t('firstJump')+': '+date(state.summary.first_jump_at));
   const actions=node('div',null,'actions');actions.append(own?button('export',()=>download('/api/me/export','jumpscan-data.json')):button('csv',()=>download('/api/athletes/'+athlete.id+'/export.csv','athlete-'+athlete.id+'.csv')));
   head.append(actions);content.append(head,node('p',t('chartNote'),'muted'));
