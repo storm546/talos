@@ -39,6 +39,26 @@ The database file is `/data/jumpscan.db` inside the `jumpscan-data` volume. If y
 volume with a bind mount, make sure the mounted directory is writable by the unprivileged container user
 (uid/gid of `jumpscan`, created in the image).
 
+### Without Docker (systemd)
+
+Use this where Docker is not available (for example inside an LXC container). Python 3.13 is assumed.
+
+```sh
+useradd --system --home-dir /srv/jumpscan --shell /usr/sbin/nologin jumpscan
+git clone <repository-url> /srv/jumpscan && cd /srv/jumpscan && git checkout main
+python3 -m venv .venv && .venv/bin/pip install -r server/requirements.txt
+cp deploy/jumpscan.service /etc/systemd/system/
+# If the reverse proxy runs on another machine, set HOST in the unit to this machine's LAN address.
+systemctl daemon-reload && systemctl enable --now jumpscan
+curl -i http://127.0.0.1:8171/        # expect HTTP/1.1 200
+```
+
+The database is `/var/lib/jumpscan/jumpscan.db` (systemd creates the directory for the service user).
+For the commands below, replace `docker compose exec jumpscan python` with
+`sudo -u jumpscan env JUMPSCAN_DB=/var/lib/jumpscan/jumpscan.db /srv/jumpscan/.venv/bin/python`, run from
+`/srv/jumpscan`. Undo: `systemctl disable --now jumpscan`, remove the unit file, `/srv/jumpscan`,
+`/var/lib/jumpscan` and the `jumpscan` user.
+
 ## 3. Create the first admin
 
 Users are created through the API by an admin, so the first one has to be inserted once. Either use the
@@ -71,8 +91,8 @@ The password is passed as an environment variable, not as an argument, so it doe
 history. Then log in on the dashboard with that email and password.
 
 Role model for the rest: an admin creates coaches and athletes (`POST /api/users`), a coach creates
-athletes in their own club. There is no password-change endpoint yet; to rotate a password, insert a new
-user row with the snippet above or delete the row and recreate the account.
+athletes in their own club. An admin, or a coach for athletes of their own club, sets a new password with
+`POST /api/users/{id}/password` (also on the dashboard's Users page); this signs that user out everywhere.
 
 ## 4. Seed the demo accounts for the jury
 

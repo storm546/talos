@@ -1,4 +1,5 @@
-fastapi
-uvicorn
-pytest
-httpx
+# Versions the 252 server tests passed with on Python 3.13 (2026-11-17).
+fastapi==0.163.1
+uvicorn==0.54.0
+pytest==9.2.0
+httpx==0.28.1

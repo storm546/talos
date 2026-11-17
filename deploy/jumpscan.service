@@ -1,0 +1,25 @@
+# systemd unit for running the JumpScan server without Docker.
+# Install: see "Without Docker" in deploy/README.md. Edit HOST if the reverse proxy runs on another machine.
+[Unit]
+Description=JumpScan club server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=jumpscan
+Group=jumpscan
+WorkingDirectory=/srv/jumpscan
+Environment=JUMPSCAN_DB=/var/lib/jumpscan/jumpscan.db
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HOST=127.0.0.1
+ExecStart=/srv/jumpscan/.venv/bin/uvicorn server.main:app --host ${HOST} --port 8171
+Restart=on-failure
+# The service only needs to write its database directory.
+StateDirectory=jumpscan
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
