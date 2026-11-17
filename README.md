@@ -103,7 +103,17 @@ Requires JDK 17 and the Android SDK with platform 35. Point Gradle at the SDK wi
 ```sh
 ./gradlew :app:assembleDebug
 # output: app/build/outputs/apk/debug/app-debug.apk
+
+./gradlew --no-daemon :app:assembleRelease -PjumpscanKeystore=/work/jumpscan-keys/keystore.properties
+# output: app/build/outputs/apk/release/app-release.apk
 ```
+
+The release command runs in `/work/jumpscan-app` on `android-build-kit`. Signing files live outside
+the repository at `/work/jumpscan-keys/jumpscan-release.jks` and
+`/work/jumpscan-keys/keystore.properties`, with a backup in `/root/jumpscan-keys/` on openclaw.
+The properties file contains `storeFile`, `storePassword`, `keyAlias` and `keyPassword`.
+Without `-PjumpscanKeystore`, release builds remain unsigned. Debug signing is unaffected.
+Release APKs include only `arm64-v8a` and `armeabi-v7a`; minification is disabled.
 
 The pose model `pose_landmarker_heavy.task` ships in `app/src/main/assets/`. Debug builds accept plain
 `http://` server URLs for local testing; release builds require `https://`.

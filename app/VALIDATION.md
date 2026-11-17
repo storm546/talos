@@ -344,3 +344,78 @@ data directory was empty afterward. The temporary video, replay CSV and UI dump 
 task and were left untouched. The mock API was stopped by its recorded PID and the emulator with
 `adb emu kill`. A final check found no adb device, no qemu or mock process, and port 8765 refused
 connections. No deployment, publication, push or service restart occurred.
+
+## Release build — 18 November 2026 (blocked)
+
+Release preparation adds optional signing through `-PjumpscanKeystore`, keeps versionCode 1,
+sets versionName to 1.0.0, disables minification, and restricts release native libraries to
+`arm64-v8a` and `armeabi-v7a`. Without the property, release signing remains unset. Debug signing
+and its network configuration remain unchanged. There are no debug-only model assets in this tree.
+
+`finish()` now decodes the result preview with the analysis's existing
+`MediaMetadataRetriever`. The editor's `videoFrame()` still opens and releases its own retriever;
+both paths use the same frame extraction helper. This removes the second simultaneous retriever
+at analysis completion. It does not establish the cause of the earlier mid-analysis decoder error.
+
+The kit initially reported only 2 GiB available with `free -g`. Key generation and builds waited
+for a reading of at least 3 GiB. When that threshold was reached, `keytool` generated the external
+JKS with RSA 4096, validity 10000 days, alias `jumpscan` and subject `CN=JumpScan`. Its random
+password was generated on the kit and was not printed, logged or committed. The signing files are:
+
+- Kit: `/work/jumpscan-keys/jumpscan-release.jks` and `/work/jumpscan-keys/keystore.properties`.
+- Openclaw backup: `/root/jumpscan-keys/jumpscan-release.jks` and `/root/jumpscan-keys/keystore.properties`.
+
+Both directories were verified as mode 700 and both pairs of files as mode 600.
+
+The task started on `stage` at `50039449da1c349cbce72f0ad6832c93092acfe3`. Concurrent detector work
+appeared in the shared workspace during the initial sync. That mixed-source build ran 51 core tests
+and failed two `RealVideoTest` cases. The other task subsequently committed its work as
+`5926fbdb670629fc35f02e1b4b1bd2ca51bc371e`; its own `core/VALIDATION.md` records those shipping
+blockers. No detector file was changed by this release task.
+
+To obtain an unambiguous check of the release changes, a source snapshot of the task-start commit
+was overlaid with this task's build configuration, decoder change and README. It was synced with
+`rsync --exclude local.properties` to `/work/jumpscan-app`, retaining the kit's private test fixtures.
+Concurrent local changes were left untouched. JDK 17 and `/opt/android-sdk` were used, with one
+Gradle worker and no overlapping Gradle builds. The following isolated build passed in 1m 24s:
+
+```sh
+cd /work/jumpscan-app
+./gradlew --no-daemon --max-workers=1 \
+  --init-script /work/jumpscan-release-check-signing.gradle \
+  :core:test :app:assembleDebug :app:assembleDebugAndroidTest
+```
+
+All 43 core tests passed, with zero failures, errors or skips. The temporary init script also
+asserted unsigned release configuration without the signing property, unchanged debug signing,
+both release ARM filters, disabled minification and the version fields. These assertions passed.
+`python3 app/tools/check_resources.py` passed for all 146 English/Bulgarian resource keys and
+format arguments. The instrumentation APK was built but was not installed or executed.
+
+The requested signed build was queued behind a fresh 3 GiB memory gate:
+
+```sh
+./gradlew --no-daemon --max-workers=1 \
+  --init-script /work/jumpscan-release-check-signing.gradle \
+  :app:assembleRelease -PjumpscanKeystore=/work/jumpscan-keys/keystore.properties
+```
+
+The gate waited eight minutes, repeatedly reporting 2 GiB available, and was stopped before
+Gradle started. No signed APK, certificate verification, zip alignment result, APK or model package
+size, packaged ABI report, or `SHA256SUMS` was produced. No emulator was launched or app installed.
+The AVD configuration is x86_64; its runtime ARM support was not checked. The unfiltered release
+variant, HTTPS login refusal screenshot, filming guide and release clip analysis remain untested.
+
+Neither required fresh ordinary debug analysis ran: jump1 is untested and jump2 is untested after
+this decoder change. The kit never provided a window for a normally sized emulator and at least
+4 GB free for inference. No replay was substituted. Earlier validation records jump1 at 280 ms,
+which conflicts with this task's requested 360 ms; a fresh run is still needed to resolve that
+expectation. The earlier `FrameDecoder` failure remains unisolated.
+
+Evidence and the isolated source snapshot are in ignored `/root/jumpscan/logs/release/`.
+`debug-build.log` contains the mixed-source failure, `debug-build-isolated.log` contains the passing
+build, `release-build.log` contains only the memory wait, and `final-kit-state.txt` records 2 GiB
+available, no adb device, no Gradle or emulator process, and the signing file permissions. Only this
+task's waiting shell was stopped. No unrelated workload, service or package was changed. The
+signed jury APK and all pending emulator checks must be completed before calling this release
+validated; the newer committed detector also has its separately documented test failures.

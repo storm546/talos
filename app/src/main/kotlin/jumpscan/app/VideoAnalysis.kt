@@ -33,20 +33,24 @@ internal fun videoFrame(context: Context, uri: Uri, timesUs: List<Long>, index: 
     val retriever = MediaMetadataRetriever()
     try {
         retriever.setDataSource(context, uri)
-        val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-        val indexed = if (Build.VERSION.SDK_INT >= 28)
-            runCatching { retriever.getFrameAtIndex(index) }.getOrNull() else null
-        val raw = indexed ?: retriever.getFrameAtTime(timesUs[index], MediaMetadataRetriever.OPTION_CLOSEST)
-            ?: throw AppError(R.string.decode_error)
-        val display = if (kotlin.math.abs(raw.width.toFloat() / raw.height - aspect) < 0.01) raw
-            else Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height,
-                Matrix().apply { postRotate(rotation.toFloat()) }, true).also { if (it !== raw) raw.recycle() }
-        val factor = minOf(1f, 720f / max(display.width, display.height))
-        val scaled = Bitmap.createScaledBitmap(display, max(1, (display.width * factor).roundToInt()),
-            max(1, (display.height * factor).roundToInt()), true).also { if (it !== display) display.recycle() }
-        return if (scaled.config == Bitmap.Config.ARGB_8888) scaled
-            else scaled.copy(Bitmap.Config.ARGB_8888, false).also { scaled.recycle() }
+        return videoFrame(retriever, timesUs, index, aspect)
     } finally { retriever.release() }
+}
+
+private fun videoFrame(retriever: MediaMetadataRetriever, timesUs: List<Long>, index: Int, aspect: Float): Bitmap {
+    val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+    val indexed = if (Build.VERSION.SDK_INT >= 28)
+        runCatching { retriever.getFrameAtIndex(index) }.getOrNull() else null
+    val raw = indexed ?: retriever.getFrameAtTime(timesUs[index], MediaMetadataRetriever.OPTION_CLOSEST)
+        ?: throw AppError(R.string.decode_error)
+    val display = if (kotlin.math.abs(raw.width.toFloat() / raw.height - aspect) < 0.01) raw
+        else Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height,
+            Matrix().apply { postRotate(rotation.toFloat()) }, true).also { if (it !== raw) raw.recycle() }
+    val factor = minOf(1f, 720f / max(display.width, display.height))
+    val scaled = Bitmap.createScaledBitmap(display, max(1, (display.width * factor).roundToInt()),
+        max(1, (display.height * factor).roundToInt()), true).also { if (it !== display) display.recycle() }
+    return if (scaled.config == Bitmap.Config.ARGB_8888) scaled
+        else scaled.copy(Bitmap.Config.ARGB_8888, false).also { scaled.recycle() }
 }
 
 internal fun framePreview(context: Context, analysis: Analysis, index: Int): Bitmap {
@@ -191,7 +195,7 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, mode: String
             val previewFrame = landing.contactMs?.let { time -> frames.first { it.tMs == time } }
                 ?: peakFlexionFrame(frames)
             val previewIndex = timesUs.indexOfFirst { it / 1000 == previewFrame.tMs }
-            val raw = videoFrame(context, uri, timesUs, previewIndex, aspect)
+            val raw = videoFrame(retriever, timesUs, previewIndex, aspect)
             val preview = try { landingPreview(raw, previewFrame) } finally { raw.recycle() }
             if (BuildConfig.DEBUG) {
                 android.util.Log.d("JumpScan", "Metrics ${landing.metrics.toJson()} contactMs=${landing.contactMs} previewMs=${previewFrame.tMs}")
