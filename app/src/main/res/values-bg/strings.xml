@@ -94,7 +94,7 @@
     <string name="uploaded">Изпратен скок №%1$d</string>
     <string name="history_summary">Скокове: %1$d · най-новите първо</string>
     <string name="history_item">№%1$d · %2$s</string>
-    <string name="history_numbers">%1$s\nМаксимално сгъване ляво / дясно: %2$s° / %3$s°\nРазстояние колене / глезени: %4$s</string>
+    <string name="history_numbers">%1$s\nМаксимално сгъване ляво / дясно (°): %2$s / %3$s\nРазстояние колене / глезени: %4$s</string>
     <string name="view_jump">Резултати за скок №%1$d</string>
     <string name="jump_title">Скок №%1$d</string>
     <string name="landing_frame">Първи контакт със земята</string>

@@ -94,7 +94,7 @@
     <string name="uploaded">Uploaded · jump #%1$d</string>
     <string name="history_summary">Jumps: %1$d · newest first</string>
     <string name="history_item">#%1$d · %2$s</string>
-    <string name="history_numbers">%1$s\nPeak flexion L / R: %2$s° / %3$s°\nKnee / ankle separation: %4$s</string>
+    <string name="history_numbers">%1$s\nPeak flexion L / R (°): %2$s / %3$s\nKnee / ankle separation: %4$s</string>
     <string name="view_jump">View numbers for jump #%1$d</string>
     <string name="jump_title">Jump #%1$d</string>
     <string name="landing_frame">Initial contact</string>
