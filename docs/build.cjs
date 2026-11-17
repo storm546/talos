@@ -42,7 +42,7 @@ try {
     else {
       const body = marked.parse(readFileSync(join(dir, basename(file)), 'utf8'));
       // Written next to the PDF and opened by file URL: Chrome loads local images only for file pages.
-      // The base URL lets relative image paths such as img/app-result.png resolve.
+      // The base URL lets relative image paths such as img/app-editor.png resolve.
       const html = join(out, `${name}.html`);
       writeFileSync(html, `<!doctype html><html lang="bg"><head><meta charset="utf-8"><title>${name}</title><base href="${pathToFileURL(dir + '/')}"><style>${css}</style></head><body>${body}</body></html>`);
       await page.goto(pathToFileURL(html).href, { waitUntil: 'load' });
