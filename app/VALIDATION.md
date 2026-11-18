@@ -986,3 +986,39 @@ The app signed out of the loopback server. Both APKs, the copied stock clip and 
 removed from the emulator. Display and locale overrides were reset. The emulator, tunnel,
 loopback server and model fixture were stopped; the disposable database was removed. The kit's
 original media was retained. `final-cleanup.txt` confirms no device or test listener remained.
+
+## Release 1.1.2 — 18 November 2026
+
+On `builder@android-build-kit`, the build ran in `/work/jumpscan-app` after an rsync excluding
+`local.properties`. Host memory and uptime were checked before the build; Gradle ran alone with
+one worker. `:core:test :app:assembleRelease` ran with the external signing configuration and
+`--rerun-tasks`; all 65 core tests passed with no failures, errors or skips.
+
+The APK is version 1.1.2 (code 4), 60,840,072 bytes (58.02 MiB), and includes only `arm64-v8a`
+and `armeabi-v7a`. The uncompressed `assets/pose_landmarker_heavy.task` is 30,664,242 bytes
+(29.24 MiB). `apksigner verify` and `zipalign -c -P 16 4` passed. The signer certificate SHA-256 is
+`a1e6b96890cf936dab8c9d98456e94be84c0930058bd38749b09c35525782cfc`.
+
+On the API 34 `jumpscan-worker-a` emulator, a temporary signed build with the ABI filters cleared
+prefilled `https://jumpscan.stormlabs.cloud` and signed in as `athlete2@demo.test` over HTTPS.
+All four Home entries opened, and Training loaded the live demo plan. The Nutrition screen saved
+82.37 kg and 134.7 g of cooked buckwheat groats for lunch on November 14, 2026. That date had no
+existing weight. API reads confirmed both writes; targeted deletes and follow-up reads confirmed
+that neither test record remained and the original food logs were unchanged. The assistant
+handled HTTP 503 with the model-unavailable message, retained the draft, and created no conversation.
+
+After sign-out, Form Tracker analyzed the public Pexels 5034571 squat clip on-device: 4 complete,
+0 partial and 2 unclear reps. Inference started with 3 GiB available on the kit. The headless EGL
+renderer produced a black screenshot; the Android UI hierarchy recorded the result and metrics.
+No form record, video, or landmarks were uploaded, and no private clip was used. No JumpScan
+crash or ANR was recorded. The app, copied clip, and temporary unfiltered APK were removed;
+the read-only emulator was stopped. Evidence is in `logs/release5/`.
+
+`logs/release/jumpscan-1.0.apk` now holds the signed ARM release, and `sha256sum -c SHA256SUMS`
+passed for all three archived APKs. The previous file was verified to be 1.1.0 and preserved as
+`jumpscan-1.1.0.apk`; no 1.1.1 artifact was found to preserve. No APK was published.
+
+The starting `stage` checkout had an empty release server default. Both APKs include a local
+`MainActivity.kt` change restoring the editable HTTPS default without changing the debug default.
+That change is intentionally outside the two-file commit; apply it when rebuilding from the
+commit alone. A copy of the source diff is in `logs/release5/release-default.patch`.
