@@ -57,13 +57,17 @@ object JumpAnalyzer {
 ```
 
 - `analyzeWithLanding` is the public entry point for metrics plus flight edges. Rules must find a
-  flight before any automatic flight is reported. If both learned edges agree with the selected
-  rules flight within an inclusive 100 ms, each reported edge estimate is their arithmetic mean,
-  with no additional timing warning. Flight time is mean landing minus mean take-off. `contactMs`
-  and `takeoffMs` are the real frame timestamps nearest those means (earlier frame on a tie), for
-  the landing window and editor. Their difference can therefore differ from the flight-time metric.
-  If learned inference runs but finds no plausible flight or disagrees, retain the rules flight
-  with `uncertain_timing`. An unavailable learned path retains the original rules result and warnings.
+  flight before any automatic flight is reported. In side view (explicit `SIDE` or selected by
+  `AUTO`), when both detectors find a flight, use both learned edges directly with no additional
+  timing warning, even when the edges disagree. In front view, if both learned edges agree with
+  the selected rules flight within an inclusive 100 ms, each reported edge estimate is their
+  arithmetic mean, with no additional timing warning. Flight time is the selected continuous
+  landing minus take-off. `contactMs` and `takeoffMs` are the real frame timestamps nearest those
+  estimates (earlier frame on a tie), for the landing window and editor. Their difference can
+  therefore differ from the flight-time metric.
+  If learned inference runs but finds no plausible flight, or disagrees in front view, retain the
+  rules flight with `uncertain_timing`. An unavailable learned path retains the original rules result
+  and warnings.
 - With no rules flight, automatic `contactMs`, `takeoffMs`, flight time and height remain null and
   `no_flight_detected` remains present. A learned flight lasting an inclusive 100–1000 ms supplies
   `learnedSuggestion`, with both edges snapped to nearest real frames, only in Kotlin `Analysis`.
@@ -93,9 +97,10 @@ object JumpAnalyzer {
   recent reference at this floor and the preceding ground frame, so settled sway cannot supply ascent.
 - Airborne: both feet above ground level by a threshold scaled to body size (hip-to-ankle length).
   Smooth the signal first; pose data is jittery.
-- Analysed landing: the last airborne-to-ground transition. Initial contact is the first observed
+- Rules landing: the last airborne-to-ground transition. Rules contact is the first observed
   frame where either measured foot crosses back through its floor clearance threshold. No fixed
-  frame correction is applied: delayed pose estimates do not identify an earlier physical contact.
+  frame correction is applied. The reported contact then follows the learned-edge policy above;
+  delayed pose estimates do not themselves identify an earlier physical contact.
 - A CMJ requires an observed take-off after an observed ground reference. A clip starting above a
   future floor reference cannot supply a CMJ. An explicitly selected `drop_jump` may start airborne;
   its initial drop landing has `jump_height_cm: null` because its take-off was not observed.

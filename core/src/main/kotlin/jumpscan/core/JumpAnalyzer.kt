@@ -203,7 +203,7 @@ object JumpAnalyzer {
         val learned = if (useLearned && !manual) try {
             LearnedFlight.predict(frames, aspect)
         } catch (_: RuntimeException) { null } catch (_: LinkageError) { null } else null
-        val (automatic, uncertainTiming) = combineFlight(rules, learned, rulesUncertain)
+        val (automatic, uncertainTiming) = combineFlight(rules, learned, rulesUncertain, sideView)
         fun nearest(time: Double) = frames.minBy { abs(it.tMs - time) }.tMs
         val suggestion = if (!manual && rules == null) learned?.edges?.let {
             val start = nearest(it.takeoffMs)
@@ -295,10 +295,12 @@ object JumpAnalyzer {
 
     /** Rules alone authorize an automatic flight; learned-only edges remain an editor suggestion. */
     internal fun combineFlight(rules: LearnedFlight.Edges?, learned: LearnedFlight.Prediction?,
-        rulesUncertain: Boolean = false): Pair<LearnedFlight.Edges?, Boolean> {
+        rulesUncertain: Boolean = false, sideView: Boolean = false): Pair<LearnedFlight.Edges?, Boolean> {
         if (rules == null) return null to false
         if (learned == null) return rules to rulesUncertain
         val edges = learned.edges
+        // Side pose contact lags physical landing; use learned timing only after rules verify a flight.
+        if (sideView && edges != null) return edges to false
         return if (edges != null && abs(rules.takeoffMs - edges.takeoffMs) <= 100 &&
             abs(rules.contactMs - edges.contactMs) <= 100)
             LearnedFlight.Edges((rules.takeoffMs + edges.takeoffMs) / 2,

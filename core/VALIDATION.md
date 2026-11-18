@@ -273,3 +273,79 @@ it does not improve automatic recall by promoting a learned-only flight.
 
 Evidence is retained in logs/learnedv2/core-test.log, core-results/, clips.csv and app-build.log.
 The app's build, instrumentation and inspected screenshot evidence is documented in app/VALIDATION.md.
+
+## Side-view learned timing policy — 18 November 2026
+
+The side-view policy was selected only after the four candidates and shipping rule were frozen in
+logs/ml/PROTOCOL_SIDE.md (SHA256 61d7a06c30e7dbb6ad0d682e039f177ea84740025b35cd646190908d44b62a41).
+The retained negative-trained MediaPipe LOSO probabilities cover nine subjects and five seeds.
+The scoring script checks all 45 folds' protocol and negative-manifest hashes, held-subject
+exclusion, test membership and train/test separation. All 2,000 baseline clip/seed outcomes,
+selected edges and analyzer errors reproduce REPORT3 before candidate comparisons.
+
+The shipping rule requires more correct side results and no more unflagged wrong results,
+unchanged or better front and force-negative results, and unchanged webcam automatic false alarms.
+The primary comparison uses five-seed means; force negatives are checked separately per seed.
+The frozen tie-break selects the passing candidate with the most correct side results, then fewer
+unflagged wrong, fewer total wrong, and finally candidate order. No candidate or threshold was
+revised after scoring. Values below are mean [minimum, maximum] over seeds, each pooled over all
+nine held-out subjects and 91 side-view jumps. Wrong means spurious or duration error greater than
+two 33 fps frames (60.606 ms). Flagged is the uncertain_timing subset of automatic reports.
+
+| Policy | Automatic | Correct | Wrong | Unflagged wrong | Flagged | Suggestion | Nothing | Pass |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| Shipped baseline | 60.0 [60, 60] | 37.6 [35, 40] | 22.4 [20, 25] | 3.0 [1, 6] | 19.4 [18, 22] | 24.8 [24, 25] | 6.2 [6, 7] | Baseline |
+| Bounded learned landing, 0–150 ms earlier | 60.0 [60, 60] | 51.4 [51, 52] | 8.6 [8, 9] | 0.2 [0, 1] | 8.4 [8, 9] | 24.8 [24, 25] | 6.2 [6, 7] | Yes |
+| Both learned edges when both detect | 60.0 [60, 60] | 58.2 [58, 59] | 1.8 [1, 2] | 1.6 [1, 2] | 0.2 [0, 1] | 24.8 [24, 25] | 6.2 [6, 7] | Yes, selected |
+| Average with landing agreement widened to 150 ms | 60.0 [60, 60] | 46.0 [42, 48] | 14.0 [12, 18] | 5.6 [3, 10] | 8.4 [8, 9] | 24.8 [24, 25] | 6.2 [6, 7] | No |
+| Learned landing with original 100 ms agreement | 60.0 [60, 60] | 40.2 [38, 42] | 19.8 [18, 22] | 0.4 [0, 1] | 19.4 [18, 22] | 24.8 [24, 25] | 6.2 [6, 7] | Yes |
+
+The selected policy also improves correct results and never increases unflagged wrong in any
+individual seed. Front outputs are identical per clip/seed. Force-negative automatic results
+remain zero front and one flagged side result per seed, with zero unflagged wrong. The selected
+policy has one spurious side result in one seed (mean 0.2), already included in wrong; the baseline
+has none. The prespecified rule compares correct and unflagged wrong rather than requiring zero
+spurious results.
+
+In explicit SIDE or AUTO-selected side view, when rules and learned inference both find a flight,
+the analyzer uses both continuous learned edges directly and clears uncertain_timing. Rules still
+authorize automatic flight; learned-only results remain suggestions. Front selection retains the
+inclusive 100 ms agreement and arithmetic means. Unavailable learned input, learned negatives,
+manual edges, model weights, preprocessing and duration gates are unchanged. Editor edges and the
+landing window use the nearest observed frames; the flight metric uses continuous selected edges.
+
+In the isolated /work/jumpscan-side copy on android-build-kit, all 55 core tests passed with zero
+failures, errors or skips. Two added JUnit tests cover the side selector's agreement/disagreement,
+missing-flight and unavailable-input cases, plus explicit SIDE and AUTO routing, continuous flight
+time and snapped editor edges. Existing front-policy, rules, manual, probability and measured-data
+checks retain their assertions. The private clips remain exactly 280/360/360 ms and the stock squat
+has no flight. Private resources remain only on the kit.
+
+The fresh public-data measurement reproduces all 200 front rows exactly (91 jumps and 109 negative
+windows), including errors and warnings. Force-negative automatic counts remain 0/109 front and
+1/109 side, with zero unflagged wrong in both views. The webcam test halves preserve the automatic
+false-alarm identity of every negative clip, including errors: looking_down is 7/100 with nine
+errors; still_pose is 1/100 with zero errors. Positive automatic counts also remain 64/100, 34/100
+and 49/100 for jump_in_place, jump_left and jump_right, respectively; errors remain 9, 12 and 7.
+
+The held-out estimate uses saved 33 fps fold predictions and does not rerun angle validity after
+each chosen contact, as in REPORT3. The fresh Kotlin measurement includes analyzer errors and uses
+the final model; its Twente inputs are in training and are not a second held-out accuracy estimate.
+Webcam class labels do not establish edge timing accuracy. Duplicate-content caveats from REPORT2
+remain. Full tables, protocol, script, provenance, test XML and kit checks are retained in
+logs/ml/REPORT_SIDE.md and logs/ml/side-*.
+
+The same isolated copy passed `:app:assembleDebug` in 44 seconds after core tests completed in
+1 minute 7 seconds. Both invocations used nice level 15, --no-daemon, --max-workers=1, a 768 MB
+Gradle heap and one active CPU. Memory and uptime were checked before each invocation; builds
+were serial. The other worker's emulator and /work/jumpscan-app copy were not used. Commands:
+
+```sh
+cd /work/jumpscan-side
+JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=1 nice -n 15 ./gradlew --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx768m -XX:ActiveProcessorCount=1 -Dfile.encoding=UTF-8" :core:test
+JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=1 nice -n 15 ./gradlew --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx768m -XX:ActiveProcessorCount=1 -Dfile.encoding=UTF-8" :app:assembleDebug
+```
+
+The APK remains in /work/jumpscan-side/app/build/outputs/apk/debug/app-debug.apk. Build logs,
+the APK SHA256 and machine-readable checks remain under logs/ml/side-*; research artifacts and
+private landmarks are not committed.

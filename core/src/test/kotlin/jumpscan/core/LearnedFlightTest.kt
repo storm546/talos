@@ -114,6 +114,42 @@ class LearnedFlightTest {
     }
 
     @Test
+    fun sidePolicyUsesBothLearnedEdgesOnlyWhenRulesAlsoFindFlight() {
+        val rules = LearnedFlight.Edges(1000.0, 1400.0)
+        for (edges in listOf(LearnedFlight.Edges(1020.0, 1380.0),
+            LearnedFlight.Edges(1200.0, 1550.0), LearnedFlight.Edges(700.0, 1100.0))) {
+            assertEquals(edges to false, JumpAnalyzer.combineFlight(rules,
+                LearnedFlight.Prediction(edges), rulesUncertain = true, sideView = true))
+            assertEquals(null to false, JumpAnalyzer.combineFlight(null,
+                LearnedFlight.Prediction(edges), sideView = true))
+        }
+        assertEquals(rules to true, JumpAnalyzer.combineFlight(rules,
+            LearnedFlight.Prediction(null), sideView = true))
+        assertEquals(rules to false, JumpAnalyzer.combineFlight(rules, null, sideView = true))
+        assertEquals(rules to true, JumpAnalyzer.combineFlight(rules, null,
+            rulesUncertain = true, sideView = true))
+        assertEquals(null to false, JumpAnalyzer.combineFlight(null,
+            LearnedFlight.Prediction(null), sideView = true))
+    }
+
+    @Test
+    fun sideAnalyzerUsesLearnedTimingAndSnapsEditorEdges() {
+        val fixture = fixture("twente-side")
+        val learned = LearnedFlight.predict(fixture.frames, fixture.aspect)!!.edges!!
+        for (view in listOf(JumpAnalyzer.View.SIDE, JumpAnalyzer.View.AUTO)) {
+            val rules = JumpAnalyzer.analyzeRulesWithLanding(fixture.frames, "cmj", fixture.aspect, view)
+            assertNotNull(rules.metrics.flightTimeMs)
+            val result = JumpAnalyzer.analyzeWithLanding(fixture.frames, "cmj", fixture.aspect, view)
+            assertTrue("single_leg_view" in result.metrics.warnings)
+            assertEquals(learned.contactMs - learned.takeoffMs, result.metrics.flightTimeMs!!, 1e-9)
+            assertEquals(fixture.frames.minBy { abs(it.tMs - learned.takeoffMs) }.tMs, result.takeoffMs)
+            assertEquals(fixture.frames.minBy { abs(it.tMs - learned.contactMs) }.tMs, result.contactMs)
+            assertFalse("uncertain_timing" in result.metrics.warnings)
+            assertNull(result.learnedSuggestion)
+        }
+    }
+
+    @Test
     fun nativeTrainingRatesAndLowRateFallback() {
         val fixture = fixture("twente-front")
         for (fps in listOf(24, 25, 30, 33, 36)) {
