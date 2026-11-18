@@ -28,8 +28,9 @@ The strongest single asset is the validation: most school projects cannot say ho
 
 ## Honest state of accuracy (2026-11-17, nine lab subjects)
 
-- Detection: the right jump is found in 71 of 91 lab jumps from the front and 60 of 91 from the side,
-  with no spurious result. Ten of the 20 front misses are one subject whose pose is lost mid-air.
+- Detection (rules plus learned cross-check, each subject held out): from the front 64 of 91 jumps get a
+  number without a warning and none of them is wrong; the 7 wrong ones carry a warning; 20 get suggested
+  frames. From the side 41 without a warning, 3 of them wrong.
 - Flight time: front mean error 32 ms (about one frame at 33 fps); side flights are about 87 ms long
   because the pose lags at landing.
 - Knee flexion: front RMSE 17.3 degrees with the range compressed (slope 0.65); side, image plane, 10.0.
@@ -46,8 +47,8 @@ Status key: done, running, staged (built but not reviewed or not deployed), todo
 - done: knee flexion, frontal-plane angle, knee/ankle ratio, asymmetry, flight time, jump height; heavy pose model
 - done: validation against Twente; batch scorer
 - done: side view with one measured leg and image-plane angle; detector fixes; nine-subject benchmark (182 clips)
-- running: RTMPose comparison, YouTube slow-motion benchmark, learned take-off/landing detector (logs/run-day.sh)
-- todo: session of three trials with the median reported; port the learned detector if its evaluation holds
+- done: learned take-off/landing detector as a cross-check and frame suggester (16 289 weights, plain Kotlin)
+- todo: session of three trials with the median reported; final RTMPose report; YouTube slow-motion benchmark
 
 ### B. Club server
 - done: auth, roles, jumps, delete-my-data, validation, rate limit, coach dashboard v1
