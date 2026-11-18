@@ -75,6 +75,42 @@ def check():
         page.get_by_role('button', name='Изход', exact=True).click()
         page.locator('#login-form').wait_for()
 
+        # Club platform: groups, sessions, wellbeing, feedback (section 5.4).
+        login('coach')
+        page.get_by_role('button', name='Групи', exact=True).click()
+        assert page.locator('.group-row').count() == 2
+        page.locator('summary', has_text='Добави група').click()
+        page.locator('form input[name=name]').fill('Браузър група')
+        page.get_by_role('button', name='Създай група', exact=True).click()
+        page.locator('.group-row', has_text='Браузър група').wait_for()
+        page.locator('.group-row', has_text='Браузър група').get_by_role('button', name='Избери членове', exact=True).click()
+        assert page.locator('.member-panel input[type=checkbox]').count() == 6
+        page.get_by_role('button', name='Запиши членове', exact=True).click()
+        page.get_by_role('button', name='Сесии', exact=True).click()
+        page.get_by_role('heading', name='Сесии', exact=True).wait_for()
+        page.get_by_role('button', name='Календар (.ics)', exact=True).wait_for()
+        page.locator('tbody').get_by_role('button', name='Доклад', exact=True).first.click()
+        page.locator('.report-panel table').wait_for()
+        page.get_by_role('button', name='Самочувствие', exact=True).click()
+        page.get_by_role('heading', name='Самочувствие', exact=True).wait_for()
+        assert page.get_by_text('под обичайното', exact=True).count() == 1
+        # athlete page: feedback thread visible for staff
+        page.get_by_role('button', name='Отбор', exact=True).click()
+        page.locator('.name-button').first.click()
+        page.locator('.comment-box').wait_for()
+        page.get_by_role('button', name='Изход', exact=True).click()
+        page.locator('#login-form').wait_for()
+
+        login('athlete1')
+        page.get_by_role('button', name='Моите сесии', exact=True).wait_for()
+        page.get_by_role('button', name='Моите отбелязвания', exact=True).click()
+        page.locator('table').wait_for()
+        page.get_by_role('button', name='Моите скокове', exact=True).click()
+        page.locator('.comment-box').wait_for()
+        assert page.get_by_role('textbox', name='Коментар').count() == 1
+        page.get_by_role('button', name='Изход', exact=True).click()
+        page.locator('#login-form').wait_for()
+
         login('admin')
         page.get_by_role('button', name='Клубове', exact=True).click()
         page.get_by_role('heading', name='Клубове', exact=True).wait_for()
