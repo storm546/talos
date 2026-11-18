@@ -44,13 +44,17 @@ class MainActivity : Activity() {
     private var resultSession: ClubSession? = null
     private var queueSending = false
     private val pendingRoot by lazy { java.io.File(filesDir, "pending") }
-    private fun pending() = PendingUploads(pendingRoot, base(), prefs.getLong("user_id", 0))
+    private fun pending() = PendingUploads(pendingRoot, base(), athleteId())
+    internal var formChoice = FormChoice("squat", null)
+    internal var lastForm: FormResult? = null
+    internal var assistantChat = AssistantChat()
     private var test = "cmj"
-    private lateinit var page: LinearLayout
+    internal lateinit var page: LinearLayout
+        private set
     private var screen = "login"
     private var progress: ProgressBar? = null
     private var progressText: TextView? = null
-    private val green by lazy { getColor(R.color.accent) }
+    internal val green by lazy { getColor(R.color.accent) }
     private val ink by lazy { getColor(R.color.ink) }
     private val muted by lazy { getColor(R.color.muted) }
     private val warning by lazy { getColor(R.color.warning) }
@@ -73,16 +77,26 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         val retained = lastNonConfigurationInstance as? RetainedResult
         if (retained != null) { analysis = retained.analysis; uploadedId = retained.uploadedId; test = retained.test; queuedId = retained.queuedId; edits = retained.edits; clientId = retained.clientId; selectedSession = retained.selectedSession; resultSession = retained.resultSession }
-        if (analysis != null) { if (edits != null) frameEditor() else result() } else if (!openVideo(intent)) {
+        lastForm = retained?.form
+        assistantChat = retained?.chat ?: AssistantChat()
+        savedInstanceState?.getString("form_exercise")?.let { formChoice = FormChoice(it, savedInstanceState.getString("form_side")) }
+        if (lastForm != null && retained?.screen == "form_result") formResult(lastForm!!.metrics, lastForm)
+        else if (analysis != null && retained?.screen in listOf("frames", "result")) { if (edits != null) frameEditor() else result() } else if (!openVideo(intent)) {
             if (token().isEmpty()) login() else home()
         }
         sendPending(automatic = true)
     }
 
-    private data class RetainedResult(val analysis: Analysis?, val uploadedId: Long?, val test: String, val queuedId: String?, val edits: FrameEdits?, val clientId: String?, val selectedSession: ClubSession?, val resultSession: ClubSession?)
+    private data class RetainedResult(val analysis: Analysis?, val uploadedId: Long?, val test: String, val queuedId: String?, val edits: FrameEdits?, val clientId: String?, val selectedSession: ClubSession?, val resultSession: ClubSession?, val form: FormResult?, val chat: AssistantChat, val screen: String)
 
     @Deprecated("Uses the platform non-configuration state API")
-    override fun onRetainNonConfigurationInstance(): Any = RetainedResult(analysis, uploadedId, test, queuedId, edits, clientId, selectedSession, resultSession)
+    override fun onRetainNonConfigurationInstance(): Any = RetainedResult(analysis, uploadedId, test, queuedId, edits, clientId, selectedSession, resultSession, lastForm, assistantChat, screen)
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("form_exercise", formChoice.exercise)
+        outState.putString("form_side", formChoice.side)
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -105,11 +119,12 @@ class MainActivity : Activity() {
         return true
     }
 
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-    private fun token() = prefs.getString("token", "").orEmpty()
-    private fun base() = prefs.getString("server", if (BuildConfig.DEBUG) "http://10.0.2.2:8000" else "").orEmpty()
+    internal fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    internal fun token() = prefs.getString("token", "").orEmpty()
+    internal fun base() = prefs.getString("server", if (BuildConfig.DEBUG) "http://10.0.2.2:8000" else "").orEmpty()
+    internal fun athleteId() = prefs.getLong("user_id", 0)
 
-    private fun layout(title: String, name: String) {
+    internal fun layout(title: String, name: String) {
         screen = name
         progress = null
         progressText = null
@@ -140,7 +155,7 @@ class MainActivity : Activity() {
         text(title, 28).apply { setTypeface(null, Typeface.BOLD); setPadding(0, dp(10), 0, dp(18)) }
     }
 
-    private fun text(value: String, size: Int = 16, color: Int = if (size <= 14) muted else ink, parent: LinearLayout = page): TextView = TextView(this).apply {
+    internal fun text(value: String, size: Int = 16, color: Int = if (size <= 14) muted else ink, parent: LinearLayout = page): TextView = TextView(this).apply {
         text = value
         textSize = size.toFloat()
         setTextColor(color)
@@ -148,7 +163,7 @@ class MainActivity : Activity() {
         parent.addView(this, LinearLayout.LayoutParams(-1, -2))
     }
 
-    private fun button(label: String, primary: Boolean = false, parent: LinearLayout = page,
+    internal fun button(label: String, primary: Boolean = false, parent: LinearLayout = page,
                        action: () -> Unit): Button = Button(this).apply {
         text = label
         isAllCaps = false
@@ -175,7 +190,7 @@ class MainActivity : Activity() {
         parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
     }
 
-    private fun field(label: String, value: String = "", type: Int = InputType.TYPE_CLASS_TEXT): EditText {
+    internal fun field(label: String, value: String = "", type: Int = InputType.TYPE_CLASS_TEXT): EditText {
         val caption = text(label, 14).apply { setPadding(0, dp(14), 0, dp(6)) }
         return EditText(this).apply {
             id = View.generateViewId()
@@ -198,7 +213,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun login(message: String? = null) {
+    internal fun login(message: String? = null) {
         layout(getString(R.string.sign_in), "login")
         text(getString(R.string.login_intro))
         if (message != null) text(message, 15, getColor(R.color.error))
@@ -233,6 +248,8 @@ class MainActivity : Activity() {
                 if (prior != id || base() != address) {
                     selectedSession = null
                     resultSession = null
+                    if (prior != 0L) lastForm = null
+                    assistantChat = AssistantChat()
                     if (prior != 0L) {
                         analysis = null; edits = null; uploadedId = null; queuedId = null; clientId = null
                     }
@@ -247,7 +264,7 @@ class MainActivity : Activity() {
         text(getString(R.string.privacy), 14)
     }
 
-    private fun home(message: String? = null) {
+    internal fun home(message: String? = null) {
         layout(getString(R.string.home_title), "home")
         if (message != null) text(message, 15, getColor(R.color.error))
         clubHome()
@@ -276,6 +293,12 @@ class MainActivity : Activity() {
             filmingGuide { launchVideo(pick.setType("video/*"), 11) }
         }
         text(getString(R.string.analysis_hint), 14)
+        button(getString(R.string.form_title)) { formHome() }
+        if (token().isNotEmpty()) {
+            button(getString(R.string.nutrition_title)) { nutritionHome() }
+            button(getString(R.string.assistant_title)) { assistantScreen() }
+            button(getString(R.string.training_title)) { trainingHome() }
+        }
         pendingControls()
         if (analysis != null) button(getString(R.string.last_result)) { result() }
         if (token().isNotEmpty()) {
@@ -303,6 +326,8 @@ class MainActivity : Activity() {
         uploadedId = null
         queuedId = null
         clientId = null
+        lastForm = null
+        assistantChat = AssistantChat()
     }
 
     private fun sessionLabel(session: ClubSession): String = buildString {
@@ -498,9 +523,12 @@ class MainActivity : Activity() {
     }
 
     @Suppress("DEPRECATION")
-    private fun launchVideo(intent: Intent, request: Int) {
+    internal fun launchVideo(intent: Intent, request: Int) {
         try { startActivityForResult(intent, request) }
-        catch (_: Exception) { home(getString(R.string.no_video_app)) }
+        catch (_: Exception) {
+            val error = getString(R.string.no_video_app)
+            if (request in 12..13) formHome(error) else home(error)
+        }
     }
 
     @Deprecated("Uses the platform activity result API")
@@ -509,6 +537,28 @@ class MainActivity : Activity() {
         if (requestCode in 10..11 && resultCode == RESULT_OK) {
             val uri = data?.data
             if (uri != null) startAnalysis(uri) else home(getString(R.string.no_video_returned))
+        }
+        if (requestCode in 12..13) {
+            val uri = data?.data
+            if (resultCode != RESULT_OK) formHome()
+            else if (uri == null) formHome(getString(R.string.no_video_returned))
+            else {
+                val choice = formChoice
+                val expectedGeneration = generation + 1
+                work(getString(R.string.analysing), { analyzeFormVideo(this, uri, choice) { value ->
+                    runOnUiThread {
+                        if (!isDestroyed && generation == expectedGeneration) {
+                            progress?.isIndeterminate = false
+                            progress?.progress = value
+                            progressText?.text = getString(R.string.progress, value)
+                        }
+                    }
+                } }, { metrics ->
+                    val result = FormResult(JSONObject(metrics.toJson()))
+                    lastForm = result
+                    formResult(result.metrics, result)
+                }, { formHome(it) })
+            }
         }
     }
 
@@ -710,7 +760,7 @@ class MainActivity : Activity() {
         showFrame()
     }
 
-    private fun pendingControls() {
+    internal fun pendingControls() {
         val count = if (token().isNotEmpty()) pending().count() else
             pendingRoot.walkTopDown().count { it.isFile && it.name.endsWith(".json") }
         text(getString(R.string.pending_count, count), 14).setPadding(0, dp(18), 0, dp(8))
@@ -726,6 +776,54 @@ class MainActivity : Activity() {
         }
     }
 
+    internal fun saveFeature(kind: FeatureWrite, body: JSONObject, day: String = "",
+        clientId: String = UUID.randomUUID().toString(), done: (Int?, String) -> Unit) {
+        if (token().isEmpty()) return login()
+        val queue = pending()
+        val savedBase = base()
+        val savedToken = token()
+        work(getString(R.string.feature_saving), {
+            synchronized(uploadLock) {
+                if (Thread.currentThread().isInterrupted) throw InterruptedException()
+                val name = queue.enqueueFeature(kind, day, body, clientId)
+                val sent = linkedMapOf<String, Long>()
+                try { flush(queue, sent, savedBase, savedToken) }
+                catch (error: ApiError) { if (error.status == 401) throw error }
+                catch (error: IOException) { if (error is AppError) throw error }
+                val status = when {
+                    sent.containsKey(name) -> R.string.feature_saved
+                    queue.featurePending(name) -> R.string.saved_pending
+                    else -> R.string.feature_rejected
+                }
+                status to sent
+            }
+        }, { (status, sent) ->
+            applyUploadReceipts(sent)
+            done(status, getString(status))
+        }, { done(null, it) })
+    }
+
+    private fun flush(queue: PendingUploads, sent: MutableMap<String, Long>, address: String, auth: String) {
+        queue.send(sent, put = { day, body ->
+            require(JSONObject(api(address, "/api/me/checkins/$day", "PUT", auth, body)).getString("day") == day)
+        }, featureSend = { kind, path, body ->
+            val response = JSONObject(api(address, path, kind.method, auth, body))
+        if (kind.method == "POST") response.getLong("id") else {
+            require(response.getString("day") == path.split('/').last { it != "complete" })
+            0L
+        }
+        }) { metrics -> JSONObject(api(address, "/api/jumps", "POST", auth, metrics)).getLong("id") }
+    }
+
+    private fun applyUploadReceipts(sent: Map<String, Long>) {
+        queuedId?.let { name -> sent[name]?.let { uploadedId = it; queuedId = null } }
+        lastForm?.let { form ->
+            if (sent.keys.any { it.endsWith("-${form.clientId}.json") }) form.status = R.string.feature_saved
+            else if (form.status == R.string.saved_pending && pending().featureRejected(form.clientId))
+                form.status = R.string.feature_rejected
+        }
+    }
+
     private fun sendPending(automatic: Boolean) {
         if (queueSending || token().isEmpty() || pending().count() == 0) return
         val savedToken = token()
@@ -734,27 +832,25 @@ class MainActivity : Activity() {
         val queue = pending()
         queueSending = true
         if (screen == "result") result() else if (screen == "home") home()
+        else if (screen == "form_result") lastForm?.let { formResult(it.metrics, it) }
         executor.submit {
             var error: Exception? = null
             val sent = linkedMapOf<String, Long>()
             try {
                 synchronized(uploadLock) {
-                    queue.send(sent, put = { day, body ->
-                        require(JSONObject(api(savedBase, "/api/me/checkins/$day", "PUT", savedToken, body)).getString("day") == day)
-                    }) { metrics ->
-                        JSONObject(api(savedBase, "/api/jumps", "POST", savedToken, metrics)).getLong("id")
-                    }
+                    flush(queue, sent, savedBase, savedToken)
                 }
             } catch (e: Exception) { error = e }
             runOnUiThread {
                 queueSending = false
                 if (!isDestroyed && token() == savedToken && base() == savedBase && prefs.getLong("user_id", 0) == savedOwner) {
-                    queuedId?.let { id -> sent[id]?.let { uploadedId = it; queuedId = null } }
+                    applyUploadReceipts(sent)
                     if (error is ApiError && (error as ApiError).status == 401) {
                         prefs.edit().remove("token").apply()
                         if (screen != "busy") login(getString(R.string.session_expired))
                     } else {
                         if (screen == "result") result() else if (screen == "home") home()
+                        else if (screen == "form_result") lastForm?.let { formResult(it.metrics, it) }
                         if (error != null && error !is InterruptedException) {
                             Toast.makeText(this, errorMessage(error!!), Toast.LENGTH_LONG).show()
                         } else if (!automatic) Toast.makeText(this, getString(R.string.pending_sent), Toast.LENGTH_LONG).show()
@@ -805,7 +901,7 @@ class MainActivity : Activity() {
         }, 14, warning)
     }
 
-    private fun number(json: JSONObject, key: String): String = if (json.isNull(key)) getString(R.string.not_available)
+    internal fun number(json: JSONObject, key: String): String = if (json.isNull(key)) getString(R.string.not_available)
         else metricNumber(json.getDouble(key), key, resources.configuration.locales[0])
 
     private fun history() {
@@ -836,7 +932,7 @@ class MainActivity : Activity() {
         }, { home(it) })
     }
 
-    private fun <T> work(title: String, action: () -> T, success: (T) -> Unit, failure: (String) -> Unit) {
+    internal fun <T> work(title: String, action: () -> T, success: (T) -> Unit, failure: (String) -> Unit) {
         task?.cancel(true)
         val currentGeneration = ++generation
         layout(title, "busy")
@@ -906,7 +1002,8 @@ class MainActivity : Activity() {
 /** Dashboard DIGITS precision, without a rounded negative zero. */
 internal fun metricNumber(value: Double, key: String, locale: Locale): String {
     val digits = when (key) {
-        "flight_time_ms", "fps" -> 0
+        "flight_time_ms", "fps", "kcal", "calories", "value_kcal", "training_minutes", "descent_time_ms", "ascent_time_ms",
+        "median_descent_time_ms", "median_ascent_time_ms" -> 0
         "knee_ankle_ratio", "quality" -> 2
         else -> 1
     }

@@ -1,6 +1,8 @@
 package jumpscan.app
 
 import android.content.Context
+import jumpscan.core.FormAnalyzer
+import jumpscan.core.FormMetrics
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.media.MediaExtractor
@@ -68,7 +70,29 @@ internal fun applyEdges(context: Context, analysis: Analysis, takeoffMs: Long, l
         previewUnclear = unclearPreview(analysis.frames.first { it.tMs == landingMs }))
 }
 
-internal fun analyzeVideo(context: Context, uri: Uri, test: String, mode: String = "full", progress: (Int) -> Unit): Analysis {
+internal fun analyzeVideo(context: Context, uri: Uri, test: String, mode: String = "full", progress: (Int) -> Unit): Analysis =
+    withVideoPose(context, uri, mode, 10_000L, progress) { retriever, frames, timesUs, aspect, truncated ->
+        val landing = try { JumpAnalyzer.analyzeWithLanding(frames, test, aspect) }
+            catch (_: IllegalArgumentException) { throw AppError(R.string.too_few_clear_frames) }
+        val previewFrame = landing.contactMs?.let { time -> frames.first { it.tMs == time } } ?: peakFlexionFrame(frames)
+        val previewIndex = timesUs.indexOfFirst { it / 1000 == previewFrame.tMs }
+        val raw = videoFrame(retriever, timesUs, previewIndex, aspect)
+        val preview = try { landingPreview(raw, previewFrame) } finally { raw.recycle() }
+        if (BuildConfig.DEBUG) {
+            android.util.Log.d("JumpScan", "Metrics ${landing.metrics.toJson()} contactMs=${landing.contactMs} previewMs=${previewFrame.tMs}")
+            File(context.filesDir, "metrics.json").writeText(landing.metrics.toJson())
+        }
+        Analysis(landing, truncated, preview, unclearPreview(previewFrame), frames, timesUs, uri, aspect)
+    }
+
+internal fun analyzeFormVideo(context: Context, uri: Uri, choice: FormChoice, progress: (Int) -> Unit): FormMetrics =
+    withVideoPose(context, uri, "form", 60_000L, progress) { _, frames, _, aspect, _ ->
+        try { FormAnalyzer.analyze(frames, choice.exercise, choice.side, aspect) }
+        catch (_: IllegalArgumentException) { throw AppError(R.string.too_few_clear_frames) }
+    }
+
+private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: Long, progress: (Int) -> Unit,
+    finish: (MediaMetadataRetriever, List<Frame>, List<Long>, Float, Boolean) -> T): T {
     val started = android.os.SystemClock.elapsedRealtime()
     val retriever = MediaMetadataRetriever()
     try {
@@ -84,7 +108,8 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, mode: String
         val displayWidth = if (rotation % 180 != 0) height else width
         val displayHeight = if (rotation % 180 != 0) width else height
         val aspect = displayWidth.toFloat() / displayHeight
-        val limit = minOf(duration, 10_000L)
+        if (mode == "form" && duration > maxMs) throw AppError(R.string.form_clip_limit)
+        val limit = minOf(duration, maxMs)
         val extractor = MediaExtractor()
         val timesUs = try {
             extractor.setDataSource(context, uri, null)
@@ -186,30 +211,19 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, mode: String
             }
         }
 
-        fun finish(frames: List<Frame>, phase: String): Analysis {
-            export(frames, "landmarks.csv")
+        fun complete(frames: List<Frame>, phase: String): T {
+            if (mode != "form") export(frames, "landmarks.csv")
             if (BuildConfig.DEBUG) android.util.Log.d("JumpScan",
                 "Analysis elapsedMs=${android.os.SystemClock.elapsedRealtime() - started} phase=$phase frames=${frames.size}")
-            val landing = try { JumpAnalyzer.analyzeWithLanding(frames, test, aspect) }
-                catch (_: IllegalArgumentException) { throw AppError(R.string.too_few_clear_frames) }
-            val previewFrame = landing.contactMs?.let { time -> frames.first { it.tMs == time } }
-                ?: peakFlexionFrame(frames)
-            val previewIndex = timesUs.indexOfFirst { it / 1000 == previewFrame.tMs }
-            val raw = videoFrame(retriever, timesUs, previewIndex, aspect)
-            val preview = try { landingPreview(raw, previewFrame) } finally { raw.recycle() }
-            if (BuildConfig.DEBUG) {
-                android.util.Log.d("JumpScan", "Metrics ${landing.metrics.toJson()} contactMs=${landing.contactMs} previewMs=${previewFrame.tMs}")
-                File(context.filesDir, "metrics.json").writeText(landing.metrics.toJson())
-            }
-            return Analysis(landing, duration - limit > 1000.0 / fps, preview, unclearPreview(previewFrame), frames, timesUs, uri, aspect)
+            return finish(retriever, frames, timesUs, aspect, duration - limit > 1000.0 / fps)
         }
 
         if (BuildConfig.DEBUG && mode == "replay") {
             val (fixtureAspect, frames) = File(context.filesDir, "replay.csv").bufferedReader().use(::readLandmarkCsv)
             require(kotlin.math.abs(fixtureAspect - aspect) < 0.01) { "Fixture aspect differs from video" }
             progress(100)
-            return finish(frames, "replay")
+            return complete(frames, "replay")
         }
-        return finish(detect(), "full")
+        return complete(detect(), "full")
     } finally { retriever.release() }
 }

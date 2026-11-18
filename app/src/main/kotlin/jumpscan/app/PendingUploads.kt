@@ -11,6 +11,29 @@ import java.util.UUID
 
 internal val uploadLock = Any()
 
+internal enum class FeatureWrite(val method: String, val keys: Set<String>) {
+    FORM("POST", setOf("exercise", "side", "view", "fps", "quality", "repetitions", "summary", "warnings")),
+    FOOD("POST", setOf("day", "meal", "food_id", "grams")),
+    WEIGHT("PUT", setOf("kg")),
+    SET("POST", setOf("day", "exercise_id", "set_no", "reps", "load_kg", "rpe", "plan_id")),
+    COMPLETE("PUT", emptySet());
+
+    fun path(day: String): String = when (this) {
+        FORM -> "/api/form"
+        FOOD -> "/api/food-logs"
+        SET -> "/api/set-logs"
+        WEIGHT -> "/api/me/weights/${LocalDate.parse(day)}"
+        COMPLETE -> "/api/me/nutrition/days/${LocalDate.parse(day)}/complete"
+    }
+
+    fun validate(body: JSONObject) {
+        val expected = if (method == "POST") keys + "client_id" else keys
+        require(body.keys().asSequence().toSet() == expected)
+        if (method == "POST") UUID.fromString(body.getString("client_id"))
+        if (this == FORM) validateFormFields(body)
+    }
+}
+
 /** Directory identity binds saved numbers to one athlete on one server. Tokens, images and poses are excluded. */
 internal class PendingUploads(root: File, server: String, owner: Long) {
     private val directory = File(root, MessageDigest.getInstance("SHA-256")
@@ -52,6 +75,33 @@ internal class PendingUploads(root: File, server: String, owner: Long) {
     }
 
     fun checkin(day: String): JSONObject? = files().firstOrNull { it.name == "checkin-$day.json" }?.let { read(it) }
+
+    fun enqueueFeature(kind: FeatureWrite, day: String, values: JSONObject, clientId: String): String {
+        UUID.fromString(clientId)
+        val body = JSONObject(values.toString())
+        if (kind.method == "POST") body.put("client_id", clientId)
+        kind.path(day)
+        kind.validate(body)
+        val stamp = maxOf(System.currentTimeMillis(), (files().lastOrNull { it.name.startsWith("feature-") }
+            ?.name?.split('-', limit = 3)?.get(1)?.toLongOrNull() ?: 0L) + 1)
+        val name = "feature-$stamp-$clientId.json"
+        write(File(directory, name), JSONObject().put("kind", kind.name).put("day", day).put("body", body))
+        return name
+    }
+
+    fun featurePending(name: String): Boolean = files().any { it.name == name }
+
+    fun featureRejected(clientId: String): Boolean = directory.listFiles().orEmpty().any {
+        it.name.startsWith("feature-") && it.name.removeSuffix(".bak").endsWith("-$clientId.json.rejected")
+    }
+
+    private fun feature(file: File): Triple<FeatureWrite, String, JSONObject> = try {
+        val bytes = AtomicFile(file).readFully()
+        require(bytes.size <= 66_000)
+        val envelope = JSONObject(String(bytes, Charsets.UTF_8))
+        val kind = FeatureWrite.valueOf(envelope.getString("kind"))
+        Triple(kind, kind.path(envelope.getString("day")), envelope.getJSONObject("body").also(kind::validate))
+    } catch (_: Exception) { throw AppError(R.string.pending_unreadable) }
 
     private fun read(file: File): JSONObject? = if (!file.exists() && !File(file.path + ".bak").exists()) null else try {
         val bytes = AtomicFile(file).readFully()
@@ -112,11 +162,18 @@ internal class PendingUploads(root: File, server: String, owner: Long) {
     /** A permanent rejection or unreadable file is set aside and the rest still send; transient errors stop. */
     fun send(sent: MutableMap<String, Long>, put: (String, JSONObject) -> Unit = { _, _ ->
         throw AppError(R.string.pending_unreadable)
+    }, featureSend: (FeatureWrite, String, JSONObject) -> Long = { _, _, _ ->
+        throw AppError(R.string.pending_unreadable)
     }, post: (JSONObject) -> Long) {
         for (file in files()) {
             if (Thread.currentThread().isInterrupted) throw InterruptedException()
             try {
-                if (file.name.startsWith("checkin-")) {
+                if (file.name.startsWith("feature-")) {
+                    val (kind, path, body) = feature(file)
+                    val id = featureSend(kind, path, body)
+                    remove(file)
+                    sent[file.name] = id
+                } else if (file.name.startsWith("checkin-")) {
                     sendCheckin(file.name.removePrefix("checkin-").removeSuffix(".json"), put)
                 } else sendJump(file.name, post)?.let { sent[file.name] = it }
             } catch (e: ApiError) {

@@ -924,3 +924,65 @@ All 16 screenshots were opened and inspected. Screenshots and command logs are i
 `/root/jumpscan/logs/appfinish/`. This run uses API 34;
 Android API 26–33 runtime verification remains a limitation, although the timestamp parser no
 longer depends on their `Instant.parse` behavior.
+
+## 2026-11-18 — Form, nutrition, assistant and training screens
+
+The four home entries use the existing programmatic view styles. Form analysis uses the shared
+on-device pose pipeline and sends form metrics only. Food, weight, diary completion and training
+sets use the account-scoped pending queue. The adaptive program is read-only in the app.
+Assistant proposals require a separate online confirmation and are never queued for replay.
+
+### Build and instrumentation
+
+The repository was synced to `/work/jumpscan-app` on `builder@android-build-kit` with
+`rsync --exclude local.properties`. Host checks used `free -g`, `uptime` and `MemAvailable`;
+only one Gradle build and at most one `jumpscan-worker-a` emulator ran at a time. The final build
+ran with the emulator stopped and succeeded:
+
+```sh
+./gradlew --no-daemon :core:test :app:assembleDebug :app:assembleDebugAndroidTest
+adb shell am instrument -w jumpscan.app.test/jumpscan.app.AppChecks
+python3 app/tools/check_resources.py
+python3 app/tools/check_mock_api.py
+```
+
+All 65 core tests passed. Both APKs installed; the instrumentation passed routing and ordering,
+stable retry IDs, durability, queue isolation, form payload boundaries and localized numbers.
+The resource checker passed all 323 English/Bulgarian strings. The existing mock API check passed.
+
+### End-to-end and visual checks
+
+The API 34 emulator signed in as `athlete2@demo.test` against a loopback instance of the stage
+server with a disposable seeded database. On-device analysis of the public Pexels 5034571 stock
+clip (`one-person.mp4`, 300 frames) showed 4 complete, 0 partial and 2 unclear repetitions. With
+the API tunnel disconnected, upload saved the form metrics to the pending queue. Reconnecting and
+sending pending items returned HTTP 201. GET history showed the set and its per-repetition
+measurements. Replaying the same form `client_id` returned HTTP 200 without adding a second row.
+No owner clip, video payload or landmarks were sent.
+
+The API confirmed 123.5 g of oats for lunch, body weight of 81.6 kg, and a scheduled set of 6 reps
+at 42.5 kg and RPE 7.5 with its assigned plan ID. The weight trend and daily totals were visible.
+A locally seeded program showed the goal, rate, applied targets and expenditure. The local
+assistant model fixture returned an answer, proposed 80.4 kg for the previous day and left that row
+unchanged before confirmation. Confirm applied one change. A model-side HTTP 503 produced the
+localized unavailable message and retained the draft.
+
+English and Bulgarian emulator screenshots were captured and inspected under
+`/root/jumpscan/logs/appui/`. The offline form receipt and retry control were moved above the
+measurements and the result refreshes after delivery. Unclear repetitions show the reasons
+without repeating unavailable measurements. The final views showed no text truncation or overlap
+apart from normal scroll boundaries. Evidence includes `build-final.log`,
+`instrumentation-final.txt`, `public-api.txt`, `local-api.log`, and `local-verification.txt`.
+
+### Public deployment limitation
+
+Public login succeeded, but `https://jumpscan.stormlabs.cloud/openapi.json` did not advertise any
+of these feature routes, and authenticated reads for form, foods, weights, plans, set logs and
+assistant history returned HTTP 404. Public feature writes and a public model test could not be
+verified. The public inspection sessions were signed out, and no public feature records were
+created or deleted.
+
+The app signed out of the loopback server. Both APKs, the copied stock clip and UI dump were
+removed from the emulator. Display and locale overrides were reset. The emulator, tunnel,
+loopback server and model fixture were stopped; the disposable database was removed. The kit's
+original media was retained. `final-cleanup.txt` confirms no device or test listener remained.

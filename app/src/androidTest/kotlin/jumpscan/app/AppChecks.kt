@@ -6,13 +6,18 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
 import jumpscan.core.Frame
+import jumpscan.core.FormMetrics
+import jumpscan.core.FormSummary
 import jumpscan.core.JumpMetrics
 import jumpscan.core.JumpAnalyzer
 import jumpscan.core.Landmark
+import jumpscan.core.toJson
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.Locale
+import java.util.UUID
+import java.time.LocalDate
 
 /** Small platform-only checks; no test library is needed. */
 class AppChecks : Instrumentation() {
@@ -22,14 +27,67 @@ class AppChecks : Instrumentation() {
         try {
             clubChecks()
             queueChecks()
+            featureChecks()
             previewChecks()
             numberChecks()
-            output.putString("stream", "Club parsing, check-in validation, queue migration, retry identity, isolation, durability, preview and number-format checks passed.\n")
+            output.putString("stream", "Club parsing, check-in validation, feature routing and ordering, queue migration, retry identity, isolation, durability, preview and number-format checks passed.\n")
             finish(Activity.RESULT_OK, output)
         } catch (e: Throwable) {
             output.putString("stream", "App checks failed: ${e.stackTraceToString()}\n")
             finish(Activity.RESULT_CANCELED, output)
         }
+    }
+
+    private fun featureChecks() {
+        check(decimal("80,25") == 80.25 && decimal("80.25") == 80.25 && decimal("NaN") == null)
+        val day = "2026-11-18"
+        val set = setBody(day, 9, null, listOf("1", "6", "10,5", "7"))!!
+        check(set.getDouble("load_kg") == 10.5 && set.isNull("plan_id"))
+        check(setBody(day, 9, null, listOf("1", "6", "", "11")) == null)
+        val week = weekStart(LocalDate.parse(day))
+        val plan = JSONObject("""{"starts_on":"$day","weeks":1,"items":[{"weekday":0},{"weekday":2}]}""")
+        check(planDays(plan, week).single().first.toString() == day)
+        check(planDays(plan, week.plusWeeks(1)).single().first.toString() == "2026-11-23")
+        val root = targetContext.cacheDir.resolve("feature-checks")
+        try {
+            val queue = PendingUploads(root, "https://club.example", 1)
+            val form = JSONObject(FormMetrics("squat", null, "front", 30.0, 1.0, emptyList(),
+                FormSummary(0, 0, 0, null, null, null, null, null, null, null, null, null, null), emptyList()).toJson())
+            val food = JSONObject().put("day", day).put("meal", "lunch").put("food_id", 2).put("grams", 123.5)
+            val uuid = UUID.randomUUID().toString()
+            val formName = queue.enqueueFeature(FeatureWrite.FORM, "", form, uuid)
+            queue.enqueueFeature(FeatureWrite.FOOD, "", food, UUID.randomUUID().toString())
+            queue.enqueueFeature(FeatureWrite.WEIGHT, day, JSONObject().put("kg", 81.5), UUID.randomUUID().toString())
+            queue.enqueueFeature(FeatureWrite.SET, "", set, UUID.randomUUID().toString())
+            queue.enqueueFeature(FeatureWrite.COMPLETE, day, JSONObject(), UUID.randomUUID().toString())
+            check(PendingUploads(root, "https://club.example", 2).count() == 0)
+            check(runCatching { queue.enqueueFeature(FeatureWrite.FORM, "", JSONObject(form.toString())
+                .put("video", "local only"), uuid) }.isFailure)
+            val restored = PendingUploads(root, "https://club.example", 1)
+            val firstAttempt = runCatching {
+                restored.send(linkedMapOf(), featureSend = { _, path, json ->
+                    check(path == "/api/form" && json.getString("client_id") == uuid)
+                    throw IOException("Response lost")
+                }) { error("Not a jump") }
+            }
+            check(firstAttempt.exceptionOrNull() is IOException && restored.count() == 5)
+            val routes = mutableListOf<String>()
+            val sent = linkedMapOf<String, Long>()
+            restored.send(sent, featureSend = { kind, path, json ->
+                routes.add("${kind.method} $path")
+                when (kind) {
+                    FeatureWrite.FORM -> check(json.getString("client_id") == uuid && json.isNull("side"))
+                    FeatureWrite.FOOD -> check(json.getDouble("grams") == 123.5 && json.has("client_id"))
+                    FeatureWrite.WEIGHT -> check(json.getDouble("kg") == 81.5 && !json.has("client_id"))
+                    FeatureWrite.SET -> check(json.getInt("reps") == 6 && json.has("client_id"))
+                    FeatureWrite.COMPLETE -> check(json.length() == 0)
+                }
+                17L
+            }) { error("Not a jump") }
+            check(routes == listOf("POST /api/form", "POST /api/food-logs", "PUT /api/me/weights/$day",
+                "POST /api/set-logs", "PUT /api/me/nutrition/days/$day/complete"))
+            check(sent[formName] == 17L && restored.count() == 0)
+        } finally { root.deleteRecursively() }
     }
 
     private fun clubChecks() {
