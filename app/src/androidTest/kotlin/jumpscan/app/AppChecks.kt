@@ -20,14 +20,36 @@ class AppChecks : Instrumentation() {
     override fun onStart() {
         val output = Bundle()
         try {
+            clubChecks()
             queueChecks()
             previewChecks()
             numberChecks()
-            output.putString("stream", "Queue isolation, durability, failure retention, payload boundaries, preview and number-format checks passed.\n")
+            output.putString("stream", "Club parsing, check-in validation, queue migration, retry identity, isolation, durability, preview and number-format checks passed.\n")
             finish(Activity.RESULT_OK, output)
         } catch (e: Throwable) {
             output.putString("stream", "App checks failed: ${e.stackTraceToString()}\n")
             finish(Activity.RESULT_CANCELED, output)
+        }
+    }
+
+    private fun clubChecks() {
+        val sessions = parseSessions("""[
+            {"id":2,"title":"Cancelled","starts_at":"2026-11-19T12:30:00Z","place":"Hall","test":"cmj","trials":3,"jump_count":1,"cancelled":1},
+            {"id":1,"title":"Next","starts_at":"2026-11-18T12:30:00Z","place":"Hall","test":"drop_jump","trials":5,"jump_count":0,"cancelled":false}]
+        """)
+        check(sessions.map { it.id } == listOf(1L, 2L) && sessions[1].cancelled && sessions[1].jumpCount == 1)
+        check(localDateTime(sessions[0].startsAt, Locale.UK, java.time.ZoneId.of("Europe/Sofia")).contains("14:30"))
+        val comments = parseComments("""[
+            {"id":1,"author_name":"Coach","author_role":"coach","body":"First","created_at":"2026-11-18T10:00:00Z","jump_id":3,"session_id":null},
+            {"id":2,"author_name":"Athlete","author_role":"athlete","body":"Reply","created_at":"2026-11-18T11:00:00Z","jump_id":null,"session_id":4}]
+        """)
+        check(comments[0].id == 2L && comments[0].sessionId == 4L && comments[1].jumpId == 3L)
+        check(checkinBody(List(5) { 5 }, "0", "10").getInt("rpe") == 10)
+        check(checkinBody(List(5) { 1 }, "", "").isNull("rpe"))
+        for ((scores, minutes, rpe) in listOf(Triple(List(5) { 0 }, "", ""), Triple(List(4) { 3 }, "", ""),
+                Triple(List(5) { 3 }, "20", ""), Triple(List(5) { 3 }, "601", "5"), Triple(List(5) { 3 }, "20", "11"))) {
+            try { checkinBody(scores, minutes, rpe); error("Invalid check-in accepted") }
+            catch (e: AppError) { check(e.resource == R.string.checkin_invalid) }
         }
     }
 
@@ -68,11 +90,35 @@ class AppChecks : Instrumentation() {
             try { restored.send(sent) { throw ApiError(401) }; error("Expected HTTP failure") }
             catch (_: ApiError) { check(restored.count() == 1) }
             restored.send(sent) { json ->
-                check(json.length() == 14 && json.getDouble("flight_time_ms") == 360.0)
+                check(json.length() == 15 && json.getDouble("flight_time_ms") == 360.0)
                 check(!json.has("video") && !json.has("landmarks"))
                 7L
             }
             check(sent[name] == 7L && restored.count() == 0)
+            // Older app files gain a durable UUID before the first network attempt.
+            queue.enqueue(metrics)
+            val legacy = root.walkTopDown().first { it.isFile && it.extension == "json" }
+            legacy.writeText(JSONObject(legacy.readText()).apply { remove("client_id") }.toString())
+            var uuid = ""
+            try { queue.send(linkedMapOf()) { json ->
+                uuid = json.getString("client_id"); java.util.UUID.fromString(uuid)
+                throw IOException("Response lost after storage")
+            }; error("Expected lost response") } catch (_: IOException) { }
+            check(JSONObject(legacy.readText()).getString("client_id") == uuid)
+            queue.send(linkedMapOf()) { check(it.getString("client_id") == uuid); 7L }
+            check(queue.count() == 0)
+            val sessionName = queue.enqueue(metrics, sessionId = 12)
+            queue.sendJump(sessionName) { check(it.getLong("session_id") == 12L); 8L }
+            val day = todayUtc()
+            queue.enqueueCheckin(day, checkinBody(listOf(1, 2, 3, 4, 5), "", ""))
+            queue.enqueueCheckin(day, checkinBody(listOf(5, 4, 3, 2, 1), "40", "6"))
+            check(queue.count() == 1 && queue.checkin(day)!!.getInt("sleep") == 5)
+            try { queue.send(linkedMapOf(), put = { _, _ -> throw IOException() }) { error("Not a jump") } }
+            catch (_: IOException) { check(queue.count() == 1) }
+            queue.send(linkedMapOf(), put = { date, body ->
+                check(date == day && body.getInt("training_minutes") == 40 && body.getInt("rpe") == 6)
+            }) { error("Not a jump") }
+            check(queue.count() == 0 && queue.checkin(day) == null)
             queue.enqueue(metrics)
             val file = root.walkTopDown().first { it.isFile && it.extension == "json" }
             file.writeText(JSONObject().put("video", "must never be sent").toString())

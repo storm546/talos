@@ -654,3 +654,89 @@ the reviewed owner landmarks through debug replay; history used the loopback-onl
 owner clip was copied into the repository, and no production endpoint or service was changed.
 Test app data and private device copies were cleared, the temporary mock was stopped, and the
 emulator was shut down after validation.
+
+## 2026-11-18 — Club platform
+
+Implemented athlete sessions, daily check-ins and coach feedback in the existing plain-Views app.
+Home loads up to five upcoming visible sessions, formats their timestamps in the device's local
+zone, shows the next attempt when jumps already exist, and disables cancelled sessions. Selecting
+one fixes the test type and carries the session into the result and upload. Club requests run in
+the background; their failure leaves video controls available. Session parsing accepts both JSON
+booleans and the server's SQLite 0/1 cancellation flags.
+
+The check-in uses the UTC calendar day required by the API, five integer scores with 5 as best,
+and optional paired training minutes/RPE. Check-ins share the existing account/server-bound atomic
+queue and replace the pending item for the same day. Feedback is paginated, newest first, with
+translated author roles, timestamps, jump/session references, a reply field and home unread count.
+Opening feedback calls POST /api/me/read. New labels are available in Bulgarian and English.
+
+A result receives one random UUID before its first upload or queue write. Every attempt carries
+that client_id and the optional session_id. Older queued results acquire a UUID that is written
+before a network attempt. Both HTTP 201 and repeat HTTP 200 acknowledge success; failures retain
+the saved item. Queue files contain metrics or check-in numbers, never tokens, video or landmarks.
+
+Validation used builder@android-build-kit, /work/jumpscan-app, JDK 17 and /opt/android-sdk. Sources
+were synced with rsync --exclude local.properties, excluding build products, Git metadata and logs.
+Only one Gradle build ran at a time. The final required command passed:
+
+```sh
+cd /work/jumpscan-app
+timeout 1200 nice -n 15 ./gradlew --no-daemon --max-workers=1 \
+  :core:test :app:assembleDebug :app:assembleDebugAndroidTest
+/opt/android-sdk/platform-tools/adb -s emulator-5554 shell am instrument -w \
+  jumpscan.app.test/jumpscan.app.AppChecks
+```
+
+All 55 core tests passed, with zero failures, errors or skips. Both APKs assembled. Instrumentation
+on the final APKs passed club parsing, local time conversion, score/pair validation, day-key
+replacement, legacy UUID persistence, retry identity, account/server isolation, failure retention,
+payload boundaries, preview and existing locale/precision checks. The final Bulgarian unread label
+was also checked in the packaged APK. Local checks passed:
+
+```sh
+python3 app/tools/check_resources.py
+python3 app/tools/check_mock_api.py
+```
+
+All 192 resource keys and format arguments match. The mock contract check exercises authentication,
+sessions and cancellation, a dropped response and repeat 200, check-in create/replace and paired
+validation, feedback ordering/references and read counts. The fixture binds only to loopback and
+uses a synthetic athlete; its /_fixture endpoint exposes only this temporary test state.
+
+Emulator flows used only AVD jumpscan-worker-a, with no overlapping emulator. Memory and uptime were
+checked before work; drivers waited whenever available memory fell below 3 GiB. The initial 2048 MB
+guest was stopped when it left insufficient headroom. UI and replay checks then used a 1024 MB guest,
+two cores, SwiftShader and a 720 × 1280 display at 320 dpi. This checks the club app flows, not inference
+performance. The reviewed debug replay read the original clip and landmarks directly from the kit
+into app-private device storage; no owner clip or private landmark fixture entered the repository.
+
+Observed through the app against app/tools/mock_api.py:
+
+- Selected Morning jumps; the cancelled session was visibly disabled. The result displayed the
+  selected session in both languages. The first upload stored session_id=1 and a random client_id,
+  then the fixture deliberately closed the connection without a response. The app retained one
+  queued file. Send pending repeated the identical UUID, received 200, removed the file and left
+  exactly one stored jump. Home then showed attempt 2 of 3.
+- Selected all five scores as 5 and saved an online check-in with both optional fields empty.
+  Disabled Wi-Fi/mobile data and removed adb reverse forwarding, then saved 45 minutes and RPE 6.
+  One pending check-in remained for the day. Home showed the saved status and unavailable sessions;
+  Record still opened the filming guide. Restoring connectivity and Send pending updated the same
+  server record and emptied the queue.
+- Opened the coach thread from the home badge, saw the author role and session reference, and sent
+  “Thanks today” through the reply box. The reply appeared first. The fixture's read_at was set,
+  its unread count became zero, and home displayed zero unread comments.
+
+Screenshots, matching UI trees, build/instrumentation output, request payloads and mock state are
+retained outside version control in /root/jumpscan/logs/appclub/. Home, check-in, feedback and result
+with a session were captured in Bulgarian and English. Every saved screenshot was opened and
+inspected; controls and longer Bulgarian labels wrap without clipping or overlap, and lower fields
+and actions remain reachable by scrolling. Screenshot review also corrected the Bulgarian unread
+count wording. These are mock API and debug replay checks; no production account or server was used.
+
+Cleanup cleared and uninstalled the app and instrumentation package, removed this task's temporary
+video and UI dump, removed adb forwarding, reset app locale and display overrides, and returned
+animation scales and radios to their normal enabled settings. The app data directory was empty
+before uninstall. The temporary mock was stopped by its recorded, command-checked PID and the
+emulator was stopped with adb emu kill. Final checks found no adb device, emulator/mock process or
+listener on port 8765. Original kit clips and fixtures were retained. No deployment, publication,
+push, unrelated workload stop or service restart occurred.

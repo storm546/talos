@@ -18,7 +18,7 @@ internal fun serverUrl(input: String): String {
     return value
 }
 
-// Only credentials and metrics JSON enter this function. Video and pose data stay on the device.
+// Only account, club and metrics JSON enter this function. Video and pose data stay on the device.
 internal fun api(base: String, path: String, method: String = "GET", token: String = "", body: JSONObject? = null): String {
     val connection = URI(serverUrl(base) + path).toURL().openConnection() as HttpURLConnection
     try {

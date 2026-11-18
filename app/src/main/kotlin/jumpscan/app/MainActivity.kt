@@ -22,6 +22,8 @@ import org.json.JSONObject
 import jumpscan.core.toJson
 import java.io.IOException
 import java.util.Locale
+import java.util.UUID
+import java.time.Instant
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
@@ -36,6 +38,9 @@ class MainActivity : Activity() {
     private var edits: FrameEdits? = null
     private var uploadedId: Long? = null
     private var queuedId: String? = null
+    private var clientId: String? = null
+    private var selectedSession: ClubSession? = null
+    private var resultSession: ClubSession? = null
     private var queueSending = false
     private val pendingRoot by lazy { java.io.File(filesDir, "pending") }
     private fun pending() = PendingUploads(pendingRoot, base(), prefs.getLong("user_id", 0))
@@ -66,17 +71,17 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val retained = lastNonConfigurationInstance as? RetainedResult
-        if (retained != null) { analysis = retained.analysis; uploadedId = retained.uploadedId; test = retained.test; queuedId = retained.queuedId; edits = retained.edits }
+        if (retained != null) { analysis = retained.analysis; uploadedId = retained.uploadedId; test = retained.test; queuedId = retained.queuedId; edits = retained.edits; clientId = retained.clientId; selectedSession = retained.selectedSession; resultSession = retained.resultSession }
         if (analysis != null) { if (edits != null) frameEditor() else result() } else if (!openVideo(intent)) {
             if (token().isEmpty()) login() else home()
         }
         sendPending(automatic = true)
     }
 
-    private data class RetainedResult(val analysis: Analysis?, val uploadedId: Long?, val test: String, val queuedId: String?, val edits: FrameEdits?)
+    private data class RetainedResult(val analysis: Analysis?, val uploadedId: Long?, val test: String, val queuedId: String?, val edits: FrameEdits?, val clientId: String?, val selectedSession: ClubSession?, val resultSession: ClubSession?)
 
     @Deprecated("Uses the platform non-configuration state API")
-    override fun onRetainNonConfigurationInstance(): Any = RetainedResult(analysis, uploadedId, test, queuedId, edits)
+    override fun onRetainNonConfigurationInstance(): Any = RetainedResult(analysis, uploadedId, test, queuedId, edits, clientId, selectedSession, resultSession)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -134,12 +139,12 @@ class MainActivity : Activity() {
         text(title, 28).apply { setTypeface(null, Typeface.BOLD); setPadding(0, dp(10), 0, dp(18)) }
     }
 
-    private fun text(value: String, size: Int = 16, color: Int = if (size <= 14) muted else ink): TextView = TextView(this).apply {
+    private fun text(value: String, size: Int = 16, color: Int = if (size <= 14) muted else ink, parent: LinearLayout = page): TextView = TextView(this).apply {
         text = value
         textSize = size.toFloat()
         setTextColor(color)
         setPadding(0, dp(4), 0, dp(4))
-        page.addView(this, LinearLayout.LayoutParams(-1, -2))
+        parent.addView(this, LinearLayout.LayoutParams(-1, -2))
     }
 
     private fun button(label: String, primary: Boolean = false, parent: LinearLayout = page,
@@ -236,6 +241,7 @@ class MainActivity : Activity() {
     private fun home(message: String? = null) {
         layout(getString(R.string.home_title), "home")
         if (message != null) text(message, 15, getColor(R.color.error))
+        clubHome()
         text(getString(R.string.guide_short))
         text(getString(R.string.choose_test), 18).setPadding(0, dp(20), 0, dp(8))
         val types = RadioGroup(this)
@@ -247,6 +253,7 @@ class MainActivity : Activity() {
                 buttonTintList = ColorStateList.valueOf(green)
                 minHeight = dp(48)
                 isChecked = test == value
+                isEnabled = selectedSession == null
                 setOnClickListener { test = value }
             })
         }
@@ -270,11 +277,175 @@ class MainActivity : Activity() {
                 val savedBase = base()
                 work(getString(R.string.signing_out), { api(savedBase, "/api/auth/logout", "POST", savedToken) }, {
                     prefs.edit().remove("token").remove("name").remove("user_id").apply()
+                    selectedSession = null
                     login()
                 }, { error -> home(getString(R.string.signout_error, error)) })
             }
         } else button(getString(R.string.sign_in)) { login() }
         text(getString(R.string.coach_note), 14)
+    }
+
+    private fun sessionLabel(session: ClubSession): String = buildString {
+        append(session.title)
+        append("\n" + localDateTime(session.startsAt, resources.configuration.locales[0]))
+        if (session.place.isNotBlank()) append(" · " + session.place)
+        append("\n" + getString(if (session.test == "cmj") R.string.cmj else R.string.drop_jump))
+        if (session.jumpCount > 0) append(" · " + getString(R.string.session_attempt, session.jumpCount + 1, session.trials))
+        if (session.cancelled) append(" · " + getString(R.string.session_cancelled))
+    }
+
+    private fun clubHome() {
+        val host = page
+        val day = todayUtc()
+        val checkin = button(getString(R.string.checkin_title)) { checkin() }
+        val feedback = button(getString(R.string.feedback_title)) { feedback() }
+        checkin.isEnabled = token().isNotEmpty()
+        feedback.isEnabled = token().isNotEmpty()
+        text(getString(R.string.sessions_title), 21)
+        val sessions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        page.addView(sessions)
+        val status = text(getString(if (token().isEmpty()) R.string.club_sign_in else R.string.club_loading), 14, parent = sessions)
+        selectedSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 14, parent = sessions) }
+        if (selectedSession != null) button(getString(R.string.session_clear), parent = sessions) {
+            selectedSession = null; home()
+        }
+        if (token().isEmpty()) return
+        val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
+        fun current() = !isDestroyed && page === host && token() == savedToken && base() == savedBase
+        executor.submit {
+            try {
+                val rows = parseSessions(api(savedBase, "/api/sessions?from=${Instant.now()}&limit=5", token = savedToken))
+                runOnUiThread {
+                    if (current()) {
+                        status.text = if (rows.isEmpty()) getString(R.string.sessions_empty) else ""
+                        selectedSession?.let { chosen ->
+                            rows.firstOrNull { it.id == chosen.id }?.let { fresh ->
+                                if (fresh.cancelled) { selectedSession = null; home(); return@runOnUiThread }
+                                selectedSession = fresh
+                            }
+                        }
+                        rows.forEach { session ->
+                            button(sessionLabel(session), parent = sessions) {
+                                selectedSession = session; test = session.test; home()
+                            }.isEnabled = !session.cancelled
+                        }
+                    }
+                }
+            } catch (_: Exception) { runOnUiThread { if (current()) status.text = getString(R.string.sessions_offline) } }
+        }
+        executor.submit {
+            val queued = synchronized(uploadLock) { runCatching { pending().checkin(day) }.getOrNull() }
+            val done = if (queued != null) true else runCatching {
+                JSONArray(api(savedBase, "/api/checkins?athlete_id=$owner&from=$day&to=$day", token = savedToken)).length() > 0
+            }.getOrNull()
+            runOnUiThread { if (current()) checkin.text = getString(when {
+                queued != null -> R.string.checkin_pending
+                done == true -> R.string.checkin_done
+                done == false -> R.string.checkin_not_done
+                else -> R.string.checkin_unknown
+            }) }
+            val unread = runCatching { JSONObject(api(savedBase, "/api/me/unread", token = savedToken)).getInt("comments") }.getOrNull()
+            runOnUiThread { if (current()) feedback.text = if (unread == null) getString(R.string.feedback_unknown)
+                else getString(R.string.feedback_unread, unread) }
+        }
+    }
+
+    private fun checkin() {
+        val day = todayUtc()
+        val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
+        work(getString(R.string.checkin_title), {
+            synchronized(uploadLock) { pending().checkin(day) } ?: try {
+                val rows = JSONArray(api(savedBase, "/api/checkins?athlete_id=$owner&from=$day&to=$day", token = savedToken))
+                if (rows.length() == 0) null else rows.getJSONObject(0)
+            } catch (e: IOException) { if (e is ApiError) throw e else null }
+        }, { checkinForm(day, it) }, { home(it) })
+    }
+
+    private fun checkinForm(day: String, saved: JSONObject?, message: String? = null) {
+        layout(getString(R.string.checkin_title), "checkin")
+        text(getString(R.string.checkin_day, day), 14)
+        text(getString(R.string.checkin_scale), 14)
+        if (message != null) text(message, 15, getColor(R.color.error))
+        val keys = listOf("sleep", "fatigue", "soreness", "stress", "mood")
+        val groups = listOf(R.string.checkin_sleep, R.string.checkin_fatigue, R.string.checkin_soreness,
+            R.string.checkin_stress, R.string.checkin_mood).mapIndexed { index, label ->
+            text(getString(label), 16)
+            RadioGroup(this).apply {
+                orientation = RadioGroup.HORIZONTAL
+                for (score in 1..5) addView(RadioButton(this@MainActivity).apply {
+                    id = View.generateViewId(); text = score.toString(); tag = score
+                    setTextColor(ink); buttonTintList = ColorStateList.valueOf(green)
+                    minHeight = dp(48); setPadding(0, 0, 0, 0)
+                    contentDescription = getString(label) + ": " + score
+                    isChecked = score == (saved?.optInt(keys[index], 3) ?: 3)
+                }, RadioGroup.LayoutParams(0, -2, 1f))
+                page.addView(this)
+            }
+        }
+        fun optional(key: String) = if (saved == null || saved.isNull(key)) "" else saved.getString(key)
+        val minutes = field(getString(R.string.checkin_minutes), optional("training_minutes"), InputType.TYPE_CLASS_NUMBER)
+        val rpe = field(getString(R.string.checkin_rpe), optional("rpe"), InputType.TYPE_CLASS_NUMBER)
+        text(getString(R.string.checkin_optional), 14)
+        button(getString(R.string.checkin_save), primary = true) {
+            val body = try { checkinBody(groups.map { group -> group.findViewById<RadioButton>(group.checkedRadioButtonId).tag as Int },
+                minutes.text.toString(), rpe.text.toString()) } catch (e: AppError) {
+                Toast.makeText(this, errorMessage(e), Toast.LENGTH_LONG).show(); return@button
+            }
+            val queue = pending(); val savedToken = token(); val savedBase = base()
+            try { synchronized(uploadLock) { queue.enqueueCheckin(day, body) } }
+            catch (_: Exception) { Toast.makeText(this, getString(R.string.pending_save_failed), Toast.LENGTH_LONG).show(); return@button }
+            work(getString(R.string.checkin_saving), {
+                synchronized(uploadLock) { queue.sendCheckin(day) { date, value ->
+                    api(savedBase, "/api/me/checkins/$date", "PUT", savedToken, value)
+                } }
+            }, {
+                home()
+                Toast.makeText(this, getString(R.string.checkin_saved), Toast.LENGTH_LONG).show()
+            }, { checkinForm(day, body, getString(R.string.checkin_queued) + "\n" + it) })
+        }
+        button(getString(R.string.home)) { home() }
+    }
+
+    private fun feedback(offset: Int = 0) {
+        val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
+        work(getString(R.string.feedback_title), {
+            val rows = parseComments(api(savedBase, "/api/comments?athlete_id=$owner&limit=50&offset=$offset", token = savedToken))
+            api(savedBase, "/api/me/read", "POST", savedToken)
+            rows
+        }, { rows -> feedbackForm(rows, offset) }, { home(it) })
+    }
+
+    private fun feedbackForm(rows: List<ClubComment>, offset: Int, draft: String = "", message: String? = null) {
+        layout(getString(R.string.feedback_title), "feedback")
+        if (message != null) text(message, 15, getColor(R.color.error))
+        if (rows.isEmpty()) text(getString(R.string.feedback_empty))
+        val reply = field(getString(R.string.feedback_reply), draft).apply {
+            setSingleLine(false); minLines = 2; maxLines = 8
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            filters = arrayOf(android.text.InputFilter.LengthFilter(1000))
+        }
+        button(getString(R.string.feedback_send), primary = true) {
+            val body = reply.text.toString().trim()
+            if (body.isEmpty()) { reply.error = getString(R.string.feedback_required); return@button }
+            val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
+            work(getString(R.string.feedback_sending), {
+                api(savedBase, "/api/comments", "POST", savedToken, JSONObject().put("athlete_id", owner).put("body", body))
+            }, { feedback() }, { feedbackForm(rows, offset, body, it) })
+        }
+        button(getString(R.string.home)) { home() }
+        for (comment in rows) {
+            text(getString(R.string.feedback_author, comment.authorName, getString(when (comment.authorRole) {
+                "coach" -> R.string.role_coach
+                "admin" -> R.string.role_admin
+                else -> R.string.role_athlete
+            })), 18, green)
+            text(localDateTime(comment.createdAt, resources.configuration.locales[0]), 14)
+            comment.jumpId?.let { text(getString(R.string.feedback_jump, it), 14) }
+            comment.sessionId?.let { text(getString(R.string.feedback_session, it), 14) }
+            text(comment.body)
+        }
+        if (rows.size == 50) button(getString(R.string.feedback_older)) { feedback(offset + 50) }
+        if (offset > 0) button(getString(R.string.feedback_newest)) { feedback() }
     }
 
     private fun filmingGuide(continueAction: () -> Unit) {
@@ -312,6 +483,8 @@ class MainActivity : Activity() {
         edits = null
         uploadedId = null
         queuedId = null
+        clientId = null
+        resultSession = selectedSession
         val expectedGeneration = generation + 1
         work(getString(R.string.analysing), { analyzeVideo(this, uri, test, mode) { value ->
             runOnUiThread {
@@ -330,6 +503,7 @@ class MainActivity : Activity() {
         val current = analysis ?: return home()
         layout(getString(R.string.result), "result")
         text(if (current.metrics.test == "cmj") getString(R.string.cmj) else getString(R.string.drop_jump), 18)
+        resultSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 16, green) }
         if (current.truncated) text(getString(R.string.truncated), 14)
         text(getString(R.string.depth_note), 14)
         text(edgeTimes(current.landing.takeoffMs, current.landing.contactMs), 16)
@@ -373,20 +547,20 @@ class MainActivity : Activity() {
                 val savedToken = token()
                 val savedBase = base()
                 val queue = pending()
+                val uuid = clientId ?: UUID.randomUUID().toString().also { clientId = it }
+                try {
+                    synchronized(uploadLock) { queuedId = queue.enqueue(current.metrics, uuid, resultSession?.id) }
+                } catch (_: Exception) {
+                    return@button result().also { text(getString(R.string.pending_save_failed), 15, getColor(R.color.error)) }
+                }
+                val name = queuedId!!
                 work(getString(R.string.uploading), {
                     synchronized(uploadLock) {
-                        if (Thread.currentThread().isInterrupted) throw InterruptedException()
-                        try {
-                            val id = JSONObject(api(savedBase, "/api/jumps", "POST", savedToken,
-                                JSONObject(current.metrics.toJson()))).getLong("id")
-                            id to null
-                        } catch (e: IOException) {
-                            if (e is ApiError || e is AppError || Thread.currentThread().isInterrupted) throw e
-                            try { null to queue.enqueue(current.metrics) }
-                            catch (_: IOException) { throw AppError(R.string.pending_save_failed) }
+                        queue.sendJump(name) { body ->
+                            JSONObject(api(savedBase, "/api/jumps", "POST", savedToken, body)).getLong("id")
                         }
                     }
-                }, { (id, pendingId) -> uploadedId = id; queuedId = pendingId; result() },
+                }, { id -> uploadedId = id; queuedId = null; result() },
                     { result(); text(it, 15, getColor(R.color.error)) })
             }
         }
@@ -453,6 +627,7 @@ class MainActivity : Activity() {
                 edits = null
                 uploadedId = null
                 queuedId = null
+                clientId = null
                 result()
             }, { frameEditor(it) })
         }
@@ -525,7 +700,9 @@ class MainActivity : Activity() {
             val sent = linkedMapOf<String, Long>()
             try {
                 synchronized(uploadLock) {
-                    queue.send(sent) { metrics ->
+                    queue.send(sent, put = { day, body ->
+                        api(savedBase, "/api/me/checkins/$day", "PUT", savedToken, body)
+                    }) { metrics ->
                         JSONObject(api(savedBase, "/api/jumps", "POST", savedToken, metrics)).getLong("id")
                     }
                 }
