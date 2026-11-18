@@ -1,10 +1,13 @@
 """Create synthetic demo accounts, jumps and club data, once per database."""
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import random
 import secrets
 
 from .main import Checkin, Jump, database, database_path, init_db, password_hash
+
+SOFIA = ZoneInfo("Europe/Sofia")
 
 
 def seed(path=None):
@@ -88,18 +91,21 @@ def seed(path=None):
                       db.execute("SELECT * FROM groups WHERE club_id = ?", (demo_club_id,))}
 
         if not db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]:
-            now = datetime.now(timezone.utc)
+            # Local start times in Bulgarian club time, on round quarter hours, stored as UTC.
             sessions = (
-                # title, days offset from now, group, test, trials, place, cancelled
-                ("Тренировка скокове", -20, "Юноши", "drop_jump", 3, "Зала 1", False),
-                ("Тест срещу часовник", -10, None, "cmj", 3, "Зала 2", False),
-                ("Седмичен тест", -3, "Състезатели", "drop_jump", 3, "Зала 1", False),
-                ("Контролно тестване", 2, None, "cmj", 3, "Зала 2", False),
-                ("Състезателна подготовка", 7, "Състезатели", "drop_jump", 3, "Зала 1", True),
+                # title, days offset from today, local hour:minute, group, test, trials, place, cancelled
+                ("Тренировка: скокове от платформа", -20, 17, 30, "Юноши", "drop_jump", 3, "Зала 1", False),
+                ("Контролен тест — скок с приклякане", -10, 18, 15, None, "cmj", 3, "Зала 2", False),
+                ("Седмичен тест на отбора", -3, 16, 45, "Състезатели", "drop_jump", 3, "Зала 1", False),
+                ("Контролно тестване на формата", 2, 19, 0, None, "cmj", 3, "Зала 2", False),
+                ("Подготовка за състезание", 7, 17, 30, "Състезатели", "drop_jump", 3, "Зала 1", True),
             )
             session_ids = []
-            for title, offset, group_name, test, trials, place, cancelled in sessions:
-                starts_at = (now + timedelta(days=offset)).isoformat()
+            for title, offset, hour, minute, group_name, test, trials, place, cancelled in sessions:
+                local = datetime(
+                    *(datetime.now(SOFIA).date() + timedelta(days=offset)).timetuple()[:3],
+                    hour, minute, tzinfo=SOFIA)
+                starts_at = local.astimezone(timezone.utc).isoformat()
                 cursor = db.execute(
                     "INSERT INTO sessions(club_id, group_id, title, starts_at, place, test, trials, "
                     "notes, created_by, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -121,28 +127,39 @@ def seed(path=None):
                         db.execute("UPDATE jumps SET session_id = ? WHERE id = ?", (session_id, jump_id))
 
         # 14 days of check-ins for every demo athlete, with one athlete clearly low today.
-        # Wellbeing is stable per athlete (so the previous-14-day median is well defined);
-        # training load varies day to day. athlete2 drops clearly below their usual today.
+        # Each athlete has their own stable wellbeing level and a personal weekly training rhythm
+        # (a sport-day skipping pattern plus item-level noise), so days vary naturally without
+        # looking like a test fixture. athlete2 drops clearly below their own usual level today.
         rng = random.Random(20261118)
         if not db.execute("SELECT COUNT(*) FROM checkins").fetchone()[0]:
             today = datetime.now(timezone.utc).date()
             for account in athlete_ids:
                 athlete_id = athlete_ids[account]
                 variant = int(account[-1])
-                base = 4 if variant % 2 == 0 else 3
+                level = 4 if variant % 2 == 0 else 3
+                # Personal training days (offset within a two-week beat), per athlete.
+                train_days = {0, 1, 3, 6, 8, 10, 12} if variant % 2 == 0 else {0, 2, 3, 5, 7, 10, 12}
                 for days_ago in range(14):
                     day = today - timedelta(days=days_ago)
                     if account == "athlete2" and days_ago == 0:
-                        mood, sleep, fatigue, soreness, stress = 1, 1, 1, 1, 1
+                        # Below his own usual, but still a real day — not five 1s.
+                        mood, sleep, fatigue, soreness, stress = 2, 3, 2, 3, 2
+                    elif days_ago == 0:
+                        # Everyone else reports their typical day, so exactly one athlete stands out.
+                        mood, sleep, fatigue, soreness, stress = [level] * 5
                     else:
-                        mood = sleep = fatigue = soreness = stress = base
-                    training = rng.choice([None, (rng.randint(30, 90), rng.randint(2, 8))])
+                        mood, sleep, fatigue, soreness, stress = [max(1, min(5, level + rng.randint(-1, 1)))
+                                                                  for _ in range(5)]
+                    if days_ago in train_days:
+                        training_minutes = rng.randint(45, 120)
+                        rpe = rng.randint(4, 8)
+                    else:
+                        training_minutes = rpe = None
                     db.execute(
                         "INSERT INTO checkins(athlete_id, day, sleep, fatigue, soreness, stress, mood, "
                         "training_minutes, rpe, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (athlete_id, day.isoformat(), sleep, fatigue, soreness, stress, mood,
-                         training[0] if training else None, training[1] if training else None,
-                         now_isos(day), now_isos(day)))
+                         training_minutes, rpe, now_isos(day), now_isos(day)))
 
         # A few coach comments and one athlete reply on the first athlete's thread.
         if not db.execute("SELECT COUNT(*) FROM comments").fetchone()[0]:

@@ -115,6 +115,16 @@ const locale = () => state.language === 'bg' ? 'bg-BG' : 'en-GB';
 const DIGITS = {flight_time_ms:0, fps:0, knee_ankle_ratio:2, quality:2};
 const format = (value, key) => value == null ? '—' : new Intl.NumberFormat(locale(), {maximumFractionDigits:DIGITS[key] ?? 1}).format(value);
 const date = value => value ? new Date(value).toLocaleDateString(locale()) : '—';
+// No seconds: dashboards show date + hour:minute in the viewer's own time zone.
+const dateTime = value => value ? new Date(value).toLocaleString(locale(), {year:'numeric', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+// Two-line date for session tables: date above a small time, so the column stays narrow.
+function sessionWhen(iso) {
+  const d = new Date(iso);
+  const cell = node('td', null, 'nowrap');
+  cell.append(document.createTextNode(d.toLocaleDateString(locale())),
+    node('br'), node('small', d.toLocaleTimeString(locale(), {hour:'2-digit', minute:'2-digit'})));
+  return cell;
+}
 function apiDay() {
   const now = new Date();
   const parts = new Intl.DateTimeFormat('en-CA', {timeZone:'UTC', year:'numeric', month:'2-digit', day:'2-digit'}).format(now);
@@ -564,6 +574,7 @@ function sessions(content) {
 }
 function reportGrid(report) {
   const grid = table(['name','trialsDone','ratio','peakL','peakR','asymmetry','height'], t('report'));
+  grid.wrap.classList.add('club-table');
   for (const row of report.athletes) {
     const tr = node('tr');
     tr.append(node('td', row.name));
@@ -578,38 +589,42 @@ function reportGrid(report) {
   return grid.wrap;
 }
 function sessionTable(rows, staff) {
-  const grid = table(['sessionTitle','date','group','test','trials','jumps', ...(staff ? ['actions'] : [])], t('sessions'));
-  for (const session of rows) {
+  // Action column first so buttons stay visible without horizontal scrolling.
+  const cells = row => {
     const tr = node('tr');
-    const titleTd = node('td', session.title);
-    if (session.cancelled) titleTd.append(node('span', ' · ' + t('cancelledBadge'), 'badge pending'));
-    tr.append(titleTd);
-    tr.append(node('td', new Date(session.starts_at).toLocaleString(locale())));
-    tr.append(node('td', groupNameOf(session)));
-    tr.append(node('td', t(session.test)));
-    tr.append(node('td', String(session.trials), 'num'));
-    tr.append(node('td', String(session.jump_count || 0), 'num'));
     if (staff) {
       const cell = node('td'); const actions = node('div', null, 'cell-actions');
-      actions.append(button('editSession', () => { state.sessionEdit = session; state.sessionReport = null; render('#session-title'); }));
-      actions.append(button('report', async () => { const report = await api('/api/sessions/'+session.id+'/report'); state.sessionReport = report; render('#calendar-download'); }));
-      actions.append(button(session.cancelled ? 'restoreSession' : 'cancelSession', async () => { await api('/api/sessions/'+session.id, {method:'PATCH', body:JSON.stringify(cancelFrom(session))}); await load(); message('saved'); }));
+      actions.append(button('editSession', () => { state.sessionEdit = row; state.sessionReport = null; render('#session-title'); }));
+      actions.append(button('report', async () => { const report = await api('/api/sessions/'+row.id+'/report'); state.sessionReport = report; render('#calendar-download'); }));
+      actions.append(button(row.cancelled ? 'restoreSession' : 'cancelSession', async () => { await api('/api/sessions/'+row.id, {method:'PATCH', body:JSON.stringify(cancelFrom(row))}); await load(); message('saved'); }));
       cell.append(actions); tr.append(cell);
     }
-    grid.body.append(tr);
-  }
+    const titleTd = node('td', row.title);
+    if (row.cancelled) titleTd.append(node('span', ' · ' + t('cancelledBadge'), 'badge pending'));
+    tr.append(titleTd);
+    tr.append(sessionWhen(row.starts_at));
+    tr.append(node('td', groupNameOf(row)));
+    tr.append(node('td', t(row.test)));
+    tr.append(node('td', String(row.trials), 'num'));
+    tr.append(node('td', String(row.jump_count || 0), 'num'));
+    return tr;
+  };
+  const grid = table([...(staff ? ['actions'] : []), 'sessionTitle','date','group','test','trials','jumps'], t('sessions'));
+  grid.wrap.classList.add('club-table');
+  for (const session of rows) grid.body.append(cells(session));
   return grid.wrap;
 }
 function sessionsMine(content) {
   content.append(heading(t('mySessions')));
   if (!state.sessionsMine.length) { content.append(node('p', t('noSessions'), 'empty')); return; }
   const grid = table(['sessionTitle','date','place','test','trials','jumps'], t('mySessions'));
+  grid.wrap.classList.add('club-table');
   for (const session of sortSessions(state.sessionsMine)) {
     const tr = node('tr');
     const title = node('td', session.title);
     if (session.cancelled) title.append(node('span', ' · ' + t('cancelledBadge'), 'badge pending'));
     tr.append(title);
-    tr.append(node('td', new Date(session.starts_at).toLocaleString(locale())));
+    tr.append(sessionWhen(session.starts_at));
     tr.append(node('td', session.place || '—'));
     tr.append(node('td', t(session.test)));
     tr.append(node('td', String(session.trials), 'num'));
@@ -638,6 +653,7 @@ function wellbeing(content) {
   content.append(week);
   input.addEventListener('change', () => { state.wellbeingDay = input.value; load('wellbeing'); });
   const grid = table(['name','wellbeing','load','items'], t('wellbeingView'));
+  grid.wrap.classList.add('club-table');
   for (const row of state.wellbeing) {
     const tr = node('tr');
     tr.append(node('td', row.name));
@@ -659,31 +675,37 @@ function formatNumber(value) {
   return new Intl.NumberFormat(locale(), {maximumFractionDigits: 0}).format(value);
 }
 function wellbeingChart() {
-  const figure = node('figure');
-  figure.append(node('figcaption', t('wellbeingChart')));
+  // Two sibling charts so wellbeing (5–25) and load (arbitrary units) each get their own axis.
   const days = [...state.checkins].sort((a, b) => a.day < b.day ? -1 : a.day > b.day ? 1 : 0);
   const points = days.map(c => ({day: c.day, w: wellbeingSum(c), l: c.rpe != null && c.training_minutes != null ? c.rpe * c.training_minutes : null}));
-  const hasW = points.some(p => p.w != null); const hasL = points.some(p => p.l != null);
-  if (!points.length || (!hasW && !hasL)) { figure.append(node('p', t('noCheckins'))); return figure; }
-  const svg = svgNode('svg', {viewBox:'0 0 480 210', role:'img', 'aria-label':t('wellbeingChart')});
-  const wVals = points.map(p => p.w).filter(v => v != null);
-  const lVals = points.map(p => p.l).filter(v => v != null);
-  const allVals = [...wVals, ...lVals];
-  const min = Math.min(...allVals); const max = Math.max(...allVals);
+  const wrap = node('div', null, 'charts');
+  wrap.append(
+    seriesChart(t('wellbeing'), points, 'w', {dots:true}),
+    seriesChart(t('load'), points, 'l', {dots:false}));
+  return wrap;
+}
+function seriesChart(title, points, field, {dots}) {
+  const figure = node('figure');
+  figure.append(node('figcaption', title));
+  const values = points.map(p => p[field]).filter(v => v != null);
+  if (!values.length) { figure.append(node('p', t('noCheckins'))); return figure; }
+  const svg = svgNode('svg', {viewBox:'0 0 480 180', role:'img', 'aria-label':title});
+  const min = Math.min(...values), max = Math.max(...values);
   const span = (max - min) || 1;
-  const y = v => 166 - (v - min) / span * 140;
-  const x = (i) => points.length === 1 ? 54 + 202 : 54 + i / (points.length - 1) * 404;
-  for (const v of [min, (min+max)/2, max]) svg.append(svgNode('line', {x1:54, x2:458, y1:y(v), y2:y(v), class:'chart-grid'}), svgNode('text', {x:46, y:y(v)+4, 'text-anchor':'end', 'font-size':12, fill:'currentColor'}, formatNumber(v)));
-  let wPath = []; let lPath = [];
+  const lo = min - span * 0.15, hi = max + span * 0.15;
+  const y = v => 138 - (v - lo) / (hi - lo) * 116;
+  const x = i => points.length === 1 ? 54 + 202 : 54 + i / (points.length - 1) * 404;
+  for (const v of [lo, (lo + hi) / 2, hi]) svg.append(svgNode('line', {x1:54, x2:458, y1:y(v), y2:y(v), class:'chart-grid'}), svgNode('text', {x:46, y:y(v)+4, 'text-anchor':'end', 'font-size':12, fill:'currentColor'}, formatNumber(v)));
+  let path = [];
   points.forEach((p, i) => {
-    if (p.w != null) { wPath.push(x(i)+','+y(p.w)); svg.append(svgNode('circle', {cx:x(i), cy:y(p.w), r:3, class:'chart-dot'})); }
-    if (p.l != null) { lPath.push(x(i)+','+y(p.l)); svg.append(svgNode('rect', {x:x(i)-3, y:y(p.l)-3, width:6, height:6, class:'right-dot'})); }
+    if (p[field] == null) { if (path.length) { svg.append(svgNode('polyline', {points:path.join(' '), class:'series-line ' + (dots ? 'series-left' : 'series-right')})); path = []; } return; }
+    path.push(x(i)+','+y(p[field]));
+    if (dots) svg.append(svgNode('circle', {cx:x(i), cy:y(p[field]), r:3, class:'chart-dot'}));
+    else svg.append(svgNode('rect', {x:x(i)-3, y:y(p[field])-3, width:6, height:6, class:'right-dot'}));
   });
-  if (wPath.length > 1) svg.append(svgNode('polyline', {points:wPath.join(' '), class:'series-line series-left'}));
-  if (lPath.length > 1) svg.append(svgNode('polyline', {points:lPath.join(' '), class:'series-line series-right'}));
-  if (points.length > 1) svg.append(svgNode('text', {x:54, y:198, 'font-size':12, fill:'currentColor'}, date(points[0].day)), svgNode('text', {x:458, y:198, 'text-anchor':'end', 'font-size':12, fill:'currentColor'}, date(points[points.length-1].day)));
+  if (path.length > 1) svg.append(svgNode('polyline', {points:path.join(' '), class:'series-line ' + (dots ? 'series-left' : 'series-right')}));
+  if (points.length > 1) svg.append(svgNode('text', {x:54, y:164, 'font-size':12, fill:'currentColor'}, date(points[0].day)), svgNode('text', {x:458, y:164, 'text-anchor':'end', 'font-size':12, fill:'currentColor'}, date(points[points.length-1].day)));
   figure.append(svg);
-  if (hasW && hasL) figure.append(node('p', t('loadLegend'), 'legend'));
   return figure;
 }
 function wellbeingSum(c) {
@@ -696,6 +718,7 @@ function checkinRowDetail(c) {
 function checkins(content) {
   content.append(heading(t('myCheckins'), t('checkinNote')));
   const grid = table(['date','wellbeing','load','items'], t('myCheckins'));
+  grid.wrap.classList.add('club-table');
   if (!state.checkins.length) { content.append(node('p', t('noCheckins'), 'empty')); return; }
   for (const c of [...state.checkins].sort((a, b) => a.day < b.day ? -1 : a.day > b.day ? 1 : 0)) {
     const tr = node('tr');
@@ -720,7 +743,7 @@ function feedbackSection(content, athlete, comments, isOwn) {
   for (const c of comments) {
     const item = node('div', null, 'comment');
     const meta = node('div', c.author_name + ' · ' + t(c.author_role), 'meta');
-    meta.append(document.createTextNode(' · ' + new Date(c.created_at).toLocaleString(locale())));
+    meta.append(document.createTextNode(' · ' + dateTime(c.created_at)));
     if (isOwn && c.author_id !== state.user.id && c.read_at == null) meta.append(document.createTextNode(' · ' + t('missing')));
     item.append(meta);
     const jump = state.jumps.find(j => j.id === c.jump_id);
@@ -780,7 +803,7 @@ function clubs(content) {
 }
 function audit(content) {
   content.append(heading(t('audit')));const grid=table(['date','actor','action','target','detail'],t('audit'));
-  for(const entry of state.audit){const row=node('tr');row.append(node('td',new Date(entry.at).toLocaleString(locale())),node('td',entry.actor_email??(entry.actor_id==null?'—':String(entry.actor_id))),node('td',t(entry.action)),node('td',entry.target),node('td',Object.keys(entry.detail).length?JSON.stringify(entry.detail):'—','audit-detail'));grid.body.append(row);}content.append(state.audit.length?grid.wrap:node('p',t('noRows'),'empty'));
+  for(const entry of state.audit){const row=node('tr');row.append(node('td',dateTime(entry.at)),node('td',entry.actor_email??(entry.actor_id==null?'—':String(entry.actor_id))),node('td',t(entry.action)),node('td',entry.target),node('td',Object.keys(entry.detail).length?JSON.stringify(entry.detail):'—','audit-detail'));grid.body.append(row);}content.append(state.audit.length?grid.wrap:node('p',t('noRows'),'empty'));
   const paging=node('div',null,'actions pagination');const previous=button('previous',()=>{state.offset=Math.max(0,state.offset-50);return load();});previous.disabled=!state.offset;const next=button('next',()=>{state.offset+=50;return load();});next.disabled=state.audit.length<50;paging.append(previous,next);content.append(paging);
 }
 function render(focusSelector=null) {
