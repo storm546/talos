@@ -471,23 +471,37 @@ same honesty rules as `docs/validacia.md`.
 
 ### 6.4 Assistant ("AI помощник")
 
-- `POST /api/assistant` `{message, conversation_id?}` for any logged-in user. The server calls an
-  OpenAI-compatible chat model configured by environment (`JUMPSCAN_LLM_URL`, `JUMPSCAN_LLM_MODEL`,
-  `JUMPSCAN_LLM_KEY_FILE`); the default deployment uses a model running on the club's own hardware, so no
-  data leaves it. If the model is unavailable the endpoint returns 503 with a clear message; nothing else
-  depends on it.
-- Tools: read tools for everything the caller may already read (own or team summaries, jumps, form sets,
-  sessions, check-ins, training plans and logs, nutrition logs, targets, comments), and write tools for
-  actions the caller may already take (log a set, log food or weight, save a check-in, create or edit a
-  session, assign or edit a plan, set nutrition targets within the guardrails, write a coach note). Every
-  tool runs as the calling user through the same functions and scope checks as the REST API; the assistant
-  can never do what its user could not.
-- Writes are proposals: the response lists them with a summary; nothing changes until the user confirms
-  with `POST /api/assistant/confirm {proposal_id}` (single use, expires after 10 minutes, bound to the
-  user). Executed actions are audited as `assistant_action` with the tool name.
-- Data from tools and from users is passed to the model as data, never as instructions; tool results are
-  size-limited; the system prompt forbids medical advice and diet prescriptions and tells the model to
-  point to the coach. Per-user rate limit (20 requests per 10 minutes). Conversations are kept 30 days and
-  deleted with the athlete's data.
+- `POST /api/assistant` accepts `{message, conversation_id?}` and returns `{conversation_id, reply, proposal}`.
+  Any logged-in user can chat without recording consent. `GET /api/assistant/conversations` lists the
+  caller's conversations; `GET /api/assistant/conversations/{conversation_id}` returns its turns, newest
+  first. Both reads accept `limit` and `offset`; conversations cannot be opened by other users.
+- The server calls an OpenAI-compatible chat-completions endpoint using `JUMPSCAN_LLM_URL` (the API base,
+  for example a local `/v1` endpoint), `JUMPSCAN_LLM_MODEL`, and optional bearer-key file
+  `JUMPSCAN_LLM_KEY_FILE`. There is no default host or key. An unconfigured or unavailable model returns
+  503 from chat; history, confirmation, and the rest of the site do not depend on the model.
+- Read tools cover the caller's scoped jump and team summaries, jumps, sessions and reports, check-ins,
+  exercises, plans, set logs and training summaries, food and weight logs, food search, nutrition estimates,
+  targets, summaries, programs and expenditure, and comments. Form sets are not exposed until there is a
+  scoped REST history endpoint for them (6.1).
+- Write tools can propose logging a set, food, or weight, saving a check-in, creating or editing a session,
+  assigning or replacing a plan, setting a nutrition target or goal and rate, or adding a staff note.
+  Tools use the same scoped operations and input validation as REST, running as the caller. Comments and
+  plans assigned to individual athletes require those athletes' recorded consent in both REST and assistant
+  operations. The assistant rejects a program proposal if its recommended target would not pass the guardrails.
+- A proposal is `{proposal_id, expires_at, actions: [{tool, args, human_summary}]}` (otherwise `null`).
+  No domain writes occur before `POST /api/assistant/confirm {proposal_id}`. Confirmation does not call
+  the model. It revalidates against current permissions and data, then applies all actions in order in
+  one transaction, or none if any action fails. A committed proposal is single-use and expires after ten
+  minutes; it is bound to the proposing user. Unknown and other users' proposals return 404; used and
+  expired proposals return 409 while retained. Each applied action adds an `assistant_action` audit entry
+  with the proposal ID and tool name, not the action arguments or body.
+- User text and tool output are untrusted data; prompt instructions do not grant permissions. Tool results
+  are capped at 8 KiB each, with up to four tool rounds and four calls per round. The system prompt tells
+  the model to match Bulgarian or English and refer medical advice, diagnoses, and diet prescriptions to
+  the coach. All assistant endpoints share a rate limit of 20 requests per ten minutes per user.
+- Only user and final assistant text are stored as conversation turns, not the raw tool transcript. Turns
+  expire after 30 days, as do conversations idle for 30 days; pruning runs at startup and on assistant
+  requests. Expired proposal rows are pruned after a day. `DELETE /api/me/data` removes the athlete's
+  conversations and proposals. The demo seed contains no AI data.
 - Dashboard: an assistant panel on every page. App: an "AI помощник" screen with the same confirmation
   step.

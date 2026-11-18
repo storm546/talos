@@ -302,8 +302,8 @@ def install(app, h):
         if not user["consent_recorded"]:
             raise HTTPException(403, f"Consent must be recorded by a coach or admin before recording {what}")
 
-    def publish(db, user, kind, row_id, at):
-        app.state.events.publish(h.athlete_viewers(db, user), {
+    def publish(db, user, kind, row_id, at, emit=None):
+        (emit or app.state.events.publish)(h.athlete_viewers(db, user), {
             "type": kind, "id": row_id, "athlete_id": user["id"], "club_id": user["club_id"], "at": at})
 
     def staff_club(db, user, club_id):
@@ -356,24 +356,29 @@ def install(app, h):
             "WHERE plan_id = ? ORDER BY position", (plan["id"],))]
         return {**dict(plan), "items": items}
 
-    def write_items(db, plan_id, club_id, items):
+    def write_items(db, plan_id, items):
         for position, item in enumerate(items):
-            exercise_in_club(db, club_id, item.exercise_id)
             db.execute(
                 "INSERT INTO plan_items(plan_id, weekday, exercise_id, sets, reps, reps_max, load_kg, "
                 "rpe_target, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (plan_id, item.weekday, item.exercise_id, item.sets, item.reps,
                  item.reps_max if item.reps_max is not None else item.reps, item.load_kg, item.rpe_target, position))
 
-    def plan_target(db, user, body, club_id):
+    def plan_athlete(db, athlete_id, club_id):
+        athlete = db.execute("SELECT role, club_id, consent_recorded FROM users WHERE id = ?", (athlete_id,)).fetchone()
+        if athlete is None or athlete["role"] != "athlete" or athlete["club_id"] != club_id:
+            raise HTTPException(422, "Athlete must belong to the plan's club")
+        need_consent(athlete, "an individual training plan")
+
+    def validate_plan(db, body, club_id):
         if body.group_id is not None:
             group = db.execute("SELECT club_id FROM groups WHERE id = ?", (body.group_id,)).fetchone()
             if group is None or group["club_id"] != club_id:
                 raise HTTPException(422, "Group must belong to the plan's club")
         if body.athlete_id is not None:
-            athlete = db.execute("SELECT role, club_id FROM users WHERE id = ?", (body.athlete_id,)).fetchone()
-            if athlete is None or athlete["role"] != "athlete" or athlete["club_id"] != club_id:
-                raise HTTPException(422, "Athlete must belong to the plan's club")
+            plan_athlete(db, body.athlete_id, club_id)
+        for item in body.items:
+            exercise_in_club(db, club_id, item.exercise_id)
 
     # --- profile ---
 
@@ -437,16 +442,21 @@ def install(app, h):
 
     @app.post("/api/plans", status_code=201)
     def add_plan(body: PlanBody, user=Depends(current_user), db=Depends(get_db)):
+        with h.write_transaction(db, app.state.events) as emit:
+            return create_plan(body, user, db, emit)
+
+    def create_plan(body: PlanBody, user, db, emit):
         require_role(user, "admin", "coach")
         club_id = user["club_id"]
-        plan_target(db, user, body, club_id)
+        validate_plan(db, body, club_id)
+        if emit is None:
+            return
         cursor = db.execute(
             "INSERT INTO plans(club_id, title, group_id, athlete_id, starts_on, weeks, notes, created_by) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (club_id, body.title, body.group_id, body.athlete_id, body.starts_on, body.weeks, body.notes, user["id"]))
-        write_items(db, cursor.lastrowid, club_id, body.items)
+        write_items(db, cursor.lastrowid, body.items)
         audit(db, user["id"], "plan_created", cursor.lastrowid)
-        db.commit()
         return plan_json(db, db.execute("SELECT * FROM plans WHERE id = ?", (cursor.lastrowid,)).fetchone())
 
     @app.get("/api/plans/{plan_id}")
@@ -455,16 +465,23 @@ def install(app, h):
 
     @app.put("/api/plans/{plan_id}")
     def replace_plan(plan_id: int, body: PlanBody, user=Depends(current_user), db=Depends(get_db)):
+        with h.write_transaction(db, app.state.events) as emit:
+            return edit_plan(plan_id, body, user, db, emit)
+
+    def edit_plan(plan_id: int, body: PlanBody, user, db, emit):
         require_role(user, "admin", "coach")
         plan = scoped_plan(db, user, plan_id)
-        plan_target(db, user, body, plan["club_id"])
+        if plan["athlete_id"] is not None and plan["athlete_id"] != body.athlete_id:
+            plan_athlete(db, plan["athlete_id"], plan["club_id"])
+        validate_plan(db, body, plan["club_id"])
+        if emit is None:
+            return
         db.execute("UPDATE plans SET title = ?, group_id = ?, athlete_id = ?, starts_on = ?, weeks = ?, notes = ? "
                    "WHERE id = ?", (body.title, body.group_id, body.athlete_id, body.starts_on, body.weeks,
                                     body.notes, plan_id))
         db.execute("DELETE FROM plan_items WHERE plan_id = ?", (plan_id,))
-        write_items(db, plan_id, plan["club_id"], body.items)
+        write_items(db, plan_id, body.items)
         audit(db, user["id"], "plan_changed", plan_id)
-        db.commit()
         return plan_json(db, db.execute("SELECT * FROM plans WHERE id = ?", (plan_id,)).fetchone())
 
     @app.delete("/api/plans/{plan_id}", status_code=204)
@@ -483,9 +500,13 @@ def install(app, h):
 
     @app.post("/api/set-logs", status_code=201)
     def add_set_log(body: SetLog, user=Depends(current_user), db=Depends(get_db)):
+        with h.write_transaction(db, app.state.events) as emit:
+            return log_set(body, user, db, emit)
+
+    def log_set(body: SetLog, user, db, emit):
         require_role(user, "athlete")
         need_consent(user, "training")
-        if body.client_id is not None:
+        if emit is not None and body.client_id is not None:
             previous = db.execute("SELECT * FROM set_logs WHERE athlete_id = ? AND client_id = ?",
                                   (user["id"], body.client_id)).fetchone()
             if previous is not None:
@@ -496,23 +517,16 @@ def install(app, h):
             plan = db.execute("SELECT * FROM plans WHERE id = ?", (body.plan_id,)).fetchone()
             if plan is None or not plan_visible(db, user, plan):
                 raise HTTPException(422, "Plan not found")
+        if emit is None:
+            return
         created_at = h.now_iso()
-        try:
-            cursor = db.execute(
-                "INSERT INTO set_logs(athlete_id, day, exercise_id, set_no, reps, load_kg, rpe, plan_id, "
-                "client_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (user["id"], body.day, body.exercise_id, body.set_no, body.reps, body.load_kg, body.rpe,
-                 body.plan_id, body.client_id, created_at))
-        except sqlite3.IntegrityError:
-            db.rollback()
-            previous = db.execute("SELECT * FROM set_logs WHERE athlete_id = ? AND client_id = ?",
-                                  (user["id"], body.client_id)).fetchone()
-            if previous is None:
-                raise
-            return JSONResponse(status_code=200, content=set_row(previous))
+        cursor = db.execute(
+            "INSERT INTO set_logs(athlete_id, day, exercise_id, set_no, reps, load_kg, rpe, plan_id, "
+            "client_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (user["id"], body.day, body.exercise_id, body.set_no, body.reps, body.load_kg, body.rpe,
+             body.plan_id, body.client_id, created_at))
         audit(db, user["id"], "set_logged", cursor.lastrowid)
-        db.commit()
-        publish(db, user, "set", cursor.lastrowid, created_at)
+        publish(db, user, "set", cursor.lastrowid, created_at, emit)
         return JSONResponse(status_code=201, content=set_row(
             db.execute("SELECT * FROM set_logs WHERE id = ?", (cursor.lastrowid,)).fetchone()))
 
@@ -660,37 +674,31 @@ def install(app, h):
 
     @app.post("/api/food-logs", status_code=201)
     def add_food_log(body: FoodLog, user=Depends(current_user), db=Depends(get_db)):
+        with h.write_transaction(db, app.state.events) as emit:
+            return log_food(body, user, db, emit)
+
+    def log_food(body: FoodLog, user, db, emit):
         require_role(user, "athlete")
         need_consent(user, "meals")
-
-        def replay():
+        if emit is not None and body.client_id is not None:
             previous = db.execute("SELECT id FROM food_logs WHERE athlete_id = ? AND client_id = ?",
                                   (user["id"], body.client_id)).fetchone()
-            if previous is None:
-                return None
-            return JSONResponse(status_code=200, content=food_log_rows(
-                db, user["id"], "AND food_logs.id = ?", (previous["id"],))[0])
-
-        if body.client_id is not None and (again := replay()) is not None:
-            return again
+            if previous is not None:
+                return JSONResponse(status_code=200, content=food_log_rows(
+                    db, user["id"], "AND food_logs.id = ?", (previous["id"],))[0])
         check_log_day(body.day)
         clause, params = visible_food_sql(user)
         if db.execute(f"SELECT 1 FROM foods WHERE id = ? AND ({clause})", (body.food_id, *params)).fetchone() is None:
             raise HTTPException(422, "Unknown food")
+        if emit is None:
+            return
         created_at = h.now_iso()
-        try:
-            cursor = db.execute(
-                "INSERT INTO food_logs(athlete_id, day, meal, food_id, grams, client_id, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (user["id"], body.day, body.meal, body.food_id, body.grams, body.client_id, created_at))
-        except sqlite3.IntegrityError:
-            db.rollback()
-            if (again := replay()) is None:
-                raise
-            return again
+        cursor = db.execute(
+            "INSERT INTO food_logs(athlete_id, day, meal, food_id, grams, client_id, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user["id"], body.day, body.meal, body.food_id, body.grams, body.client_id, created_at))
         audit(db, user["id"], "food_logged", cursor.lastrowid)
-        db.commit()
-        publish(db, user, "food", cursor.lastrowid, created_at)
+        publish(db, user, "food", cursor.lastrowid, created_at, emit)
         return JSONResponse(status_code=201, content=food_log_rows(
             db, user["id"], "AND food_logs.id = ?", (cursor.lastrowid,))[0])
 
@@ -717,6 +725,10 @@ def install(app, h):
 
     @app.put("/api/me/weights/{day}", status_code=201)
     def put_weight(day: str, body: Weight, user=Depends(current_user), db=Depends(get_db)):
+        with h.write_transaction(db, app.state.events) as emit:
+            return save_weight(day, body, user, db, emit)
+
+    def save_weight(day: str, body: Weight, user, db, emit):
         require_role(user, "athlete")
         need_consent(user, "weights")
         try:
@@ -724,14 +736,14 @@ def install(app, h):
         except ValueError:
             raise HTTPException(422, "day must be YYYY-MM-DD") from None
         check_log_day(day)
-        db.execute("BEGIN IMMEDIATE")
+        if emit is None:
+            return
         existing = db.execute("SELECT id FROM weights WHERE athlete_id = ? AND day = ?", (user["id"], day)).fetchone()
         db.execute("INSERT INTO weights(athlete_id, day, kg) VALUES (?, ?, ?) "
                    "ON CONFLICT(athlete_id, day) DO UPDATE SET kg = excluded.kg", (user["id"], day, body.kg))
         row_id = db.execute("SELECT id FROM weights WHERE athlete_id = ? AND day = ?", (user["id"], day)).fetchone()[0]
         audit(db, user["id"], "weight_logged", row_id, {"replaced": existing is not None})
-        db.commit()
-        publish(db, user, "weight", row_id, h.now_iso())
+        publish(db, user, "weight", row_id, h.now_iso(), emit)
         return JSONResponse(status_code=200 if existing else 201,
                             content={"athlete_id": user["id"], "day": day, "kg": body.kg})
 
@@ -808,12 +820,18 @@ def install(app, h):
 
     @app.put("/api/athletes/{athlete_id}/nutrition/target")
     def put_target(athlete_id: int, body: Target, user=Depends(current_user), db=Depends(get_db)):
+        with h.write_transaction(db, app.state.events) as emit:
+            return save_target(athlete_id, body, user, db, emit)
+
+    def save_target(athlete_id: int, body: Target, user, db, emit):
         athlete = h.athlete_access(db, user, athlete_id)
         need_consent(athlete, "a nutrition target")
         estimate = rounded(estimate_for(db, athlete_id, utc_today())).get("expenditure_kcal")
         problem = tn.check_target(body.kcal, estimate, bool(athlete["under_18"]), user["role"] != "athlete")
         if problem:
             raise HTTPException(422, problem)
+        if emit is None:
+            return
         now = h.now_iso()
         db.execute(
             "INSERT INTO nutrition_targets(athlete_id, kcal, protein_g, carbs_g, fat_g, set_by, updated_at) "
@@ -822,7 +840,6 @@ def install(app, h):
             "set_by = excluded.set_by, updated_at = excluded.updated_at",
             (athlete_id, body.kcal, body.protein_g, body.carbs_g, body.fat_g, user["id"], now))
         audit(db, user["id"], "target_set", athlete_id, {"kcal": body.kcal})
-        db.commit()
         return target_json(db, athlete)
 
     @app.get("/api/athletes/{athlete_id}/nutrition/summary")
@@ -937,6 +954,10 @@ def install(app, h):
 
     @app.put("/api/athletes/{athlete_id}/nutrition/program")
     def set_program(athlete_id: int, body: Program, user=Depends(current_user), db=Depends(get_db)):
+        with h.write_transaction(db, app.state.events) as emit:
+            return save_program(athlete_id, body, user, db, emit)
+
+    def save_program(athlete_id: int, body: Program, user, db, emit, *, require_applicable=False):
         athlete = h.athlete_access(db, user, athlete_id)
         need_consent(athlete, "a coaching program")
         existing = program_row(db, athlete_id)
@@ -959,6 +980,10 @@ def install(app, h):
         # The recommended deficit still passes the under-18 and 1500 kcal guardrails before it is applied.
         guardrail = tn.check_target(target["calories"], round(rec["expenditure_kcal"]),
                                     bool(athlete["under_18"]), user["role"] != "athlete")
+        if guardrail is not None and require_applicable:
+            raise HTTPException(422, guardrail)
+        if emit is None:
+            return
         now = h.now_iso()
         applied = guardrail is None
         db.execute(
@@ -979,8 +1004,7 @@ def install(app, h):
                  user["id"], now))
         audit(db, user["id"], "coaching_program_set", athlete_id,
               {"goal": body.goal, "rate_kg_week": body.rate_kg_week, "applied": applied})
-        db.commit()
-        publish_athlete(db, athlete, "coaching", athlete_id, now)
+        publish(db, athlete, "coaching", athlete_id, now, emit)
         return program_view(db, athlete)
 
     @app.put("/api/me/nutrition/days/{day}/complete")
@@ -1054,6 +1078,13 @@ def install(app, h):
         return csv_response(db, user, athlete, "weights", ["athlete_id", "athlete_name", "day", "kg", "trend_kg"], [
             {"athlete_id": athlete_id, "athlete_name": athlete["name"], "day": day, "kg": kg,
              "trend_kg": by_day.get(day)} for day, kg in rows])
+
+    return {operation.__name__: operation for operation in (
+        list_plans, get_plan, list_exercises, list_set_logs, training_summary, list_foods,
+        list_food_logs, athlete_weights, nutrition_estimate, get_target, nutrition_summary,
+        nutrition_expenditure, get_program, create_plan, edit_plan, log_set, log_food,
+        save_weight, save_target, save_program,
+    )}
 
 
 def export_data(db, athlete_id):

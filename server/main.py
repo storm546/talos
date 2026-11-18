@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from . import training_nutrition_api
+from . import assistant_api, training_nutrition_api
 
 
 def database_path():
@@ -47,6 +47,20 @@ def database(path):
             yield connection
     finally:
         connection.close()
+
+
+@contextmanager
+def write_transaction(db, event_bus):
+    events = []
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        yield lambda viewers, event: events.append((viewers, event))
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+    for viewers, event in events:
+        event_bus.publish(viewers, event)
 
 
 def init_db(path):
@@ -157,6 +171,7 @@ def init_db(path):
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS jumps_client ON jumps(athlete_id, client_id) "
                    "WHERE client_id IS NOT NULL")
         training_nutrition_api.init_schema(db)  # training and nutrition tables (SPEC 6.2, 6.3)
+        assistant_api.init_schema(db)
 
 
 def password_hash(password, salt):
@@ -427,8 +442,9 @@ def session_athletes(db, session):
             "SELECT id FROM users WHERE role = 'athlete' AND club_id = ? ORDER BY id",
             (session["club_id"],))]
     return [row["user_id"] for row in db.execute(
-        "SELECT user_id FROM group_members WHERE group_id = ? ORDER BY user_id",
-        (session["group_id"],))]
+        "SELECT group_members.user_id FROM group_members JOIN users ON users.id = group_members.user_id "
+        "WHERE group_members.group_id = ? AND users.club_id = ? AND users.role = 'athlete' "
+        "ORDER BY group_members.user_id", (session["group_id"], session["club_id"]))]
 
 
 def validated_group_id(db, user, group_id, require_club=None):
@@ -628,7 +644,7 @@ def create_app(db_path=None):
     app.state.db_path = db_path if db_path is not None else database_path()
     app.add_middleware(RequestBodyLimit)
     app.state.events = EventBus()
-    training_nutrition_api.install(app, sys.modules[__name__])
+    training_tools = training_nutrition_api.install(app, sys.modules[__name__])
     app.mount("/static", StaticFiles(directory=Path(__file__).with_name("static")), name="static")
 
     csp = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -870,6 +886,7 @@ def create_app(db_path=None):
         db.execute("DELETE FROM comments WHERE athlete_id = ?", (user["id"],))
         db.execute("DELETE FROM checkins WHERE athlete_id = ?", (user["id"],))
         training_nutrition_api.delete_data(db, user["id"])
+        assistant_api.delete_data(db, user["id"])
         db.execute("DELETE FROM jumps WHERE athlete_id = ?", (user["id"],))
         audit(db, user["id"], "data_deleted", user["id"])
         db.commit()
@@ -1110,8 +1127,14 @@ def create_app(db_path=None):
 
     @app.post("/api/sessions", status_code=201)
     def add_session(body: SessionBody, user=Depends(current_user), db=Depends(get_db)):
+        with write_transaction(db, app.state.events) as emit:
+            return create_session(body, user, db, emit)
+
+    def create_session(body: SessionBody, user, db, emit):
         require_role(user, "admin", "coach")
         group_id = validated_group_id(db, user, body.group_id, require_club=user["club_id"])
+        if emit is None:
+            return
         cursor = db.execute(
             "INSERT INTO sessions(club_id, group_id, title, starts_at, place, test, trials, notes, "
             "created_by, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1119,31 +1142,33 @@ def create_app(db_path=None):
              body.trials, body.notes, user["id"], body.cancelled))
         session_id = cursor.lastrowid
         audit(db, user["id"], "session_created", session_id)
-        db.commit()
         session = db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
-        app.state.events.publish(session_viewers(db, session),
-                                 {"type": "session", "id": session_id, "club_id": user["club_id"],
-                                  "at": now_iso()})
+        emit(session_viewers(db, session),
+             {"type": "session", "id": session_id, "club_id": user["club_id"], "at": now_iso()})
         return {**dict(session), "jump_count": 0}
 
     @app.patch("/api/sessions/{session_id}")
     def edit_session(session_id: int, body: SessionBody, user=Depends(current_user), db=Depends(get_db)):
+        with write_transaction(db, app.state.events) as emit:
+            return update_session(session_id, body, user, db, emit)
+
+    def update_session(session_id: int, body: SessionBody, user, db, emit):
         require_role(user, "admin", "coach")
         session = scoped_session(db, user, session_id)
         if user["role"] == "coach" and session["club_id"] != user["club_id"]:
             raise HTTPException(404, "Session not found")
         group_id = validated_group_id(db, user, body.group_id, require_club=session["club_id"])
+        if emit is None:
+            return
         db.execute(
             "UPDATE sessions SET group_id = ?, title = ?, starts_at = ?, place = ?, test = ?, "
             "trials = ?, notes = ?, cancelled = ? WHERE id = ?",
             (group_id, body.title, body.starts_at, body.place, body.test, body.trials, body.notes,
              body.cancelled, session_id))
         audit(db, user["id"], "session_changed", session_id)
-        db.commit()
         session = db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
-        app.state.events.publish(session_viewers(db, session),
-                                 {"type": "session", "id": session_id, "club_id": session["club_id"],
-                                  "at": now_iso()})
+        emit(session_viewers(db, session),
+             {"type": "session", "id": session_id, "club_id": session["club_id"], "at": now_iso()})
         return dict(session)
 
     @app.get("/api/sessions/{session_id}/report")
@@ -1221,6 +1246,10 @@ def create_app(db_path=None):
 
     @app.put("/api/me/checkins/{day}", status_code=201)
     def put_checkin(day: str, body: Checkin, user=Depends(current_user), db=Depends(get_db)):
+        with write_transaction(db, app.state.events) as emit:
+            return save_checkin(day, body, user, db, emit)
+
+    def save_checkin(day: str, body: Checkin, user, db, emit):
         require_role(user, "athlete")
         if not user["consent_recorded"]:
             raise HTTPException(403, "Consent must be recorded by a coach or admin before recording check-ins")
@@ -1231,9 +1260,10 @@ def create_app(db_path=None):
         today = datetime.now(timezone.utc).date()
         if not (today - timedelta(days=6) <= day_date <= today + timedelta(days=1)):
             raise HTTPException(422, "Check-in day must be from 6 days before today through tomorrow (UTC)")
+        if emit is None:
+            return
         day = day_date.isoformat()
         now = now_iso()
-        db.execute("BEGIN IMMEDIATE")
         existing = db.execute("SELECT * FROM checkins WHERE athlete_id = ? AND day = ?",
                               (user["id"], day)).fetchone()
         db.execute(
@@ -1245,10 +1275,8 @@ def create_app(db_path=None):
             (user["id"], day, body.sleep, body.fatigue, body.soreness, body.stress, body.mood,
              body.training_minutes, body.rpe, now, now))
         status = 201 if existing is None else 200
-        db.commit()
-        app.state.events.publish(athlete_viewers(db, user),
-                                 {"type": "checkin", "id": user["id"], "athlete_id": user["id"],
-                                  "club_id": user["club_id"], "at": now})
+        emit(athlete_viewers(db, user), {"type": "checkin", "id": user["id"], "athlete_id": user["id"],
+                                        "club_id": user["club_id"], "at": now})
         return JSONResponse(status_code=status, content={"athlete_id": user["id"], "day": day,
                                                          **body.model_dump()})
 
@@ -1329,6 +1357,10 @@ def create_app(db_path=None):
 
     @app.post("/api/comments", status_code=201)
     def add_comment(body: CommentBody, user=Depends(current_user), db=Depends(get_db)):
+        with write_transaction(db, app.state.events) as emit:
+            return write_comment(body, user, db, emit)
+
+    def write_comment(body: CommentBody, user, db, emit):
         athlete = db.execute("SELECT * FROM users WHERE id = ? AND role = 'athlete'",
                              (body.athlete_id,)).fetchone()
         if athlete is None:
@@ -1337,6 +1369,8 @@ def create_app(db_path=None):
             raise HTTPException(403, "Athletes can comment on their own thread only")
         if user["role"] == "coach" and athlete["club_id"] != user["club_id"]:
             raise HTTPException(404, "Athlete not found")
+        if not athlete["consent_recorded"]:
+            raise HTTPException(403, "Consent must be recorded by a coach or admin before recording comments")
         if body.jump_id is not None:
             jump = db.execute("SELECT athlete_id FROM jumps WHERE id = ?", (body.jump_id,)).fetchone()
             if jump is None or jump["athlete_id"] != body.athlete_id:
@@ -1345,16 +1379,16 @@ def create_app(db_path=None):
             session = db.execute("SELECT * FROM sessions WHERE id = ?", (body.session_id,)).fetchone()
             if session is None or not session_visible(db, athlete, session):
                 raise HTTPException(422, "Referenced session is not visible to this athlete")
+        if emit is None:
+            return
         now = now_iso()
         cursor = db.execute(
             "INSERT INTO comments(athlete_id, author_id, jump_id, session_id, body, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (body.athlete_id, user["id"], body.jump_id, body.session_id, body.body, now))
         audit(db, user["id"], "comment_created", cursor.lastrowid)
-        db.commit()
-        app.state.events.publish(athlete_viewers(db, athlete),
-                                 {"type": "comment", "id": cursor.lastrowid, "athlete_id": body.athlete_id,
-                                  "club_id": athlete["club_id"], "at": now})
+        emit(athlete_viewers(db, athlete), {"type": "comment", "id": cursor.lastrowid,
+                                           "athlete_id": body.athlete_id, "club_id": athlete["club_id"], "at": now})
         return {"id": cursor.lastrowid, "athlete_id": body.athlete_id, "author_id": user["id"],
                 "jump_id": body.jump_id, "session_id": body.session_id, "body": body.body,
                 "created_at": now, "read_at": None}
@@ -1416,6 +1450,12 @@ def create_app(db_path=None):
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"X-Accel-Buffering": "no"})
 
+    assistant_api.install(app, sys.modules[__name__], {**training_tools, **{
+        operation.__name__: operation for operation in (
+            athletes, athlete_summary, jumps, list_sessions, session_report, list_checkins,
+            team_checkins, list_comments, create_session, update_session, save_checkin, write_comment,
+        )
+    }})
     return app
 
 
