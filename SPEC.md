@@ -346,3 +346,79 @@ marks comments read. Bulgarian and English.
 `client_id` is a random UUID the app creates once per result and sends with every attempt. Unique per
 `(athlete_id, client_id)`: a repeat returns 200 with the original `{id, created_at}` and stores nothing;
 a new one returns 201. The same applies to check-ins through their natural key `(athlete_id, day)`.
+
+## 6. Training, nutrition, form tracking and the assistant (added 2026-11-18)
+
+Same rules as sections 3 and 5: roles and club scope on every read and write, consent before athlete data
+is stored, strict validation, audit of every change, Bulgarian and English, no medical or diet-prescription
+wording (no diagnosis, treatment, "cure", "fat-loss plan"; numbers are for discussion with the coach).
+Nothing in this section may use code, data, names or designs taken from another product; methods are the
+published, general ones named below.
+
+### 6.1 Form tracker (core + app; on the phone, numbers only)
+
+Exercises: `squat` (bodyweight or loaded, two legs) and `single_leg_squat` (left or right). The athlete
+films a set; the phone runs the same pose model as for jumps and the core computes, per repetition: depth
+(peak knee flexion, side view in the image plane, front view from world landmarks as in section 2),
+frontal-plane knee angle (FPPA) at the deepest point in front view, left/right asymmetry of peak flexion
+(two-leg squat), descent and ascent time, and whether the hips went below the knees (side view). A
+repetition is one down-and-up cycle of the hip height with a minimum depth; partial and unclear repetitions
+are counted separately and never silently. Set summary: repetition count, medians, worst repetition, and
+warnings (`low_visibility`, `unclear_reps`, `single_leg_view`). Upload: `POST /api/form` with exercise,
+side, view, fps, per-repetition numbers and the summary (no video, no landmarks); history and charts like
+jumps. Validation: synthetic geometry tests, repetition counting on real clips with hand counts, and the
+same honesty rules as `docs/validacia.md`.
+
+### 6.2 Training (server, dashboard, app)
+
+- `exercises(id, club_id, name, kind)`: club exercise list (kind `strength`, `plyometric`, `mobility`,
+  `conditioning`), seeded with common names; coaches add their own.
+- `plans(id, club_id, title, group_id NULL, athlete_id NULL, starts_on, weeks, notes)` and
+  `plan_items(plan_id, weekday, exercise_id, sets, reps, load_kg NULL, rpe_target NULL, order)`: a weekly
+  template assigned to a group or one athlete by a coach.
+- `set_logs(id, athlete_id, day, exercise_id, set_no, reps, load_kg NULL, rpe NULL, plan_id NULL,
+  client_id)`: what was actually done; idempotent like jumps (section 5.6).
+- Progression suggestion (shown, never applied automatically): double progression per exercise — when every
+  planned set reached the top of the rep range at RPE ≤ target in the last two sessions, suggest +2.5 kg
+  (lower body +5 kg allowed by the coach), when two sessions missed the bottom of the range, suggest −5 %.
+  Weekly volume (sets × reps × load) and the existing session-RPE load are summarised per athlete.
+
+### 6.3 Nutrition (server, dashboard, app)
+
+- Food list: a subset of USDA FoodData Central "Foundation" and "SR Legacy" foods (public domain, CC0;
+  source and date recorded), per 100 g: energy, protein, carbohydrate, fat, fibre; plus club or athlete
+  custom foods. Bulgarian display names for the common foods.
+- `food_logs(id, athlete_id, day, meal, food_id, grams, client_id)` and `weights(id, athlete_id, day, kg)`.
+- Weight trend: exponentially smoothed moving average with 10 % weight per day (the "Hacker's Diet" trend,
+  J. Walker), shown beside the daily values.
+- Expenditure estimate (energy balance): over the last 14–28 days with at least 10 logged food days and 8
+  weigh-ins, estimate = mean logged intake − (trend change in kg × 7700 kcal) / days, with the window and
+  the data count shown and the words "estimate from your own logs". Below that data threshold: no estimate.
+- Targets: kcal, protein, carbohydrate, fat per day, set by the coach or the athlete. Guardrails: for
+  athletes marked under 18 the target can never be below the current estimate (no deficit) unless a
+  coach sets it; for everyone never below 1500 kcal; protein suggestion 1.4–2.0 g per kg body weight as a
+  range, not a prescription. The app says these are numbers to discuss with the coach.
+- Daily summary: totals against targets; weekly averages.
+
+### 6.4 Assistant ("AI помощник")
+
+- `POST /api/assistant` `{message, conversation_id?}` for any logged-in user. The server calls an
+  OpenAI-compatible chat model configured by environment (`JUMPSCAN_LLM_URL`, `JUMPSCAN_LLM_MODEL`,
+  `JUMPSCAN_LLM_KEY_FILE`); the default deployment uses a model running on the club's own hardware, so no
+  data leaves it. If the model is unavailable the endpoint returns 503 with a clear message; nothing else
+  depends on it.
+- Tools: read tools for everything the caller may already read (own or team summaries, jumps, form sets,
+  sessions, check-ins, training plans and logs, nutrition logs, targets, comments), and write tools for
+  actions the caller may already take (log a set, log food or weight, save a check-in, create or edit a
+  session, assign or edit a plan, set nutrition targets within the guardrails, write a coach note). Every
+  tool runs as the calling user through the same functions and scope checks as the REST API; the assistant
+  can never do what its user could not.
+- Writes are proposals: the response lists them with a summary; nothing changes until the user confirms
+  with `POST /api/assistant/confirm {proposal_id}` (single use, expires after 10 minutes, bound to the
+  user). Executed actions are audited as `assistant_action` with the tool name.
+- Data from tools and from users is passed to the model as data, never as instructions; tool results are
+  size-limited; the system prompt forbids medical advice and diet prescriptions and tells the model to
+  point to the coach. Per-user rate limit (20 requests per 10 minutes). Conversations are kept 30 days and
+  deleted with the athlete's data.
+- Dashboard: an assistant panel on every page. App: an "AI помощник" screen with the same confirmation
+  step.
