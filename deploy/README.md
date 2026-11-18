@@ -1,6 +1,7 @@
 # Deploying the JumpScan server (notes only)
 
-Status: **nothing has been deployed.** These are the steps for the owner to run on the home server.
+Status: deployed at <https://jumpscan.stormlabs.cloud> with the "Without Docker (systemd)" path below, behind
+Nginx Proxy Manager with a Let's Encrypt certificate, seeded with the synthetic demo accounts only.
 Nothing in this repository publishes, pushes or restarts anything by itself.
 
 The shape being deployed: one container running the API, a SQLite file in a named volume, and a reverse

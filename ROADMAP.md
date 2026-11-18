@@ -68,7 +68,7 @@ Status key: done, running, staged (built but not reviewed or not deployed), todo
 
 ### E. Operations
 - done: CI workflow (both jobs checked from a fresh clone), Dockerfile and compose file (start command checked; image build not runnable here), systemd unit, deployment notes, README
-- needs the owner: public address and go-ahead to deploy; the rules require the project online from registration to the end of the tournament, with test accounts for every role
+- done (2026-11-18): deployed at https://jumpscan.stormlabs.cloud (systemd behind NPM, Let's Encrypt, demo accounts only); the rules require the project online from registration to the end of the tournament, with test accounts for every role
 
 ### F. Documents (Bulgarian)
 - done (drafts with placeholders for names): documentation (five A4 pages with figures), A4 flyer, eleven-slide deck, talk plan, user guide, formula explainer, test-account sheet, submission checklist; `node docs/build.cjs` prints them
