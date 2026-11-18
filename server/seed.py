@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+import hashlib
+import json
 import random
 import secrets
 
@@ -274,6 +276,41 @@ def seed_training_nutrition(db, user_ids, athlete_ids, groups):
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (athlete_ids[account], kcal, 130, round(kcal * .5 / 4), round(kcal * .3 / 9), user_ids.get("coach"),
              datetime.now(timezone.utc).isoformat()))
+    seed_coaching(db, athlete_ids["athlete6"], user_ids.get("coach"), food_ids, today)
+
+
+def seed_coaching(db, athlete_id, coach_id, food_ids, today):
+    """One demo athlete with a long, complete diary and weigh-in history so an adaptive program is shown."""
+    if db.execute("SELECT COUNT(*) FROM coaching_programs").fetchone()[0]:
+        return
+    rng = random.Random(7777)
+    base = 72.0
+    for days_ago in range(48):
+        d = today - timedelta(days=days_ago)
+        iso = d.isoformat()
+        if not db.execute("SELECT 1 FROM food_logs WHERE athlete_id = ? AND day = ?", (athlete_id, iso)).fetchone():
+            for meal, food, grams in MEAL_PLAN:
+                db.execute(
+                    "INSERT INTO food_logs(athlete_id, day, meal, food_id, grams, client_id, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (athlete_id, iso, meal, food_ids[food], round(grams * rng.uniform(.9, 1.1)),
+                     f"seed-coach-food-{athlete_id}-{iso}-{food}", now_isos(d)))
+        if not db.execute("SELECT 1 FROM weights WHERE athlete_id = ? AND day = ?", (athlete_id, iso)).fetchone():
+            db.execute("INSERT INTO weights(athlete_id, day, kg) VALUES (?, ?, ?)",
+                       (athlete_id, iso, round(base + days_ago * .03 + rng.gauss(0, .2), 1)))
+    for days_ago in range(42):  # mark the recent, continuous span of diary days explicitly complete
+        iso = (today - timedelta(days=days_ago)).isoformat()
+        rows = [[r["id"], r["meal"], r["food_id"], r["grams"]] for r in db.execute(
+            "SELECT id, meal, food_id, grams FROM food_logs WHERE athlete_id = ? AND day = ? ORDER BY id",
+            (athlete_id, iso))]
+        fingerprint = hashlib.blake2b(json.dumps(rows, separators=(",", ":")).encode("utf-8")).hexdigest()
+        db.execute("INSERT OR IGNORE INTO nutrition_day_complete(athlete_id, day, diary_fingerprint, confirmed_at) "
+                   "VALUES (?, ?, ?, ?)", (athlete_id, iso, fingerprint, now_isos(today)))
+    db.execute(
+        "INSERT INTO coaching_programs(athlete_id, effective_date, seed_kcal, mode, goal, rate_kg_week, "
+        "protein_g, fat_g, applied, set_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (athlete_id, (today - timedelta(days=45)).isoformat(), 2600.0, "updating", "lose", 0.3, 150.0, 70.0,
+         0, coach_id, datetime.now(timezone.utc).isoformat()))
 
 
 def now_isos(day):

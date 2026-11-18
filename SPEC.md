@@ -429,6 +429,29 @@ same honesty rules as `docs/validacia.md`.
   below the current estimate, or any target while there is no estimate (a coach or admin can, above 1500);
   protein suggestion 1.4–2.0 g per kg of trend weight as a range, not a prescription. The app says these are
   numbers to discuss with the coach.
+- Adaptive expenditure and the weekly program: the owner's own adaptive method, an original Python
+  reimplementation of a reverse-engineered numeric method (`server/coaching.py`, exponential weight trend +
+  14-day energy balance), test-only compared to the owner's reference implementation on a fixed synthetic
+  history to 1e-9 (integers exactly). A day counts only when the athlete has explicitly confirmed it complete
+  (`PUT /api/me/nutrition/days/{day}/complete`, consent needed; stored in `nutrition_day_complete` with a
+  fingerprint of that day's diary, so a later edit stops the day counting); missing intake is never treated as
+  zero, and a confirmed day with no food is a true zero. From a saved seed the expenditure steps forward one
+  day at a time towards the trailing 14-day energy balance (mean logged intake over the 14 complete days minus
+  the trend's weight change over the window × 7700 kcal/kg, divided by 14), with the daily move capped at
+  150/7 kcal; it holds when a day is incomplete, a weigh-in is missing, or the trend cannot cover the window.
+  `coaching_programs(athlete_id, effective_date, seed_kcal, mode, goal, rate_kg_week, protein_g, fat_g, applied,
+  set_by, updated_at)` holds one program per athlete. `PUT /api/athletes/{id}/nutrition/program` (goal `maintain`
+  /`lose`/`gain`, rate 0–2 kg/week, protein and fat grams; consent needed, same scope as 6.2) seeds the program
+  from the one-shot estimate on first use (422 when there is not enough logged data yet) and recomputes the
+  recommended daily targets: calories = expenditure ± 7700 × rate / 7 (maintain holds), protein and fat as given,
+  carbs filling the remainder. The recommendation still passes through the guardrails before it is applied: the
+  1500 kcal floor and the under-18 "no deficit without a coach" rule still hold, so a recommended deficit for an
+  under-18 set by the athlete is shown (`applied: false`, with the guardrail reason) but not written to the
+  target; otherwise it updates `nutrition_targets` so the daily summary shows targets-vs-actual as before.
+  `GET /api/athletes/{id}/nutrition/expenditure` returns the daily expenditure series (current value and recent
+  history); `GET /api/athletes/{id}/nutrition/program` returns the current recommendation and whether it is
+  applied. Not enough confirmed days, or no program, yields no program rather than a guess. The server never
+  imports the reference implementation at runtime.
 - Daily summary: totals and kcal per meal against the target, remaining amounts, and averages over the 7 days
   ending at the chosen day (logged days only).
 - API: `GET /api/foods?q=` (system, club and own foods), `POST /api/foods`, `DELETE /api/foods/{id}` (own or club
@@ -438,10 +461,13 @@ same honesty rules as `docs/validacia.md`.
   `PUT /api/athletes/{id}/nutrition/target`, `GET /api/athletes/{id}/nutrition/summary?day=`;
   `GET /api/athletes/{id}/nutrition.csv` and `weights.csv` (staff). Scope as in 6.2. Audit actions:
   `food_created`, `food_deleted`, `food_logged`, `food_deleted_log`, `weight_logged`, `weight_deleted`,
-  `target_set`, `profile_changed`; CSV exports are audited as `csv_export` with the kind. New meals and
-  weights publish `food` and `weight` events (no values).
-- The athlete JSON export adds `set_logs`, `custom_foods`, `food_logs`, `weights`, `nutrition_target` and
-  `under_18`; `DELETE /api/me/data` also deletes them, retaining the account, consent and plans.
+  `target_set`, `profile_changed`, `coaching_program_set`, `nutrition_day_completed`,
+  `nutrition_day_uncompleted`; CSV exports are audited as `csv_export` with the kind. New meals and
+  weights publish `food` and `weight` events (no values); a program or a confirmed day publish `coaching` and
+  `nutrition_day` events (no values).
+- The athlete JSON export adds `set_logs`, `custom_foods`, `food_logs`, `weights`, `nutrition_target`,
+  `coaching_program`, `complete_diary_days` and `under_18`; `DELETE /api/me/data` also deletes them, retaining
+  the account, consent and plans.
 
 ### 6.4 Assistant ("AI помощник")
 

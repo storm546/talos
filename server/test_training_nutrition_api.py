@@ -54,6 +54,8 @@ def audit_actions(client, auth):
     ("GET", "/api/athletes/1/weights"), ("GET", "/api/athletes/1/training"), ("GET", "/api/athletes/1/nutrition/estimate"),
     ("GET", "/api/athletes/1/nutrition/target"), ("PUT", "/api/athletes/1/nutrition/target"),
     ("GET", "/api/athletes/1/nutrition/summary"), ("PATCH", "/api/users/1/profile"),
+    ("GET", "/api/athletes/1/nutrition/expenditure"), ("GET", "/api/athletes/1/nutrition/program"),
+    ("PUT", "/api/athletes/1/nutrition/program"), ("PUT", f"/api/me/nutrition/days/{day()}/complete"),
     ("GET", "/api/athletes/1/training.csv"), ("GET", "/api/athletes/1/nutrition.csv"), ("GET", "/api/athletes/1/weights.csv"),
 ])
 def test_new_endpoints_require_a_token(api, method, path):
@@ -712,7 +714,8 @@ def test_migrates_previous_schema_and_keeps_users(tmp_path):
             assert len(client.get("/api/foods", params={"limit": 500}, headers=headers).json()) > 300
     with main.database(path) as db:
         tables = {row["name"] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-        assert {"exercises", "plans", "plan_items", "set_logs", "foods", "food_logs", "weights", "nutrition_targets"} <= tables
+        assert {"exercises", "plans", "plan_items", "set_logs", "foods", "food_logs", "weights", "nutrition_targets",
+                "coaching_programs", "nutrition_day_complete"} <= tables
         assert db.execute("SELECT under_18 FROM users").fetchone()[0] == 0
         assert db.execute("SELECT COUNT(*) FROM foods").fetchone()[0] == len(__import__("server.training_nutrition_api", fromlist=["x"]).read_foods_csv())
         assert {"set_logs_client", "food_logs_client", "foods_fdc"} <= {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'index'")}
@@ -733,3 +736,120 @@ def test_seed_training_nutrition_is_idempotent_and_synthetic(api):
     seed(path)
     with main.database(path) as db:
         assert {t: db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tables} == before
+
+
+# --- adaptive expenditure and the weekly coaching program ---
+
+def confirm_day(client, headers, offset):
+    return client.put(f"/api/me/nutrition/days/{day(offset)}/complete", headers=headers)
+
+
+def flat_history(client, path, uid, headers, days_n=28, kcal=2000):
+    """A clean flat history (stable weight) so the adaptive expenditure settles at the intake, then confirmed."""
+    fill(path, uid, food_days=days_n, weigh_days=days_n, kcal=kcal, start=-(days_n - 1), kg=80.0, drift=0.0)
+    for n in range(days_n):
+        assert confirm_day(client, headers, -n).status_code == 200
+
+
+def set_program(client, headers, athlete_id, goal, rate, protein_g=150, fat_g=50):
+    return client.put(f"/api/athletes/{athlete_id}/nutrition/program",
+                      json={"goal": goal, "rate_kg_week": rate, "protein_g": protein_g, "fat_g": fat_g}, headers=headers)
+
+
+def test_day_complete_consent_scope_and_idempotency(api, auth):
+    client, path = api
+    uid, athlete = make_athlete(client, auth)
+    assert confirm_day(client, auth("coach"), 0).status_code == 403  # staff cannot confirm an athlete's day
+    first = confirm_day(client, athlete, -1)
+    assert first.status_code == 200 and first.json()["status"] == "complete" and first.json()["day"] == day(-1)
+    again = confirm_day(client, athlete, -1)  # idempotent re-confirmation
+    assert again.status_code == 200 and again.json() == first.json()
+    assert client.put(f"/api/me/nutrition/days/2026-13-02/complete", headers=athlete).status_code == 422
+    assert client.put(f"/api/me/nutrition/days/{day(-60)}/complete", headers=athlete).status_code == 422  # too old
+    unconsented, head = make_athlete(client, auth, "nc@demo.test", consent=False)
+    assert confirm_day(client, head, -1).status_code == 403
+    assert confirm_day(client, head, -1).json()["detail"].startswith("Consent")
+    assert client.delete(f"/api/me/nutrition/days/{day(-1)}/complete", headers=athlete).status_code == 204
+    assert client.delete(f"/api/me/nutrition/days/{day(-1)}/complete", headers=athlete).status_code == 404
+
+
+def test_program_needs_enough_data_and_returns_no_guess(api, auth):
+    client, path = api
+    uid, athlete = make_athlete(client, auth)
+    empty = client.get(f"/api/athletes/{uid}/nutrition/program", headers=athlete)
+    assert empty.status_code == 200 and empty.json()["program"] is None
+    assert client.get(f"/api/athletes/{uid}/nutrition/expenditure", headers=athlete).json()["expenditure"] is None
+    refused = set_program(client, athlete, uid, "lose", 0.5)
+    assert refused.status_code == 422 and "enough" in refused.json()["detail"].lower()
+
+
+def test_program_holds_without_fourteen_complete_days(api, auth):
+    client, path = api
+    uid, athlete = make_athlete(client, auth)
+    fill(path, uid, food_days=12, weigh_days=10, kcal=2000)  # enough to seed the one-shot estimate, no complete days
+    created = set_program(client, athlete, uid, "maintain", 0.0)
+    assert created.status_code == 200 and created.json()["program"]["mode"] == "holding"  # holds, not a guess
+    series = client.get(f"/api/athletes/{uid}/nutrition/expenditure", headers=athlete).json()
+    assert series["expenditure"]["status"] == "holding" and series["expenditure"]["complete_days"] == 0
+
+
+def test_program_guardrails_floor_and_under_18(api, auth):
+    client, path = api
+    # Adult athlete, stable 2000 kcal: expenditure settles at 2000.
+    adult, head = make_athlete(client, auth, "adult@demo.test")
+    flat_history(client, path, adult, head)
+    ok = set_program(client, head, adult, "lose", 0.25)  # 2000 - 7700*0.25/7 = 1725
+    assert ok.status_code == 200 and ok.json()["applied"] is True and ok.json()["guardrail"] is None
+    assert ok.json()["program"]["recommended_target"]["calories"] == 1725
+    assert client.get(f"/api/athletes/{adult}/nutrition/target", headers=head).json()["target"]["kcal"] == 1725
+    floored = set_program(client, head, adult, "lose", 1.0, protein_g=50, fat_g=20)  # 900 kcal, below the floor
+    assert floored.status_code == 200 and floored.json()["applied"] is False and "1500" in floored.json()["guardrail"]
+    assert client.get(f"/api/athletes/{adult}/nutrition/target", headers=head).json()["target"]["kcal"] == 1725  # unchanged
+
+    # Under-18 athlete: a self-set deficit is shown but not applied without a coach.
+    minor, mhead = make_athlete(client, auth, "minor@demo.test")
+    assert client.patch(f"/api/users/{minor}/profile", json={"under_18": True}, headers=auth("coach")).status_code == 200
+    flat_history(client, path, minor, mhead)
+    shown = set_program(client, mhead, minor, "lose", 0.25)
+    assert shown.status_code == 200 and shown.json()["applied"] is False and "coach" in shown.json()["guardrail"]
+    assert client.get(f"/api/athletes/{minor}/nutrition/target", headers=mhead).json()["target"] is None  # not applied
+    by_coach = set_program(client, auth("coach"), minor, "lose", 0.25)
+    assert by_coach.status_code == 200 and by_coach.json()["applied"] is True
+    assert client.get(f"/api/athletes/{minor}/nutrition/target", headers=mhead).json()["target"]["kcal"] == 1725
+
+
+def test_program_scope_idempotency_audit_and_events(api, auth):
+    client, path = api
+    adult, head = make_athlete(client, auth, "prog@demo.test")
+    flat_history(client, path, adult, head)
+    assert set_program(client, auth("coach2"), adult, "maintain", 0.0).status_code == 404  # cross-club
+    assert client.get(f"/api/athletes/{adult}/nutrition/program", headers=auth("coach2")).status_code == 404
+    assert set_program(client, auth("athlete1"), adult, "maintain", 0.0).status_code == 403  # other athlete
+    for bad in ({"goal": "lose", "rate_kg_week": 0, "protein_g": 150, "fat_g": 50},  # lose needs a positive rate
+                {"goal": "maintain", "rate_kg_week": 0.5, "protein_g": 150, "fat_g": 50},  # maintain needs rate 0
+                {"goal": "lose", "rate_kg_week": 3, "protein_g": 150, "fat_g": 50}, {"goal": "x", "rate_kg_week": 0}):
+        assert client.put(f"/api/athletes/{adult}/nutrition/program", json=bad, headers=head).status_code == 422
+    first = set_program(client, head, adult, "gain", 0.25)
+    assert first.status_code == 200 and first.json()["applied"] is True
+    again = set_program(client, head, adult, "gain", 0.25)  # idempotent upsert: same program state
+    assert again.json()["program"] == first.json()["program"] and again.json()["applied"] == first.json()["applied"]
+    assert "coaching_program_set" in audit_actions(client, auth)
+    export = client.get("/api/me/export", headers=head).json()
+    assert export["coaching_program"]["goal"] == "gain" and export["coaching_program"]["applied"] is True
+    assert len(export["complete_diary_days"]) == 28 and export["complete_diary_days"][0]["day"] == day(-27)
+    assert client.delete("/api/me/data", headers=head).status_code == 204
+    after = client.get("/api/me/export", headers=head).json()
+    assert after["coaching_program"] is None and after["complete_diary_days"] == []
+    with main.database(path) as db:
+        assert db.execute("SELECT COUNT(*) FROM coaching_programs WHERE athlete_id = ?", (adult,)).fetchone()[0] == 0
+
+
+def test_seed_demo_athlete_shows_an_adaptive_program(api, auth):
+    client, path = api
+    a6 = user_id(path, "athlete6")
+    series = client.get(f"/api/athletes/{a6}/nutrition/expenditure", headers=auth("coach")).json()
+    assert series["expenditure"]["status"] == "updating"  # a mature, adapting series from the seeded history
+    assert sum(1 for e in series["history"] if e["status"] == "updating") >= 10
+    program = client.get(f"/api/athletes/{a6}/nutrition/program", headers=auth("coach")).json()
+    assert program["program"] is not None and program["program"]["goal"] == "lose"
+    assert program["program"]["recommended_target"]["calories"] > 0

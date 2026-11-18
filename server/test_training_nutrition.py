@@ -8,12 +8,13 @@ import sys
 
 import pytest
 
-from server import main, training_nutrition as tn
+from server import coaching as co, main, training_nutrition as tn
 from server.training_nutrition_api import FOODS_CSV, load_foods, read_foods_csv
 from server.weight_trend import daily_trend, weight_trend_pipeline
 
 DAY = 86_400_000_000
 ORIGINAL = Path("/opt/personal-nutrition/trend_model")
+REFERENCE = Path("/opt/personal-nutrition")
 
 
 # --- progression ---
@@ -233,6 +234,114 @@ def test_no_third_party_product_names_in_shipped_trend_code():
     for word in ("macrofactor", "libapp", "sha256", "personal-nutrition", "apk"):
         assert word not in text
     assert "reconstructed from measured behaviour" in (package / "__init__.py").read_text()
+
+
+def test_no_third_party_product_names_in_shipped_coaching_code():
+    base = Path(main.__file__).parent
+    shipped = [base / "coaching.py", base / "training_nutrition_api.py", base / "seed.py"]
+    text = "\n".join(p.read_text() for p in shipped).lower()
+    for word in ("macrofactor", "libapp", "sha256", "personal-nutrition", "apk", "microfactor"):
+        assert word not in text
+    assert "reimplementation of a reverse-engineered numeric method" in (base / "coaching.py").read_text()
+
+
+# --- adaptive expenditure and the weekly program: faithful to the owner's reference (1e-9) ---
+
+
+@pytest.fixture
+def original_coaching():
+    """Import the owner's reference coaching backend, test only; never shipped or imported at runtime."""
+    if not REFERENCE.is_dir():
+        pytest.skip("the owner's reference implementation is not on this machine")
+    sys.path.insert(0, str(REFERENCE))
+    try:
+        import coaching as reference
+        yield reference
+    finally:
+        sys.path.remove(str(REFERENCE))
+        for name in [n for n in sys.modules if n in (
+                "coaching", "core", "trend", "goals", "nutrition_days", "weights", "common_catalog", "nutrients")
+                or (n.startswith("weight_") and not n.startswith("weight_trend"))]:
+            del sys.modules[name]
+
+
+def _synthetic_history(seed_date, n_before, n_after, holes=()):
+    """A fixed diary + weigh-in history: one snapshot and one weight per day, some days left incomplete."""
+    import random
+    rng = random.Random(2026)
+    days, snaps, weights_rows, weights = [], {}, [], {}
+    start = seed_date - timedelta(days=n_before)
+    weight = 83.0
+    d = start
+    while d <= seed_date + timedelta(days=n_after):
+        iso = d.isoformat()
+        offset = (d - start).days
+        kcal = round(2250 + rng.uniform(-180, 180), 6)
+        if offset in holes:  # an edited (changed) day: confirmed but no longer matching, must not count
+            snap = {"date": iso, "status": "complete", "confirmed_status": "complete", "revision": 1,
+                    "fingerprint": "z" * 64, "entry_count": 4, "calories": kcal, "changed": True}
+        else:
+            snap = {"date": iso, "status": "complete", "confirmed_status": "complete", "revision": 1,
+                    "fingerprint": "z" * 64, "entry_count": 4, "calories": kcal, "changed": False}
+        days.append(snap)
+        snaps[iso] = {"status": snap["status"], "calories": snap["calories"], "changed": snap["changed"]}
+        weight += rng.uniform(-0.11, 0.04)
+        weights_rows.append([iso, round(weight, 3), 1])
+        weights[iso] = round(weight, 3)
+        d += timedelta(days=1)
+    return days, snaps, weights_rows, weights
+
+
+def test_adaptive_expenditure_series_matches_the_reference_to_1e_9(original_coaching):
+    ref = original_coaching
+    seed_date, seed_kcal, mode = date(2026, 1, 15), 2550.0, "updating"
+    as_of = (seed_date + timedelta(days=40)).isoformat()
+    days, snaps, weights_rows, weights = _synthetic_history(seed_date, 18, 40, holes=(20, 33))
+    inputs = {"version": ref.METHOD, "date": as_of, "start": seed_date.isoformat(),
+              "settings": [{"effective_date": seed_date.isoformat(), "seed_kcal": seed_kcal,
+                            "mode": mode, "revision": 1}],
+              "days": days, "weights": weights_rows, "goals": [], "breaks": []}
+    reference_series = ref.Coaching(":memory:")._compute(inputs)
+    ours = co.compute(seed_date.isoformat(), seed_kcal, mode, snaps, weights, as_of)
+
+    assert ours["expenditure"]["status"] == reference_series["expenditure"]["status"]
+    assert abs(ours["expenditure"]["value_kcal"] - reference_series["expenditure"]["value_kcal"]) < 1e-9
+    assert len(ours["history"]) == len(reference_series["history"]) > 0
+    updating = 0
+    for mine, reference in zip(ours["history"], reference_series["history"]):
+        assert mine["date"] == reference["date"]
+        assert mine["status"] == reference["status"]
+        assert mine["complete_days"] == reference["complete_days"]  # integers, exactly
+        assert abs(mine["value_kcal"] - reference["value_kcal"]) < 1e-9
+        updating += mine["status"] == "updating"
+    assert updating >= 10  # the real stepping path (trend + 150/7 cap) is exercised, not only holds
+
+
+def test_weekly_program_targets_match_the_reference_to_1e_9(original_coaching):
+    ref = original_coaching
+    seed_date, seed_kcal, mode = date(2026, 1, 15), 2550.0, "updating"
+    as_of = (seed_date + timedelta(days=40)).isoformat()
+    days, snaps, weights_rows, weights = _synthetic_history(seed_date, 18, 40)
+    inputs = {"version": ref.METHOD, "date": as_of, "start": seed_date.isoformat(),
+              "settings": [{"effective_date": seed_date.isoformat(), "seed_kcal": seed_kcal,
+                            "mode": mode, "revision": 1}],
+              "days": days, "weights": weights_rows, "goals": [], "breaks": []}
+    reference_series = ref.Coaching(":memory:")._compute(inputs)
+    ours_series = co.compute(seed_date.isoformat(), seed_kcal, mode, snaps, weights, as_of)
+    assert abs(ours_series["expenditure"]["value_kcal"] - reference_series["expenditure"]["value_kcal"]) < 1e-9
+
+    for goal, rate, protein, fat in (("maintain", 0.0, 170.0, 65.0), ("lose", 0.5, 190.0, 60.0),
+                                     ("gain", 0.25, 150.0, 80.0)):
+        boundary = {"start": seed_date.isoformat(), "end": ref._shift(seed_date.isoformat(), 7),
+                    "goals": [], "breaks": [], "original": None, "revision": 0}
+        reference_program = ref.Coaching._make_preview(
+            (seed_date.isoformat(), goal, rate, protein, fat), reference_series, "fp", boundary)
+        ours = co.program_targets(ours_series["expenditure"], goal, rate, protein, fat, seed_date.isoformat())
+        for key in ("calories", "protein", "fat", "carbs", "expenditure_kcal", "rate_kg_week"):
+            assert abs(reference_program[key] - ours[key]) < 1e-9, (goal, key)
+        assert ours["goal"] == reference_program["goal"] == goal
+        assert ours["mode"] == reference_series["expenditure"]["status"]
+        assert ours["expires_on"] == reference_program["expires_on"]
 
 
 # --- food list ---

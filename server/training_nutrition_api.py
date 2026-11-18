@@ -6,6 +6,7 @@ is the main module (its auth, scope, audit and event helpers are reused, never c
 
 import csv
 from datetime import datetime, timedelta, timezone
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -16,6 +17,7 @@ from fastapi import Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from . import coaching as co
 from . import training_nutrition as tn
 from .weight_trend import daily_trend
 
@@ -106,6 +108,26 @@ SCHEMA = """
     CREATE TABLE IF NOT EXISTS nutrition_targets (
         athlete_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         kcal INTEGER NOT NULL, protein_g INTEGER, carbs_g INTEGER, fat_g INTEGER,
+        set_by INTEGER REFERENCES users(id),
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS nutrition_day_complete (
+        athlete_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        day TEXT NOT NULL,
+        diary_fingerprint TEXT NOT NULL,
+        confirmed_at TEXT NOT NULL,
+        PRIMARY KEY (athlete_id, day)
+    );
+    CREATE TABLE IF NOT EXISTS coaching_programs (
+        athlete_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        effective_date TEXT NOT NULL,
+        seed_kcal REAL NOT NULL,
+        mode TEXT NOT NULL CHECK(mode IN ('updating', 'holding')),
+        goal TEXT NOT NULL CHECK(goal IN ('maintain', 'lose', 'gain')),
+        rate_kg_week REAL NOT NULL,
+        protein_g REAL NOT NULL,
+        fat_g REAL NOT NULL,
+        applied INTEGER NOT NULL DEFAULT 0 CHECK(applied IN (0, 1)),
         set_by INTEGER REFERENCES users(id),
         updated_at TEXT NOT NULL
     );
@@ -235,6 +257,19 @@ class Target(StrictModel):
     protein_g: int | None = Field(default=None, ge=0, le=1000)
     carbs_g: int | None = Field(default=None, ge=0, le=2000)
     fat_g: int | None = Field(default=None, ge=0, le=1000)
+
+
+class Program(StrictModel):
+    goal: Literal["maintain", "lose", "gain"]
+    rate_kg_week: float = Field(ge=0, le=2)
+    protein_g: float = Field(ge=0, le=500)
+    fat_g: float = Field(ge=0, le=500)
+
+    @model_validator(mode="after")
+    def rate_matches_goal(self):
+        if (self.goal == "maintain") != (self.rate_kg_week == 0):
+            raise ValueError("Maintain uses rate 0; lose and gain need a positive rate up to 2 kg/week")
+        return self
 
 
 class Profile(StrictModel):
@@ -824,6 +859,160 @@ def install(app, h):
                 "weekly_average": {"days_logged": days, "window": [first, day], **{
                     key: round(sum(w[key] for w in weekly.values()) / days, 1) if days else None for key in keys}}}
 
+    # --- adaptive expenditure and the weekly coaching program (SPEC 6.3) ---
+
+    def publish_athlete(db, athlete, kind, row_id, at):
+        app.state.events.publish(h.athlete_viewers(db, athlete), {
+            "type": kind, "id": row_id, "athlete_id": athlete["id"], "club_id": athlete["club_id"], "at": at})
+
+    def diary_fingerprint(db, athlete_id, day):
+        """Stable hash of a day's diary, so a day confirmed complete is noticed when it is later edited."""
+        rows = [[r["id"], r["meal"], r["food_id"], r["grams"]] for r in db.execute(
+            "SELECT id, meal, food_id, grams FROM food_logs WHERE athlete_id = ? AND day = ? ORDER BY id",
+            (athlete_id, day))]
+        return hashlib.blake2b(json.dumps(rows, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+    def day_calories(db, athlete_id, day):
+        return db.execute(
+            "SELECT COALESCE(SUM(food_logs.grams * foods.kcal / 100), 0.0) AS kcal FROM food_logs "
+            "JOIN foods ON foods.id = food_logs.food_id WHERE food_logs.athlete_id = ? AND food_logs.day = ?",
+            (athlete_id, day)).fetchone()["kcal"]
+
+    def coaching_snaps(db, athlete_id):
+        """Explicitly confirmed diary days: complete unless edited since confirmation (then not counted)."""
+        snaps = {}
+        for r in db.execute("SELECT day, diary_fingerprint FROM nutrition_day_complete WHERE athlete_id = ?",
+                            (athlete_id,)):
+            snaps[r["day"]] = {"status": "complete", "calories": day_calories(db, athlete_id, r["day"]),
+                               "changed": diary_fingerprint(db, athlete_id, r["day"]) != r["diary_fingerprint"]}
+        return snaps
+
+    def program_row(db, athlete_id):
+        return db.execute("SELECT * FROM coaching_programs WHERE athlete_id = ?", (athlete_id,)).fetchone()
+
+    def expenditure_series(db, athlete, program):
+        weights = {day: kg for day, kg in weight_series(db, athlete["id"])[0]}
+        return co.compute(program["effective_date"], program["seed_kcal"], program["mode"],
+                          coaching_snaps(db, athlete["id"]), weights, utc_today().isoformat())
+
+    def recommended(expenditure, program, today):
+        return co.program_targets(expenditure, program["goal"], program["rate_kg_week"],
+                                  program["protein_g"], program["fat_g"], today)
+
+    def program_view(db, athlete):
+        program = program_row(db, athlete["id"])
+        if program is None:
+            return {"athlete_id": athlete["id"], "program": None, "under_18": bool(athlete["under_18"]),
+                    "reason": "No coaching program yet. Set a goal and weekly rate to start.",
+                    "note": "Recommended targets always pass through the under-18 and 1500 kcal guardrails."}
+        series = expenditure_series(db, athlete, program)
+        rec = recommended(series["expenditure"], program, utc_today().isoformat())
+        target = {"calories": round(rec["calories"]), "protein_g": round(rec["protein"]),
+                  "carbs_g": round(rec["carbs"]), "fat_g": round(rec["fat"])}
+        guardrail = tn.check_target(target["calories"], round(rec["expenditure_kcal"]),
+                                    bool(athlete["under_18"]), False)
+        return {"athlete_id": athlete["id"], "under_18": bool(athlete["under_18"]),
+                "program": {"goal": rec["goal"], "rate_kg_week": rec["rate_kg_week"], "mode": rec["mode"],
+                            "effective_date": rec["effective_date"], "expires_on": rec["expires_on"],
+                            "expenditure_kcal": round(rec["expenditure_kcal"]), "recommended_target": target},
+                "applied": bool(program["applied"]),
+                "guardrail": guardrail,
+                "note": "Recommended targets still pass through the under-18 and 1500 kcal guardrails."}
+
+    @app.get("/api/athletes/{athlete_id}/nutrition/expenditure")
+    def nutrition_expenditure(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+        athlete = h.athlete_access(db, user, athlete_id)
+        program = program_row(db, athlete_id)
+        if program is None:
+            return {"athlete_id": athlete_id, "expenditure": None, "history": [], "method": co.WINDOW_DAYS,
+                    "reason": "No coaching program yet.", "window_days": co.WINDOW_DAYS,
+                    "note": "Adaptive expenditure: 14-day energy balance over complete diary days and the weight trend."}
+        series = expenditure_series(db, athlete, program)
+        return {"athlete_id": athlete_id, "window_days": co.WINDOW_DAYS, **series,
+                "note": "Adaptive expenditure: 14-day energy balance over complete diary days and the weight trend."}
+
+    @app.get("/api/athletes/{athlete_id}/nutrition/program")
+    def get_program(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+        return program_view(db, h.athlete_access(db, user, athlete_id))
+
+    @app.put("/api/athletes/{athlete_id}/nutrition/program")
+    def set_program(athlete_id: int, body: Program, user=Depends(current_user), db=Depends(get_db)):
+        athlete = h.athlete_access(db, user, athlete_id)
+        need_consent(athlete, "a coaching program")
+        existing = program_row(db, athlete_id)
+        if existing is None:
+            seed = estimate_for(db, athlete_id, utc_today())
+            if not seed["available"]:
+                raise HTTPException(422, "Not enough logged days yet to start an adaptive program")
+            effective_date, seed_kcal, mode = utc_today().isoformat(), seed["expenditure_kcal"], "updating"
+        else:
+            effective_date, seed_kcal, mode = existing["effective_date"], existing["seed_kcal"], existing["mode"]
+        proposed = {"effective_date": effective_date, "seed_kcal": seed_kcal, "mode": mode, "goal": body.goal,
+                    "rate_kg_week": body.rate_kg_week, "protein_g": body.protein_g, "fat_g": body.fat_g}
+        series = expenditure_series(db, athlete, proposed)
+        try:
+            rec = recommended(series["expenditure"], proposed, utc_today().isoformat())
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from None
+        target = {"calories": round(rec["calories"]), "protein_g": round(rec["protein"]),
+                  "carbs_g": round(rec["carbs"]), "fat_g": round(rec["fat"])}
+        # The recommended deficit still passes the under-18 and 1500 kcal guardrails before it is applied.
+        guardrail = tn.check_target(target["calories"], round(rec["expenditure_kcal"]),
+                                    bool(athlete["under_18"]), user["role"] != "athlete")
+        now = h.now_iso()
+        applied = guardrail is None
+        db.execute(
+            "INSERT INTO coaching_programs(athlete_id, effective_date, seed_kcal, mode, goal, rate_kg_week, "
+            "protein_g, fat_g, applied, set_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(athlete_id) DO UPDATE SET goal = excluded.goal, rate_kg_week = excluded.rate_kg_week, "
+            "protein_g = excluded.protein_g, fat_g = excluded.fat_g, applied = excluded.applied, "
+            "set_by = excluded.set_by, updated_at = excluded.updated_at",
+            (athlete_id, effective_date, seed_kcal, mode, body.goal, body.rate_kg_week, body.protein_g,
+             body.fat_g, int(applied), user["id"], now))
+        if applied:
+            db.execute(
+                "INSERT INTO nutrition_targets(athlete_id, kcal, protein_g, carbs_g, fat_g, set_by, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(athlete_id) DO UPDATE SET kcal = excluded.kcal, "
+                "protein_g = excluded.protein_g, carbs_g = excluded.carbs_g, fat_g = excluded.fat_g, "
+                "set_by = excluded.set_by, updated_at = excluded.updated_at",
+                (athlete_id, target["calories"], target["protein_g"], target["carbs_g"], target["fat_g"],
+                 user["id"], now))
+        audit(db, user["id"], "coaching_program_set", athlete_id,
+              {"goal": body.goal, "rate_kg_week": body.rate_kg_week, "applied": applied})
+        db.commit()
+        publish_athlete(db, athlete, "coaching", athlete_id, now)
+        return program_view(db, athlete)
+
+    @app.put("/api/me/nutrition/days/{day}/complete")
+    def mark_day_complete(day: str, user=Depends(current_user), db=Depends(get_db)):
+        require_role(user, "athlete")
+        need_consent(user, "a complete diary day")
+        try:
+            day = iso_day(day)
+        except ValueError:
+            raise HTTPException(422, "day must be YYYY-MM-DD") from None
+        check_log_day(day)
+        now = h.now_iso()
+        fingerprint = diary_fingerprint(db, user["id"], day)
+        db.execute("INSERT INTO nutrition_day_complete(athlete_id, day, diary_fingerprint, confirmed_at) "
+                   "VALUES (?, ?, ?, ?) ON CONFLICT(athlete_id, day) DO UPDATE SET "
+                   "diary_fingerprint = excluded.diary_fingerprint, confirmed_at = excluded.confirmed_at",
+                   (user["id"], day, fingerprint, now))
+        audit(db, user["id"], "nutrition_day_completed", day)
+        db.commit()
+        publish_athlete(db, user, "nutrition_day", user["id"], now)
+        return {"athlete_id": user["id"], "day": day, "status": "complete",
+                "calories": round(day_calories(db, user["id"], day), 1)}
+
+    @app.delete("/api/me/nutrition/days/{day}/complete", status_code=204)
+    def unmark_day_complete(day: str, user=Depends(current_user), db=Depends(get_db)):
+        require_role(user, "athlete")
+        if db.execute("DELETE FROM nutrition_day_complete WHERE athlete_id = ? AND day = ?",
+                      (user["id"], day)).rowcount == 0:
+            raise HTTPException(404, "Day not confirmed")
+        audit(db, user["id"], "nutrition_day_uncompleted", day)
+        db.commit()
+
     # --- CSV exports for staff ---
 
     def csv_response(db, user, athlete, kind, fields, rows):
@@ -882,11 +1071,20 @@ def export_data(db, athlete_id):
     weights = [dict(r) for r in db.execute("SELECT day, kg FROM weights WHERE athlete_id = ? ORDER BY day", (athlete_id,))]
     target = db.execute("SELECT kcal, protein_g, carbs_g, fat_g, set_by, updated_at FROM nutrition_targets "
                         "WHERE athlete_id = ?", (athlete_id,)).fetchone()
+    program = db.execute("SELECT effective_date, seed_kcal, mode, goal, rate_kg_week, protein_g, fat_g, "
+                         "applied, set_by, updated_at FROM coaching_programs WHERE athlete_id = ?",
+                         (athlete_id,)).fetchone()
+    complete_days = [dict(r) for r in db.execute(
+        "SELECT day, diary_fingerprint, confirmed_at FROM nutrition_day_complete WHERE athlete_id = ? ORDER BY day",
+        (athlete_id,))]
     return {"set_logs": sets, "custom_foods": foods, "food_logs": meals, "weights": weights,
-            "nutrition_target": None if target is None else dict(target)}
+            "nutrition_target": None if target is None else dict(target),
+            "coaching_program": None if program is None else {**dict(program), "applied": bool(program["applied"])},
+            "complete_diary_days": complete_days}
 
 
 def delete_data(db, athlete_id):
-    for table in ("set_logs", "food_logs", "weights", "nutrition_targets"):
+    for table in ("set_logs", "food_logs", "weights", "nutrition_targets", "coaching_programs",
+                  "nutrition_day_complete"):
         db.execute(f"DELETE FROM {table} WHERE athlete_id = ?", (athlete_id,))
     db.execute("DELETE FROM foods WHERE owner_id = ?", (athlete_id,))
