@@ -67,7 +67,7 @@
     <string name="knee_flexion_peak_r">Peak knee flexion · right (°)</string>
     <string name="fppa_peak_l">FPPA at peak · left (°)</string>
     <string name="fppa_peak_r">FPPA at peak · right (°)</string>
-    <string name="knee_ankle_ratio">Knee / ankle separation</string>
+    <string name="knee_ankle_ratio">Knee / ankle ratio</string>
     <string name="flexion_asymmetry_pct">Peak flexion asymmetry (%)</string>
     <string name="quality">Landmark visibility (0–1)</string>
     <string name="duration_error">Cannot read this video\'s duration. Try another video.</string>
@@ -95,7 +95,7 @@
     <string name="uploaded">Uploaded · jump #%1$d</string>
     <string name="history_summary">Jumps: %1$d · newest first</string>
     <string name="history_item">#%1$d · %2$s</string>
-    <string name="history_numbers">%1$s\nPeak flexion L / R (°): %2$s / %3$s\nKnee / ankle separation: %4$s</string>
+    <string name="history_numbers">%1$s\nPeak flexion L / R (°): %2$s / %3$s\nKnee / ankle ratio: %4$s</string>
     <string name="view_jump">View numbers for jump #%1$d</string>
     <string name="jump_title">Jump #%1$d</string>
     <string name="landing_frame">Initial contact</string>

@@ -633,3 +633,24 @@ are visible and usable in both languages:
 Matching XML dumps and initial replay metric JSON are retained beside the screenshots. Build and
 instrumentation output are in logs/learnedv2/app-build.log and instrumentation.txt. This debug replay
 checks the suggestion and manual-confirmation flow; it does not benchmark full video pose extraction.
+
+## 2026-11-18 — Bulgarian app terminology
+
+Aligned Bulgarian labels, warnings, history and frame-editor text with the reviewed terminology and
+coach dashboard, retaining „спортист“. Corrected the suggested-edge articles and saved-result and
+slow-motion guidance. English changes are limited to the two knee/ankle ratio labels. String names
+and exact format placeholders are unchanged; all 147 English/Bulgarian resource checks passed.
+There are no baseline strings in these resources. The camera-depth caveats remain because the
+calculation uses estimated 3D depth.
+
+As `builder` on `android-build-kit`, in `/work/jumpscan-app`,
+`:app:assembleDebug :app:assembleDebugAndroidTest` passed with one Gradle worker. Both APKs were
+installed and `jumpscan.app.test/jumpscan.app.AppChecks` passed. One `jumpscan-worker-a` emulator
+was used; `free -g` was checked and UI work waited whenever available memory fell below 3 GB.
+Bulgarian home, result, frame editor and history screenshots, including scrolled metrics and history
+detail, are retained in `/root/jumpscan/logs/appterms/` and were opened and inspected at 720 × 1280,
+320 dpi. Longer labels wrap without clipping or overflow; no layout change was needed. Results used
+the reviewed owner landmarks through debug replay; history used the loopback-only mock API. No
+owner clip was copied into the repository, and no production endpoint or service was changed.
+Test app data and private device copies were cleared, the temporary mock was stopped, and the
+emulator was shut down after validation.
