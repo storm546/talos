@@ -419,3 +419,69 @@ available, no adb device, no Gradle or emulator process, and the signing file pe
 task's waiting shell was stopped. No unrelated workload, service or package was changed. The
 signed jury APK and all pending emulator checks must be completed before calling this release
 validated; the newer committed detector also has its separately documented test failures.
+
+## Learned detector, second integration — 18 November 2026
+
+The result screen still reports no flight when only the learned detector proposes one. Check frames
+now presets both suggested edges only when no_flight_detected is present and the Kotlin Analysis
+contains learnedSuggestion. The editor displays a short English or Bulgarian instruction to confirm
+the suggestion before applying it. Normal automatic results and manual editing retain their existing
+entry paths. Suggestions are not added to metrics JSON or uploaded data.
+
+Builds ran as builder on android-build-kit in /work/jumpscan-app, with one Gradle build in that
+directory at a time. The final build command was:
+
+```sh
+nice -n 15 ./gradlew --no-daemon --max-workers=1 :app:assembleDebug :app:assembleDebugAndroidTest
+```
+
+Both tasks passed. The debug and instrumentation APKs were installed on the dedicated
+jumpscan-worker-a AVD. The platform instrumentation command passed:
+
+```sh
+/opt/android-sdk/platform-tools/adb shell am instrument -w jumpscan.app.test/jumpscan.app.AppChecks
+```
+
+The instrumentation reported: "Queue isolation, durability, failure retention, payload boundaries,
+preview and number-format checks passed." The associated core run in /work/jumpscan-learned passed
+53 tests, with no failures, errors or skips, including the unchanged private-clip and stock-squat
+assertions. Details and measured detector tables are in core/VALIDATION.md.
+
+Only one emulator ran at a time. The final replay used the same AVD with a 720 × 1280 display,
+GPU disabled and a 1024 MB QEMU guest to leave memory for the kit's existing workloads. Memory and
+uptime were checked; the replay driver waits whenever available host memory is below 3 GB. Earlier
+larger boots were closed before launching the final emulator. Existing services and the unrelated
+RTMPose extraction jobs were not changed.
+
+The emulator replay used only /work/jumpscan-samples/one-person.mp4 and the committed public
+squat_jumps_one_person.csv.gz landmark fixture. No owner video or private landmarks were copied
+into the repository. The existing debug-only analysis_mode=replay path was used; release behavior
+was not expanded. The reproducible driver and output are retained at
+logs/learnedv2/check_suggestion.py and logs/learnedv2/suggestion-check.txt. It ran on openclaw under
+systemd-run with MemoryMax=2G, MemorySwapMax=256M and nice level 15.
+
+In English and Bulgarian, the automatic stock-squat result retained null flight time and height,
+no_flight_detected, and unavailable automatic edge markers. Check frames opened at 9876 ms with
+both suggested edges already set to 9876/9976 ms. The translated confirmation instruction was
+visible above the preview. Opening the editor and cancelling left the automatic metrics unchanged.
+The debug metrics JSON retained exactly 14 fields and no suggestion field. Explicit Apply in the
+English editor produced the manual result with the "Frames set by hand" label, 100 ms flight time
+and 1.2 cm displayed height. This is an intentional UI confirmation check on a planted-foot clip,
+not an assertion that the squat contains a jump. The existing debug metrics.json export describes
+the initial replay; the applied manual result is verified through the visible result and UI dump.
+A new Bulgarian replay then restored the automatic no-flight result and checked cancellation again.
+No upload or network action was invoked. App locale selection was returned to the system default.
+
+All five final screenshots were opened and inspected. Text wraps without clipping, both suggested
+edge values are readable, the skeleton remains aligned with the stock subject, and Apply and Cancel
+are visible and usable in both languages:
+
+- logs/learnedv2/result-en.png
+- logs/learnedv2/suggestion-en.png
+- logs/learnedv2/manual-en.png
+- logs/learnedv2/result-bg.png
+- logs/learnedv2/suggestion-bg.png
+
+Matching XML dumps and initial replay metric JSON are retained beside the screenshots. Build and
+instrumentation output are in logs/learnedv2/app-build.log and instrumentation.txt. This debug replay
+checks the suggestion and manual-confirmation flow; it does not benchmark full video pose extraction.

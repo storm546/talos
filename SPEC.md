@@ -30,7 +30,7 @@ Produced by `core`, shown by `app`, stored by `server`.
 | `knee_ankle_ratio` | number or null | knee separation / ankle separation at peak flexion; null in side view | 0–5 |
 | `flexion_asymmetry_pct` | number or null | `abs(l - r) / max(l, r) * 100` of peak flexion; null with one measured leg | 0–100 |
 | `quality` | number | mean landmark visibility of hips, knees, ankles over the landing window | 0–1 |
-| `warnings` | string[] | any of `low_fps`, `low_visibility`, `no_flight_detected`, `uncertain_timing` (tracking missing at a flight edge), `single_leg_view` (only the better-observed leg is measured), `manual_edges` (take-off and landing frames chosen by the user) | max 6 items |
+| `warnings` | string[] | any of `low_fps`, `low_visibility`, `no_flight_detected`, `uncertain_timing` (missing edge tracking or rules/learned disagreement), `single_leg_view` (only the better-observed leg is measured), `manual_edges` (take-off and landing frames chosen by the user) | max 6 items |
 
 ## 2. core (Kotlin/JVM, package `jumpscan.core`)
 
@@ -45,19 +45,37 @@ data class JumpMetrics(...)                                      // fields of se
 fun JumpMetrics.toJson(): String                                 // snake_case keys of section 1, no library
 object JumpAnalyzer {
     enum class View { AUTO, FRONT, SIDE }
+    data class FlightSuggestion(val takeoffMs: Long, val landingMs: Long)
     fun analyze(frames: List<Frame>, test: String, aspect: Float = 9f / 16f,
                 view: View = View.AUTO, takeoffMs: Long? = null, landingMs: Long? = null): JumpMetrics
     data class Analysis(val metrics: JumpMetrics, val contactMs: Long?, val flightCount: Int,
                         val flightTimeMinMs: Long? = null, val flightTimeMaxMs: Long? = null,
-                        val takeoffMs: Long? = null)
+                        val takeoffMs: Long? = null, val learnedSuggestion: FlightSuggestion? = null)
     fun analyzeWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f,
                            view: View = View.AUTO, takeoffMs: Long? = null, landingMs: Long? = null): Analysis
 }
 ```
 
-- `analyzeWithLanding` is the public entry point for metrics plus flight edges. `takeoffMs` in its
-  result is the frame where the reported flight starts, including the last ground frame when tracking
-  misses the automatic take-off edge. Automatic `contactMs` and `takeoffMs` are null without a flight.
+- `analyzeWithLanding` is the public entry point for metrics plus flight edges. Rules must find a
+  flight before any automatic flight is reported. If both learned edges agree with the selected
+  rules flight within an inclusive 100 ms, each reported edge estimate is their arithmetic mean,
+  with no additional timing warning. Flight time is mean landing minus mean take-off. `contactMs`
+  and `takeoffMs` are the real frame timestamps nearest those means (earlier frame on a tie), for
+  the landing window and editor. Their difference can therefore differ from the flight-time metric.
+  If learned inference runs but finds no plausible flight or disagrees, retain the rules flight
+  with `uncertain_timing`. An unavailable learned path retains the original rules result and warnings.
+- With no rules flight, automatic `contactMs`, `takeoffMs`, flight time and height remain null and
+  `no_flight_detected` remains present. A learned flight lasting an inclusive 100–1000 ms supplies
+  `learnedSuggestion`, with both edges snapped to nearest real frames, only in Kotlin `Analysis`.
+  It never changes the metrics JSON contract. With neither flight, behavior is unchanged.
+- Learned inference uses the bundled final seed-zero temporal network at threshold 0.5. It uses
+  the clip's own mean frame rate from timestamps between 24 and 36 fps, inclusive; above 36 fps
+  it uses a 30 fps grid. Each grid cell uses the nearest real observation within half a step.
+  Missing positions are interpolated, with zero visibility and presence. Below 24 fps or with
+  unusable learned input, use the rules fallback. Only learned durations of 100–1000 ms are plausible.
+- On a no-flight result with a suggestion, the app's Check frames action opens with both suggested
+  edges preset and a translated instruction to confirm them. Applying still requires the user's
+  action. Other editor entry paths retain their existing defaults.
 - Optional input edges must be supplied together, match input frame timestamps, have landing after
   take-off, and span at most 1000 ms; otherwise `IllegalArgumentException` is thrown. They override
   automatic detection, use landing as initial contact for the 500 ms metrics window, and calculate

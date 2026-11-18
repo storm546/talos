@@ -31,7 +31,8 @@ class MainActivity : Activity() {
     private var generation = 0
     private val prefs by lazy { getSharedPreferences("account", MODE_PRIVATE) }
     private var analysis: Analysis? = null
-    private data class FrameEdits(var index: Int, var takeoffMs: Long?, var landingMs: Long?)
+    private data class FrameEdits(var index: Int, var takeoffMs: Long?, var landingMs: Long?,
+        val suggested: Boolean = false)
     private var edits: FrameEdits? = null
     private var uploadedId: Long? = null
     private var queuedId: String? = null
@@ -339,9 +340,13 @@ class MainActivity : Activity() {
         }
         if ("low_visibility" in current.metrics.warnings) text(getString(R.string.visibility_help), 16)
         button(getString(R.string.check_frames)) {
-            val start = current.landing.takeoffMs ?: peakFlexionFrame(current.frames).tMs
+            val suggestion = current.landing.learnedSuggestion
+                ?.takeIf { "no_flight_detected" in current.metrics.warnings }
+            val takeoff = suggestion?.takeoffMs ?: current.landing.takeoffMs
+            val landing = suggestion?.landingMs ?: current.landing.contactMs
+            val start = takeoff ?: peakFlexionFrame(current.frames).tMs
             edits = FrameEdits(current.timesUs.indexOfFirst { it / 1000 == start }.coerceAtLeast(0),
-                current.landing.takeoffMs, current.landing.contactMs)
+                takeoff, landing, suggested = suggestion != null)
             frameEditor()
         }
         text(getString(if (current.contactFound) R.string.landing_frame else R.string.peak_frame), 18)
@@ -403,6 +408,7 @@ class MainActivity : Activity() {
         val selection = edits ?: return result()
         layout(getString(R.string.check_frames), "frames")
         text(getString(R.string.frame_instructions), 14)
+        if (selection.suggested) text(getString(R.string.suggested_edges), 14)
         if (message != null) text(message, 15, getColor(R.color.error)).apply {
             post { announceForAccessibility(message) }
         }

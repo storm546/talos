@@ -159,3 +159,117 @@ results. Manual results use the marked contact even when there is no automatical
 Manual frame marking does not establish sub-frame accuracy. Frame rate and visibility warnings remain,
 and at least ten usable angle frames plus a usable angle in the selected landing window are required.
 No detector accuracy or clinical claim follows from these synthetic checks.
+
+## Learned detector, second integration — 18 November 2026
+
+The second integration keeps the rules detector as the sole authority for whether an automatic
+flight exists. It restores the network, weights and independent probability fixtures from
+5926fbdb670629fc35f02e1b4b1bd2ca51bc371e without changing the threshold or training recipe.
+The prior port's automatic learned-flight source is not retained.
+
+When the selected rules flight and a plausible learned flight agree within an inclusive 100 ms on
+both edges, the result uses the arithmetic mean of each pair of continuous edge estimates. Flight
+time is the difference of those means. The landing-window contact is the nearest actual frame to
+the mean landing; the editor take-off marker similarly uses the nearest actual frame. Ties choose
+the earlier frame. The metric is not recomputed from these snapped editor markers. Averaged timing
+bounds bracket the continuous means using actual observations. Agreement adds no timing warning,
+including when the original rule edge had missing tracking.
+
+If learned inference runs but has no plausible flight, or either edge disagrees, the rules flight
+is retained with uncertain_timing. If the learned path cannot run, the original rules result and
+warnings are retained. A learned-only flight never produces automatic flight time, height or
+contact. Its edges, snapped to nearest actual frames, are exposed only as Analysis.learnedSuggestion;
+no_flight_detected and the JSON contract remain unchanged. Neither detector finding a flight keeps
+the existing behavior. Manual edges bypass learned inference and always win.
+
+The learned grid uses the clip's mean capture rate from timestamps when it is between 24 and 36 fps,
+inclusive. Above 36 fps it uses 30 fps, selecting the nearest observation within half a grid step.
+Below 24 fps it falls back to rules. The longest strict-above-0.5 run still needs two samples;
+interpolated learned durations must be between 100 and 1000 ms, inclusive. No threshold, agreement
+limit, duration limit, seed or training parameter was tuned on the held-out results.
+
+All builds ran as builder on android-build-kit, with one Gradle invocation per build directory,
+--no-daemon --max-workers=1 and nice level 15. Memory and uptime were checked before starting work.
+The unrelated RTMPose extraction jobs were not touched. Core builds used /work/jumpscan-learned;
+app builds used /work/jumpscan-app. The final core command was:
+
+```sh
+cd /work/jumpscan-learned
+nice -n 15 ./gradlew --no-daemon --max-workers=1 :core:test
+```
+
+Result: 53 tests passed, zero failures, zero errors, zero skipped. Both optional measured-data tests
+and the additional public-data policy measurement ran with installed datasets. The stock-squat
+and private-clip test source and assertions are unchanged: squat has no flight and exactly the
+existing no_flight_detected warning; private durations remain exactly 280/360/360 ms and pass their
+independently reviewed contact and duration tolerances. Owner fixtures remain only on the kit.
+
+The 32 synthetic rules checks retain their assertions and explicitly exercise the rules entry
+point. Public wrapper checks now compare batch output to the public analyzer and verify that
+continuous mean timing and snapped editor markers are consistent with the policy. Nine learned
+unit checks cover independent probabilities, native and high-rate grids, interpolation, threshold
+and crossing conventions, all policy branches, unusable-input fallback and manual precedence.
+The three restored 33 fps reference fixtures still have maximum probability errors 0, 3.33e-16 and
+0 for front, side and webcam respectively. These arithmetic checks explicitly request their
+reference grid; normal inference uses the capture-rate policy above. The weights SHA256 remains
+8971650c55f04b947af7f8ac6c4e52f53c8dd39713aab5508274bbc3654b2f76.
+
+### Webcam TEST halves
+
+The same 100 files per class were selected using the frozen SHA256-basename split. Rules and the
+new public analyzer ran on identical inputs. Analyzer errors count against class recall; these
+are supplied jump-class labels rather than independently reviewed airborne intervals. A suggestion
+is counted only when no automatic flight exists. Duplicate-content caveats from REPORT2 apply.
+
+| Class | Automatic flights /100 | Rules flights /100 | Suggestion only | Analyzer errors |
+|---|---:|---:|---:|---:|
+| Looking down, false alarms | 7 | 7 | 7 | 9 |
+| Still pose, false alarms | 1 | 1 | 11 | 0 |
+| Jump in place, recall | 64 | 64 | 24 | 9 |
+| Jump left, recall | 34 | 34 | 45 | 12 |
+| Jump right, recall | 49 | 49 | 42 | 7 |
+
+Automatic false alarms are not higher than rules in either negative class. Positive automatic
+recall is retained; learned-only recovery is presented for user confirmation rather than counted
+as an automatic detection.
+
+### Held-out policy estimate and final-model consistency
+
+logs/ml/policy3.py computes the policy from the saved MediaPipe plus training negatives LOSO
+predictions at threshold 0.5, with all nine held-out subjects and five prescribed seeds. It checks
+fold train/test separation, held-subject exclusion, protocol hashes and the negative-window manifest.
+It does not fit a model. The script, REPORT3.md and per-seed/per-clip tables are retained under logs/ml.
+
+Reported automatically includes the rules flights with uncertain_timing; flagged is a subset of
+reported. Correct plus wrong equals reported. Wrong means a spurious match or duration error above
+two 33 fps frames, using REPORT2's inclusive 300 ms edge-matching convention. Values below are means
+[min, max] over five seeds, pooled over the nine held-out subjects for each seed.
+
+| Population | View | Clips per seed | Reported automatically | Correct | Wrong | Flagged uncertain_timing | Suggestion only | Nothing |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Labelled jumps | Front | 91 | 71.0 [71, 71] | 64.4 [63, 67] | 6.6 [4, 8] | 6.6 [4, 8] | 19.6 [19, 20] | 0.4 [0, 1] |
+| Labelled jumps | Side | 91 | 60.0 [60, 60] | 37.6 [35, 40] | 22.4 [20, 25] | 19.4 [18, 22] | 24.8 [24, 25] | 6.2 [6, 7] |
+| Force-negative windows | Front | 109 | 0.0 [0, 0] | 0.0 [0, 0] | 0.0 [0, 0] | 0.0 [0, 0] | 1.2 [0, 4] | 107.8 [105, 109] |
+| Force-negative windows | Side | 109 | 1.0 [1, 1] | 0.0 [0, 0] | 1.0 [1, 1] | 1.0 [1, 1] | 1.6 [0, 2] | 106.4 [106, 108] |
+
+Rules for jumps use REPORT2's saved snapshot. Rules for all 218 audited force-negative windows
+were computed in Kotlin from the original public landmark rows. Every learned prediction in the
+held-out table comes from its saved fold, never the final fit. Saved rules analysis errors remain
+nothing, with error text retained in the per-clip table. This is an estimate of edge selection
+on the saved 33 fps grid; it does not re-run landing-angle validity for each fold's averaged contact.
+The final-model Kotlin measurements below include analyzer errors explicitly.
+
+All nine Twente subjects are in the final model's training set. These numbers are only an in-sample
+consistency check, not a held-out accuracy estimate. Definitions match the table above.
+
+| View | Clips | Reported automatically | Correct | Wrong | Flagged uncertain_timing | Suggestion only | Nothing | Analyzer errors |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Front | 91 | 71 | 68 | 3 | 3 | 20 | 0 | 0 |
+| Side | 91 | 60 | 40 | 20 | 17 | 29 | 2 | 2 |
+
+Nothing includes analyzer errors. Earlier rule-only errors were also retained by REPORT2 rather
+than relabelled as successful negative detections. The final model changes timing only on agreement;
+it does not improve automatic recall by promoting a learned-only flight.
+
+Evidence is retained in logs/learnedv2/core-test.log, core-results/, clips.csv and app-build.log.
+The app's build, instrumentation and inspected screenshot evidence is documented in app/VALIDATION.md.

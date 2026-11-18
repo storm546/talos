@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="suggested_edges">These take-off and landing frames are a suggestion. Confirm them before applying.</string>
     <string name="app_name">JumpScan</string>
     <string name="brand">JUMPSCAN</string>
     <string name="sign_in">Sign in</string>

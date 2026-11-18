@@ -43,11 +43,21 @@ object JumpAnalyzer {
         takeoffMs: Long? = null, landingMs: Long? = null): JumpMetrics =
         analyzeWithLanding(frames, test, aspect, view, takeoffMs, landingMs).metrics
 
+    data class FlightSuggestion(val takeoffMs: Long, val landingMs: Long)
+
     data class Analysis(val metrics: JumpMetrics, val contactMs: Long?, val flightCount: Int,
-        val flightTimeMinMs: Long? = null, val flightTimeMaxMs: Long? = null, val takeoffMs: Long? = null)
+        val flightTimeMinMs: Long? = null, val flightTimeMaxMs: Long? = null, val takeoffMs: Long? = null,
+        val learnedSuggestion: FlightSuggestion? = null)
 
     fun analyzeWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f, view: View = View.AUTO,
-        takeoffMs: Long? = null, landingMs: Long? = null): Analysis {
+        takeoffMs: Long? = null, landingMs: Long? = null): Analysis =
+        analyzeFrames(frames, test, aspect, view, takeoffMs, landingMs, useLearned = true)
+
+    internal fun analyzeRulesWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f,
+        view: View = View.AUTO): Analysis = analyzeFrames(frames, test, aspect, view, null, null, useLearned = false)
+
+    private fun analyzeFrames(frames: List<Frame>, test: String, aspect: Float, view: View,
+        takeoffMs: Long?, landingMs: Long?, useLearned: Boolean): Analysis {
         require(test == "drop_jump" || test == "cmj") { "test must be drop_jump or cmj" }
         require(aspect > 0f) { "aspect must be positive" }
         require(frames.all { it.landmarks.size == LANDMARKS && it.worldLandmarks.size == LANDMARKS }) {
@@ -180,20 +190,39 @@ object JumpAnalyzer {
 
         // Analyse the last verified airborne-to-ground transition; without one, retain the no-flight result.
         val landing = candidates.lastOrNull()
-        val uncertainTiming = landing?.let { flight ->
+        val rulesUncertain = landing?.let { flight ->
             t[flight.firstAir] - t[flight.lastGround] > MAX_GAP_FACTOR * medianStepMs ||
                 t[flight.contact] - t[flight.lastAir] > MAX_GAP_FACTOR * medianStepMs
         } == true
         // With a missing take-off edge, use the last observed ground frame: this is an upper timing bound.
-        val flightStart = takeoffMs ?: landing?.let { flight ->
+        val ruleStart = landing?.let { flight ->
             t[if (t[flight.firstAir] - t[flight.lastGround] > MAX_GAP_FACTOR * medianStepMs)
                 flight.lastGround else flight.firstAir]
         }
-        val initialContact = landingMs ?: landing?.let { t[it.contact] }
-        val flightMs = flightStart?.let { (initialContact!! - it).toDouble() }
+        val rules = landing?.let { LearnedFlight.Edges(ruleStart!!.toDouble(), t[it.contact].toDouble()) }
+        val learned = if (useLearned && !manual) try {
+            LearnedFlight.predict(frames, aspect)
+        } catch (_: RuntimeException) { null } catch (_: LinkageError) { null } else null
+        val (automatic, uncertainTiming) = combineFlight(rules, learned, rulesUncertain)
+        fun nearest(time: Double) = frames.minBy { abs(it.tMs - time) }.tMs
+        val suggestion = if (!manual && rules == null) learned?.edges?.let {
+            val start = nearest(it.takeoffMs)
+            val end = nearest(it.contactMs)
+            if (end > start) FlightSuggestion(start, end) else null
+        } else null
+        val flightStart = takeoffMs ?: automatic?.takeoffMs?.let(::nearest)
+        val initialContact = landingMs ?: automatic?.contactMs?.let(::nearest)
+        val flightMs = if (manual) (landingMs!! - takeoffMs!!).toDouble()
+            else automatic?.let { it.contactMs - it.takeoffMs }
         // Observations bracket each edge; dropped frames and frame-rate quantisation do not imply exact contact.
-        val flightMin = landing?.let { t[it.lastAir] - t[it.firstAir] }
-        val flightMax = landing?.let { t[it.contact] - t[it.lastGround] }
+        val averaged = automatic != null && automatic != rules
+        val flightMin = if (averaged) maxOf(0L,
+            (frames.lastOrNull { it.tMs <= automatic!!.contactMs } ?: frames.first()).tMs -
+                (frames.firstOrNull { it.tMs >= automatic!!.takeoffMs } ?: frames.last()).tMs)
+            else landing?.let { t[it.lastAir] - t[it.firstAir] }
+        val flightMax = if (averaged) (frames.firstOrNull { it.tMs >= automatic!!.contactMs } ?: frames.last()).tMs -
+            (frames.lastOrNull { it.tMs <= automatic!!.takeoffMs } ?: frames.first()).tMs
+            else landing?.let { t[it.contact] - t[it.lastGround] }
         val rebound = landing != null && landing.firstAir > 0 && (test == "cmj" || candidates.indexOf(landing) > 0)
         val heightCm = if (flightMs != null && (manual || rebound)) G * (flightMs / 1000).pow(2) / 8 * 100 else null
 
@@ -261,7 +290,20 @@ object JumpAnalyzer {
             quality = quality,
             warnings = warnings,
         )
-        return Analysis(metrics, initialContact, candidates.size, flightMin, flightMax, flightStart)
+        return Analysis(metrics, initialContact, candidates.size, flightMin, flightMax, flightStart, suggestion)
+    }
+
+    /** Rules alone authorize an automatic flight; learned-only edges remain an editor suggestion. */
+    internal fun combineFlight(rules: LearnedFlight.Edges?, learned: LearnedFlight.Prediction?,
+        rulesUncertain: Boolean = false): Pair<LearnedFlight.Edges?, Boolean> {
+        if (rules == null) return null to false
+        if (learned == null) return rules to rulesUncertain
+        val edges = learned.edges
+        return if (edges != null && abs(rules.takeoffMs - edges.takeoffMs) <= 100 &&
+            abs(rules.contactMs - edges.contactMs) <= 100)
+            LearnedFlight.Edges((rules.takeoffMs + edges.takeoffMs) / 2,
+                (rules.contactMs + edges.contactMs) / 2) to false
+        else rules to true
     }
 
     private fun isSideView(frames: List<Frame>, aspect: Float): Boolean {

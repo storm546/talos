@@ -72,7 +72,7 @@ class ManualEdgesTest {
     }
 
     @Test
-    fun detectedTakeoffIsTheStartOfTheReportedFlight() {
+    fun automaticEdgesSnapToFramesWhileDurationUsesMeanEstimates() {
         val jump = frames().map { frame ->
             val elapsed = (frame.tMs - 600) / 1000.0
             val lift = if (elapsed in 0.0..0.4) (9.81 * elapsed * (0.4 - elapsed) / 2 / 1.8).toFloat() else 0f
@@ -82,7 +82,13 @@ class ManualEdgesTest {
         }
         val result = JumpAnalyzer.analyzeWithLanding(jump, "cmj")
         assertNotNull(result.takeoffMs)
-        assertEquals(result.metrics.flightTimeMs!!, (result.contactMs!! - result.takeoffMs!!).toDouble(), 0.0)
+        val rules = JumpAnalyzer.analyzeRulesWithLanding(jump, "cmj")
+        val learned = LearnedFlight.predict(jump, 9f / 16f)
+        val (edges, _) = JumpAnalyzer.combineFlight(LearnedFlight.Edges(
+            rules.takeoffMs!!.toDouble(), rules.contactMs!!.toDouble()), learned)
+        assertEquals(edges!!.contactMs - edges.takeoffMs, result.metrics.flightTimeMs!!, 0.0)
+        assertEquals(jump.minBy { kotlin.math.abs(it.tMs - edges.takeoffMs) }.tMs, result.takeoffMs)
+        assertEquals(jump.minBy { kotlin.math.abs(it.tMs - edges.contactMs) }.tMs, result.contactMs)
         val manual = JumpAnalyzer.analyzeWithLanding(jump, "cmj", takeoffMs = 480, landingMs = 1040)
         assertEquals(560.0, manual.metrics.flightTimeMs!!, 0.0)
         assertEquals(listOf("manual_edges"), manual.metrics.warnings)

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="suggested_edges">Тези кадри за отлепяне и приземяване са предложение. Потвърдете ги, преди да ги приложите.</string>
     <string name="app_name">JumpScan</string>
     <string name="brand">JUMPSCAN</string>
     <string name="sign_in">Вход</string>
