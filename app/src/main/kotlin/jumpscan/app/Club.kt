@@ -5,6 +5,7 @@ import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
 import java.time.Clock
+import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -15,9 +16,13 @@ internal fun todayLocal(clock: Clock = Clock.systemDefaultZone()): String = Loca
 internal fun localDate(value: String, locale: Locale): String =
     LocalDate.parse(value).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale))
 
+// Android 8–13 libcore predates JDK 12, so Instant.parse rejects offsets like +00:00.
+// OffsetDateTime.parse accepts both Z and +00:00.
+private fun instant(value: String): Instant = OffsetDateTime.parse(value).toInstant()
+
 internal fun localDateTime(value: String, locale: Locale, zone: ZoneId = ZoneId.systemDefault()): String =
     DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
-        .withLocale(locale).withZone(zone).format(Instant.parse(value))
+        .withLocale(locale).withZone(zone).format(instant(value))
 
 internal data class ClubSession(val id: Long, val title: String, val startsAt: String, val place: String,
     val test: String, val trials: Int, val jumpCount: Int, val cancelled: Boolean)
@@ -34,9 +39,9 @@ internal fun parseSessions(value: String): List<ClubSession> {
                 else -> throw IllegalArgumentException("Invalid session flag")
             }).also {
             require(it.id > 0 && it.test in listOf("cmj", "drop_jump") && it.trials in 1..5 && it.jumpCount >= 0)
-            Instant.parse(it.startsAt)
+            instant(it.startsAt)
         }
-    }.sortedBy { Instant.parse(it.startsAt) }
+    }.sortedBy { instant(it.startsAt) }
 }
 
 internal val checkinKeys = setOf("sleep", "fatigue", "soreness", "stress", "mood", "training_minutes", "rpe")
@@ -63,6 +68,6 @@ internal fun parseComments(value: String): List<ClubComment> {
         ClubComment(row.getLong("id"), row.getString("author_name"), row.getString("author_role"),
             row.getString("body"), row.getString("created_at"),
             if (row.isNull("jump_id")) null else row.getLong("jump_id"),
-            if (row.isNull("session_id")) null else row.getLong("session_id")).also { Instant.parse(it.createdAt) }
-    }.sortedWith(compareByDescending<ClubComment> { Instant.parse(it.createdAt) }.thenByDescending { it.id })
+            if (row.isNull("session_id")) null else row.getLong("session_id")).also { instant(it.createdAt) }
+    }.sortedWith(compareByDescending<ClubComment> { instant(it.createdAt) }.thenByDescending { it.id })
 }

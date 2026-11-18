@@ -806,3 +806,121 @@ before uninstall. The temporary mock was stopped by its recorded, command-checke
 emulator was stopped with adb emu kill. Final checks found no adb device, emulator/mock process or
 listener on port 8765. Original kit clips and fixtures were retained. No deployment, publication,
 push, unrelated workload stop or service restart occurred.
+
+## 2026-11-18 review fixes
+
+An independent review of the club-platform code found defects; these were fixed and checked.
+
+- Timestamps: every server timestamp (sessions, comments) is now parsed with OffsetDateTime, which
+  accepts both `Z` and `+00:00`. The real server emits `+00:00`, and Instant.parse on Android 8–13
+  libcore (older than JDK 12) rejects it. app/tools/mock_api.py now emits `+00:00` too. The
+  instrumentation check parses both forms. The test emulator is API 34, which already accepts
+  offsets in Instant.parse, so this run cannot prove the old failure; the fix follows from the
+  documented libcore difference.
+- Offline queue: a permanent rejection (400–499 except 401, 408, 429) or an unreadable file is moved
+  to `*.rejected` and the rest of the queue continues; home shows a count with a short message.
+  Transient errors still stop and retry later. A jump rejected with 422 that carries a session_id
+  is retried once without it, same client_id. A missing file in sendJump counts as already sent.
+  A check-in PUT is only accepted when the response body names the day.
+- Main thread: check-in Save and Upload enqueue inside the background work helper, so the click
+  handler never waits on the upload lock or the disk.
+- Sessions: selected and result sessions are cleared on sign-out, when the signed-in user changes
+  and when the selected session is missing from the refreshed list.
+- A result that is uploaded or queued is read-only (Check frames is hidden) with a message, so
+  editing frames can no longer create a second jump.
+- Club fetches run on their own executor, so slow club requests no longer delay other screens.
+- Comments are marked read only after the newest page is shown. An empty radio group no longer
+  crashes the check-in. Sign-out works offline: the token and queue owner state are dropped locally
+  even if the server call fails.
+
+Checks: `:core:test` (55 tests, 0 failures), `:app:assembleDebug`, `:app:assembleDebugAndroidTest`,
+the instrumentation checks on the emulator, app/tools/check_mock_api.py and check_resources.py all
+passed.
+
+Observed on the emulator (API 34, Europe/Sofia) against the real server running as a fresh seeded
+throwaway database, reached through an SSH reverse tunnel:
+
+- Home listed the real seeded session with the local time (17:00 UTC shown as 7:00 PM) and the
+  feedback screen showed all comments with local times; unread count cleared.
+- A debug-replay result was uploaded with the tunnel down and queued. The coach then cancelled the
+  session. With the tunnel restored the app sent it: the server answered 422, the app retried
+  without session_id and the server stored exactly one jump with the original client_id.
+- A hand-made check-in dated 2026-10-01 (older than the server window) was refused with 422 and set
+  aside as `.rejected`; the jump queued behind it was still sent and stored once. Home showed
+  "1 item(s) could not be sent and were set aside."
+- A queued result showed the saved message and no Check frames button.
+- Signing out with the network down returned to the sign-in screen and removed the token, name and
+  user id from the app preferences.
+- A quick read-only check against the public server (demo athlete) showed the sessions list and the
+  feedback screen with correct local times. Nothing was uploaded there; opening feedback marked that
+  demo athlete's two comments as read.
+
+Screenshots (each opened and inspected) are in /root/jumpscan/logs/appfix/. The app, test package,
+emulator, tunnel, throwaway server and database were removed afterwards. The emulator already held
+about 4 GB when the run started, so the 3 GB free-memory gate was bypassed for adb commands only;
+Wi-Fi had to stay disabled in the emulator because its second network blocked 10.0.2.2.
+
+## 2026-11-18 completion and independent verification
+
+The uncommitted review fixes above were reviewed against every finding in
+`logs/review-app-club.md`. Completion also fixes the history's `created_at` display through the
+same offset-aware local-time formatter, discards the retained analysis and upload identity on
+sign-out or an authenticated account/server change, and validates that a successful check-in
+response identifies the requested day. Logout also clears local state after a 401 response.
+Save and Upload capture the queue identity before background work and check cancellation after
+acquiring the lock. A missing jump file leaves the result read-only even without a returned ID.
+Malformed check-in filenames and backup-only corrupt files cannot block the queue.
+
+The extended instrumentation covers `Z`, `+00:00` and nonzero offsets, comment local times,
+400/403/404/422 quarantine, continued delivery, 401/408/429/500 retention, a failed session
+fallback, unchanged retry client IDs, missing files and corrupt backups. No dependency was added.
+
+Verification used `builder@android-build-kit`, `/work/jumpscan-app`, and an rsync excluding
+`local.properties`, `server/`, `core/`, and `SPEC.md`. A checksum dry run confirmed that the core
+source already matched. Only one Gradle build ran, with at most one `jumpscan-worker-a` emulator
+running at a time.
+The build command was:
+
+```sh
+./gradlew --no-daemon :core:test :app:assembleDebug :app:assembleDebugAndroidTest
+```
+
+It succeeded. The core test reports contain 55 tests, no failures, no errors and no skips.
+Both APKs installed successfully, and `adb shell am instrument -w
+jumpscan.app.test/jumpscan.app.AppChecks` reported all checks passed. The resource checker passed
+all 194 English/Bulgarian strings, and `python3 app/tools/check_mock_api.py` passed.
+
+The API 34 emulator initially forced its RAM to 2560 MB, leaving the host below the 3 GiB
+available-memory gate. Validation paused and that emulator was stopped. The same AVD was restarted
+with `-lowram -memory 1024 -skin 720x1280 -feature -Vulkan`; this kept host available memory above
+the gate. UI inspection used a 128 MB heap after the stock UI inspection command was killed by
+guest memory pressure. No unrelated workload was stopped.
+
+Against `https://jumpscan.stormlabs.cloud`, the app signed in as the demo athlete and loaded
+sessions, the complete coach-note thread, and history with `Europe/Sofia` as the device timezone.
+The public API returned session and comment timestamps ending in `+00:00`. The session at
+17:00 UTC rendered at 7:00 PM, coach notes at 06:21 UTC rendered at 8:21 AM, and history also used
+local time. No jumps, check-ins, comments, sessions or media were created on the public server.
+Only authentication, reads and the normal read marker were used; both app and inspection logins
+were signed out. No owner clip was used in this run.
+
+Additional UI checks used a temporary loopback-only threaded mock and the public stock squat
+fixture (`one-person.mp4` and the existing landmark CSV), not private clips. Upload displayed its
+cancellable busy screen while a different queued POST held the upload lock for 30 seconds.
+The uploaded result had no Check frames button and showed its read-only message. A 401 followed
+by login as another owner discarded the old result and selected session. Removing the selected
+session from the mock's list cleared the selection. Check-in opened during a 60-second sessions
+request; the server trace shows its check-in GET finishing while the sessions GET was still
+pending. The full click, UI inspection and screenshot sequence took 9.8 seconds. Check-in Save
+stored one check-in. With the loopback forwarding removed, sign-out returned to login and removed
+the token and owner ID. The UI driver was corrected to use the initial "How I feel today" label
+rather than waiting for the club request to replace it with the status label.
+
+Both APKs were uninstalled, the device's temporary stock clip and UI dump were removed, and the
+emulator and temporary mock were stopped. Final checks found no adb device, emulator, Gradle
+daemon, mock process or port 8765 listener. The kit's original samples were retained.
+
+All 16 screenshots were opened and inspected. Screenshots and command logs are in
+`/root/jumpscan/logs/appfinish/`. This run uses API 34;
+Android API 26–33 runtime verification remains a limitation, although the timestamp parser no
+longer depends on their `Instant.parse` behavior.

@@ -22,6 +22,10 @@ internal class PendingUploads(root: File, server: String, owner: Long) {
 
     fun count(): Int = files().size
 
+    /** Items set aside after a permanent rejection, kept here for diagnosis. */
+    fun rejectedCount(): Int = directory.listFiles().orEmpty().map { it.name.removeSuffix(".bak") }
+        .filter { it.endsWith(".rejected") }.distinct().size
+
     private fun write(file: File, body: JSONObject) {
         if (!directory.isDirectory && !directory.mkdirs()) throw AppError(R.string.pending_save_failed)
         val atomic = AtomicFile(file)
@@ -49,7 +53,7 @@ internal class PendingUploads(root: File, server: String, owner: Long) {
 
     fun checkin(day: String): JSONObject? = files().firstOrNull { it.name == "checkin-$day.json" }?.let { read(it) }
 
-    private fun read(file: File): JSONObject = try {
+    private fun read(file: File): JSONObject? = if (!file.exists() && !File(file.path + ".bak").exists()) null else try {
         val bytes = AtomicFile(file).readFully()
         require(bytes.size <= 65_536)
         JSONObject(String(bytes, Charsets.UTF_8)).also { body ->
@@ -74,30 +78,52 @@ internal class PendingUploads(root: File, server: String, owner: Long) {
         if (file.exists() || File(file.path + ".bak").exists()) throw AppError(R.string.pending_remove_failed)
     }
 
-    fun sendJump(name: String, post: (JSONObject) -> Long): Long {
+    /** Move an item aside for diagnosis so it never blocks the rest of the queue. */
+    private fun quarantine(file: File) {
+        val bak = File(file.path + ".bak")
+        if (bak.exists() && !bak.renameTo(File(file.path + ".rejected.bak"))) throw AppError(R.string.pending_save_failed)
+        if (file.exists() && !file.renameTo(File(file.path + ".rejected"))) throw AppError(R.string.pending_save_failed)
+    }
+
+    fun sendJump(name: String, post: (JSONObject) -> Long): Long? {
         require(!name.contains('/') && !name.startsWith("checkin-"))
         val file = File(directory, name)
-        val id = post(read(file))
+        val body = read(file) ?: return null // Already sent and removed.
+        val id = try {
+            post(body)
+        } catch (e: ApiError) {
+            // A jump rejected only for its session is retried once without it, same client_id.
+            if (e.status == 422 && body.has("session_id")) {
+                body.remove("session_id")
+                post(body)
+            } else throw e
+        }
         remove(file)
         return id
     }
 
     fun sendCheckin(day: String, put: (String, JSONObject) -> Unit) {
-        require(LocalDate.parse(day).toString() == day)
         val file = File(directory, "checkin-$day.json")
-        put(day, read(file))
+        val body = read(file) ?: return // Already sent and removed.
+        put(day, body)
         remove(file)
     }
 
-    /** Failed requests and unreadable files remain available. Check-ins replace by their natural day key. */
+    /** A permanent rejection or unreadable file is set aside and the rest still send; transient errors stop. */
     fun send(sent: MutableMap<String, Long>, put: (String, JSONObject) -> Unit = { _, _ ->
         throw AppError(R.string.pending_unreadable)
     }, post: (JSONObject) -> Long) {
         for (file in files()) {
             if (Thread.currentThread().isInterrupted) throw InterruptedException()
-            if (file.name.startsWith("checkin-")) {
-                sendCheckin(file.name.removePrefix("checkin-").removeSuffix(".json"), put)
-            } else sent[file.name] = sendJump(file.name, post)
+            try {
+                if (file.name.startsWith("checkin-")) {
+                    sendCheckin(file.name.removePrefix("checkin-").removeSuffix(".json"), put)
+                } else sendJump(file.name, post)?.let { sent[file.name] = it }
+            } catch (e: ApiError) {
+                if (e.status in 400..499 && e.status !in setOf(401, 408, 429)) quarantine(file) else throw e
+            } catch (e: AppError) {
+                if (e.resource == R.string.pending_unreadable) quarantine(file) else throw e
+            }
         }
     }
 

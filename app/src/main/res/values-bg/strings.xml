@@ -93,6 +93,8 @@
     <string name="signout_error">Неуспешен изход: %1$s</string>
     <string name="progress">%1$d%% · Видеото остава на устройството</string>
     <string name="uploaded">Изпратен скок №%1$d</string>
+    <string name="uploaded_readonly">Този резултат е запазен. За да промените измерване, заснемете и изпратете нов скок.</string>
+    <string name="pending_rejected">%1$d запис(а) не можаха да бъдат изпратени и бяха отделени.</string>
     <string name="history_summary">Скокове: %1$d · най-новите първо</string>
     <string name="history_item">№%1$d · %2$s</string>
     <string name="history_numbers">%1$s\nПиково сгъване ляво / дясно (°): %2$s / %3$s\nОтношение колене/глезени: %4$s</string>

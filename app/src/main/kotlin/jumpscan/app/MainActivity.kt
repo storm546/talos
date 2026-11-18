@@ -29,6 +29,7 @@ import java.util.concurrent.Future
 
 class MainActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
+    private val clubExecutor = Executors.newSingleThreadExecutor()
     private var task: Future<*>? = null
     private var generation = 0
     private val prefs by lazy { getSharedPreferences("account", MODE_PRIVATE) }
@@ -228,6 +229,14 @@ class MainActivity : Activity() {
                 }
                 Triple(newToken, user.getString("name"), user.getLong("id"))
             }, { (newToken, name, id) ->
+                val prior = prefs.getLong("user_id", 0)
+                if (prior != id || base() != address) {
+                    selectedSession = null
+                    resultSession = null
+                    if (prior != 0L) {
+                        analysis = null; edits = null; uploadedId = null; queuedId = null; clientId = null
+                    }
+                }
                 prefs.edit().putString("server", address).putString("token", newToken)
                     .putString("name", name).putLong("user_id", id).apply()
                 if (analysis != null) result() else home()
@@ -275,14 +284,25 @@ class MainActivity : Activity() {
             button(getString(R.string.sign_out)) {
                 val savedToken = token()
                 val savedBase = base()
-                work(getString(R.string.signing_out), { api(savedBase, "/api/auth/logout", "POST", savedToken) }, {
-                    prefs.edit().remove("token").remove("name").remove("user_id").apply()
-                    selectedSession = null
-                    login()
-                }, { error -> home(getString(R.string.signout_error, error)) })
+                work(getString(R.string.signing_out), { runCatching { api(savedBase, "/api/auth/logout", "POST", savedToken) } }, {
+                    signOutLocal(); login()
+                }, {
+                    signOutLocal(); login()
+                })
             }
         } else button(getString(R.string.sign_in)) { login() }
         text(getString(R.string.coach_note), 14)
+    }
+
+    private fun signOutLocal() {
+        prefs.edit().remove("token").remove("name").remove("user_id").apply()
+        selectedSession = null
+        resultSession = null
+        analysis = null
+        edits = null
+        uploadedId = null
+        queuedId = null
+        clientId = null
     }
 
     private fun sessionLabel(session: ClubSession): String = buildString {
@@ -312,7 +332,7 @@ class MainActivity : Activity() {
         if (token().isEmpty()) return
         val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
         fun current() = !isDestroyed && page === host && token() == savedToken && base() == savedBase
-        executor.submit {
+        clubExecutor.submit {
             try {
                 val rows = parseSessions(api(savedBase, "/api/sessions?from=${Instant.now()}&limit=5", token = savedToken))
                 runOnUiThread {
@@ -322,7 +342,7 @@ class MainActivity : Activity() {
                             rows.firstOrNull { it.id == chosen.id }?.let { fresh ->
                                 if (fresh.cancelled) { selectedSession = null; home(); return@runOnUiThread }
                                 selectedSession = fresh
-                            }
+                            } ?: run { selectedSession = null; home(); return@runOnUiThread }
                         }
                         rows.forEach { session ->
                             button(sessionLabel(session), parent = sessions) {
@@ -333,7 +353,7 @@ class MainActivity : Activity() {
                 }
             } catch (_: Exception) { runOnUiThread { if (current()) status.text = getString(R.string.sessions_offline) } }
         }
-        executor.submit {
+        clubExecutor.submit {
             val queued = synchronized(uploadLock) { runCatching { pending().checkin(day) }.getOrNull() }
             val done = if (queued != null) true else runCatching {
                 JSONArray(api(savedBase, "/api/checkins?athlete_id=$owner&from=$day&to=$day", token = savedToken)).length() > 0
@@ -387,17 +407,27 @@ class MainActivity : Activity() {
         val rpe = field(getString(R.string.checkin_rpe), optional("rpe"), InputType.TYPE_CLASS_NUMBER)
         text(getString(R.string.checkin_optional), 14)
         button(getString(R.string.checkin_save), primary = true) {
-            val body = try { checkinBody(groups.map { group -> group.findViewById<RadioButton>(group.checkedRadioButtonId).tag as Int },
+            val body = try { checkinBody(
+                groups.map { group ->
+                    // A group can be empty when nothing is selected; the validator reports it, no crash.
+                    val id = group.checkedRadioButtonId
+                    if (id == -1) throw AppError(R.string.checkin_invalid)
+                    group.findViewById<RadioButton>(id).tag as Int
+                },
                 minutes.text.toString(), rpe.text.toString()) } catch (e: AppError) {
                 Toast.makeText(this, errorMessage(e), Toast.LENGTH_LONG).show(); return@button
             }
             val queue = pending(); val savedToken = token(); val savedBase = base()
-            try { synchronized(uploadLock) { queue.enqueueCheckin(day, body) } }
-            catch (_: Exception) { Toast.makeText(this, getString(R.string.pending_save_failed), Toast.LENGTH_LONG).show(); return@button }
             work(getString(R.string.checkin_saving), {
-                synchronized(uploadLock) { queue.sendCheckin(day) { date, value ->
-                    api(savedBase, "/api/me/checkins/$date", "PUT", savedToken, value)
-                } }
+                synchronized(uploadLock) {
+                    if (Thread.currentThread().isInterrupted) throw InterruptedException()
+                    try { queue.enqueueCheckin(day, body) }
+                    catch (_: Exception) { throw AppError(R.string.pending_save_failed) }
+                    queue.sendCheckin(day) { date, value ->
+                        // Verify the success body, or a captive portal 200 would drop the queued check-in.
+                        require(JSONObject(api(savedBase, "/api/me/checkins/$date", "PUT", savedToken, value)).getString("day") == date)
+                    }
+                }
             }, {
                 home()
                 Toast.makeText(this, getString(R.string.checkin_saved), Toast.LENGTH_LONG).show()
@@ -409,10 +439,14 @@ class MainActivity : Activity() {
     private fun feedback(offset: Int = 0) {
         val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
         work(getString(R.string.feedback_title), {
-            val rows = parseComments(api(savedBase, "/api/comments?athlete_id=$owner&limit=50&offset=$offset", token = savedToken))
-            api(savedBase, "/api/me/read", "POST", savedToken)
-            rows
-        }, { rows -> feedbackForm(rows, offset) }, { home(it) })
+            parseComments(api(savedBase, "/api/comments?athlete_id=$owner&limit=50&offset=$offset", token = savedToken))
+        }, { rows ->
+            feedbackForm(rows, offset)
+            // Mark read only after the page is actually shown; the newest page clears the badge.
+            if (offset == 0) clubExecutor.submit {
+                runCatching { api(savedBase, "/api/me/read", "POST", savedToken) }
+            }
+        }, { home(it) })
     }
 
     private fun feedbackForm(rows: List<ClubComment>, offset: Int, draft: String = "", message: String? = null) {
@@ -513,7 +547,8 @@ class MainActivity : Activity() {
             button(getString(R.string.film_again)) { home() }
         }
         if ("low_visibility" in current.metrics.warnings) text(getString(R.string.visibility_help), 16)
-        button(getString(R.string.check_frames)) {
+        // After upload (or once queued) the result is read-only: editing frames would create a second jump.
+        if (uploadedId == null && queuedId == null) button(getString(R.string.check_frames)) {
             val suggestion = current.landing.learnedSuggestion
                 ?.takeIf { "no_flight_detected" in current.metrics.warnings }
             val takeoff = suggestion?.takeoffMs ?: current.landing.takeoffMs
@@ -547,25 +582,25 @@ class MainActivity : Activity() {
                 val savedToken = token()
                 val savedBase = base()
                 val queue = pending()
+                val sessionId = resultSession?.id
                 val uuid = clientId ?: UUID.randomUUID().toString().also { clientId = it }
-                try {
-                    synchronized(uploadLock) { queuedId = queue.enqueue(current.metrics, uuid, resultSession?.id) }
-                } catch (_: Exception) {
-                    return@button result().also { text(getString(R.string.pending_save_failed), 15, getColor(R.color.error)) }
-                }
-                val name = queuedId!!
                 work(getString(R.string.uploading), {
                     synchronized(uploadLock) {
+                        if (Thread.currentThread().isInterrupted) throw InterruptedException()
+                        val name = try { queue.enqueue(current.metrics, uuid, sessionId) }
+                            catch (_: Exception) { throw AppError(R.string.pending_save_failed) }
+                        queuedId = name // Shown as "saved" even if the send below fails.
                         queue.sendJump(name) { body ->
                             JSONObject(api(savedBase, "/api/jumps", "POST", savedToken, body)).getLong("id")
                         }
                     }
-                }, { id -> uploadedId = id; queuedId = null; result() },
+                }, { id -> if (id != null) { uploadedId = id; queuedId = null }; result() },
                     { result(); text(it, 15, getColor(R.color.error)) })
             }
         }
         if (uploadedId != null) text(getString(R.string.uploaded, uploadedId), 16, green)
         if (queuedId != null) text(getString(R.string.saved_pending), 16, green)
+        if (uploadedId != null || queuedId != null) text(getString(R.string.uploaded_readonly), 14)
         pendingControls()
         if (token().isNotEmpty()) button(getString(R.string.history)) { history() }
         button(getString(R.string.home)) { home() }
@@ -679,6 +714,10 @@ class MainActivity : Activity() {
         val count = if (token().isNotEmpty()) pending().count() else
             pendingRoot.walkTopDown().count { it.isFile && it.name.endsWith(".json") }
         text(getString(R.string.pending_count, count), 14).setPadding(0, dp(18), 0, dp(8))
+        if (token().isNotEmpty()) {
+            val rejected = pending().rejectedCount()
+            if (rejected > 0) text(getString(R.string.pending_rejected, rejected), 14, warning)
+        }
         if (count > 0) {
             if (token().isEmpty()) text(getString(R.string.pending_sign_in), 14)
             else button(getString(if (queueSending) R.string.sending_pending else R.string.send_pending)) {
@@ -701,7 +740,7 @@ class MainActivity : Activity() {
             try {
                 synchronized(uploadLock) {
                     queue.send(sent, put = { day, body ->
-                        api(savedBase, "/api/me/checkins/$day", "PUT", savedToken, body)
+                        require(JSONObject(api(savedBase, "/api/me/checkins/$day", "PUT", savedToken, body)).getString("day") == day)
                     }) { metrics ->
                         JSONObject(api(savedBase, "/api/jumps", "POST", savedToken, metrics)).getLong("id")
                     }
@@ -782,7 +821,7 @@ class MainActivity : Activity() {
                 val item = rows.getJSONObject(i)
                 // The API returns metadata and metric fields in the same object.
                 val metrics = item.optJSONObject("metrics") ?: item
-                text(getString(R.string.history_item, item.getLong("id"), item.getString("created_at").replace('T', ' ').take(19)), 16, green)
+                text(getString(R.string.history_item, item.getLong("id"), localDateTime(item.getString("created_at"), resources.configuration.locales[0])), 16, green)
                 text(getString(R.string.history_numbers,
                     getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump),
                     number(metrics, "knee_flexion_peak_l"), number(metrics, "knee_flexion_peak_r"),
@@ -859,6 +898,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         cancelWork()
         executor.shutdownNow()
+        clubExecutor.shutdownNow()
         super.onDestroy()
     }
 }

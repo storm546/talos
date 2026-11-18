@@ -93,6 +93,8 @@
     <string name="signout_error">Could not sign out: %1$s</string>
     <string name="progress">%1$d%% · Video stays on this device</string>
     <string name="uploaded">Uploaded · jump #%1$d</string>
+    <string name="uploaded_readonly">This result is saved. To change a measurement, film and upload a new jump.</string>
+    <string name="pending_rejected">%1$d item(s) could not be sent and were set aside.</string>
     <string name="history_summary">Jumps: %1$d · newest first</string>
     <string name="history_item">#%1$d · %2$s</string>
     <string name="history_numbers">%1$s\nPeak flexion L / R (°): %2$s / %3$s\nKnee / ankle ratio: %4$s</string>

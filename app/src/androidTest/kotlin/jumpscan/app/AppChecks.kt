@@ -39,6 +39,18 @@ class AppChecks : Instrumentation() {
         """)
         check(sessions.map { it.id } == listOf(1L, 2L) && sessions[1].cancelled && sessions[1].jumpCount == 1)
         check(localDateTime(sessions[0].startsAt, Locale.UK, java.time.ZoneId.of("Europe/Sofia")).contains("14:30"))
+        // The real server emits offsets (+00:00), not Z; both must parse on Android 8–13 libcore.
+        val offsetSessions = parseSessions("""[
+            {"id":1,"title":"Offset","starts_at":"2026-11-18T12:30:00+00:00","place":"Hall","test":"cmj","trials":3,"jump_count":0,"cancelled":false}]
+        """)
+        check(offsetSessions.size == 1)
+        check(localDateTime("2026-11-18T12:30:00+00:00", Locale.UK, java.time.ZoneId.of("UTC")).contains("12:30"))
+        val offsetComments = parseComments("""[
+            {"id":1,"author_name":"Coach","author_role":"coach","body":"Hi","created_at":"2026-11-18T10:00:00+00:00","jump_id":null,"session_id":null}]
+        """)
+        check(offsetComments.size == 1)
+        check(localDateTime(offsetComments.single().createdAt, Locale.UK, java.time.ZoneId.of("Europe/Sofia")).contains("12:00"))
+        check(localDateTime("2026-11-18T12:30:00+03:00", Locale.UK, java.time.ZoneId.of("Europe/Sofia")).contains("11:30"))
         for (instant in listOf("2026-11-17T22:30:00Z", "2026-06-17T21:30:00Z")) {
             val clock = java.time.Clock.fixed(java.time.Instant.parse(instant), java.time.ZoneId.of("Europe/Sofia"))
             check(todayLocal(clock) == instant.substring(0, 8) + "18")
@@ -94,8 +106,10 @@ class AppChecks : Instrumentation() {
             val sent = linkedMapOf<String, Long>()
             try { restored.send(sent) { throw IOException("Simulated network failure") }; error("Expected network failure") }
             catch (_: IOException) { check(restored.count() == 1 && sent.isEmpty()) }
-            try { restored.send(sent) { throw ApiError(401) }; error("Expected HTTP failure") }
-            catch (_: ApiError) { check(restored.count() == 1) }
+            for (status in listOf(401, 408, 429, 500)) {
+                try { restored.send(sent) { throw ApiError(status) }; error("Expected HTTP failure") }
+                catch (e: ApiError) { check(e.status == status && restored.count() == 1 && restored.rejectedCount() == 0) }
+            }
             restored.send(sent) { json ->
                 check(json.length() == 15 && json.getDouble("flight_time_ms") == 360.0)
                 check(!json.has("video") && !json.has("landmarks"))
@@ -126,11 +140,54 @@ class AppChecks : Instrumentation() {
                 check(date == day && body.getInt("training_minutes") == 40 && body.getInt("rpe") == 6)
             }) { error("Not a jump") }
             check(queue.count() == 0 && queue.checkin(day) == null)
+            // A permanent rejection is quarantined and does not block the rest of the queue.
+            val staleDay = java.time.LocalDate.parse(todayLocal()).minusDays(30).toString()
+            queue.enqueueCheckin(staleDay, checkinBody(List(5) { 3 }, "", ""))
+            queue.enqueue(metrics)
+            queue.send(linkedMapOf(), put = { date, _ ->
+                if (date == staleDay) throw ApiError(422)
+            }) { 9L }
+            check(queue.count() == 0 && queue.rejectedCount() == 1)
+            // An unreadable file is quarantined, not sent, and the queue continues.
             queue.enqueue(metrics)
             val file = root.walkTopDown().first { it.isFile && it.extension == "json" }
             file.writeText(JSONObject().put("video", "must never be sent").toString())
-            try { queue.send(linkedMapOf()) { error("Invalid payload reached network") }; error("Expected invalid payload") }
-            catch (e: AppError) { check(e.resource == R.string.pending_unreadable && queue.count() == 1) }
+            queue.enqueue(metrics, clientId = java.util.UUID.randomUUID().toString())
+            val healthyName = root.walkTopDown().map { it.name }.first { it != file.name && it.endsWith(".json") }
+            val sentMap = linkedMapOf<String, Long>()
+            queue.send(sentMap) { 5L }
+            check(queue.rejectedCount() == 2 && sentMap[healthyName] == 5L)
+            // A jump rejected only for its session is retried once without it, same client_id.
+            val rejectedSessionName = queue.enqueue(metrics, sessionId = 999)
+            val rejectedSessionId = rejectedSessionName.removeSuffix(".json")
+            var attempts = 0
+            queue.sendJump(rejectedSessionName) { body ->
+                attempts++
+                check(body.getString("client_id") == rejectedSessionId)
+                if (body.has("session_id")) throw ApiError(422)
+                6L
+            }
+            check(queue.count() == 0 && attempts == 2)
+            // Every permanent 4xx is set aside, including a failed session fallback.
+            val permanentNames = listOf(400, 403, 404, 422).associate { status ->
+                queue.enqueue(metrics, sessionId = 999).removeSuffix(".json") to status
+            }
+            val healthy = queue.enqueue(metrics)
+            val permanentSent = linkedMapOf<String, Long>()
+            queue.send(permanentSent) { body ->
+                permanentNames[body.getString("client_id")]?.let { throw ApiError(it) }
+                10L
+            }
+            check(queue.count() == 0 && queue.rejectedCount() == 6 && permanentSent[healthy] == 10L)
+            // A corrupt backup and a malformed check-in filename cannot block later work.
+            val backup = root.walkTopDown().first { it.isDirectory && it != root }
+            File(backup, "broken.json.bak").writeText("{")
+            File(backup, "checkin-invalid.json").writeText("{}")
+            queue.enqueue(metrics)
+            queue.send(linkedMapOf()) { 11L }
+            check(queue.count() == 0 && queue.rejectedCount() == 8)
+            // A missing file is already sent, not an error.
+            check(queue.sendJump(java.util.UUID.randomUUID().toString() + ".json") { error("Must not post") } == null)
         } finally { root.deleteRecursively() }
     }
 

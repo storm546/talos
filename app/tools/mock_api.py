@@ -16,13 +16,13 @@ ATHLETE = 9001
 
 
 def now():
-    return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+    return datetime.now(timezone.utc).isoformat()
 
 
 def fixture(drop_first=False):
     starts = datetime.now(timezone.utc) + timedelta(hours=2)
     return dict(jumps=[], checkins={}, attempts=[], drop_first=drop_first, sessions=[
-        dict(id=i, club_id=1, group_id=None, title=title, starts_at=(starts + timedelta(days=i - 1)).isoformat().replace('+00:00', 'Z'),
+        dict(id=i, club_id=1, group_id=None, title=title, starts_at=(starts + timedelta(days=i - 1)).isoformat(),
              place='Club hall', test='cmj', trials=3, notes='', created_by=2, cancelled=cancelled)
         for i, title, cancelled in [(1, 'Morning jumps', False), (2, 'Cancelled practice', True)]
     ], comments=[dict(id=1, athlete_id=ATHLETE, author_id=2, author_name='Demo Coach', author_role='coach',
