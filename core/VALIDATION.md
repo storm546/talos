@@ -349,3 +349,173 @@ JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=1 nice -n 15 ./gradlew --no-daemon --
 The APK remains in /work/jumpscan-side/app/build/outputs/apk/debug/app-debug.apk. Build logs,
 the APK SHA256 and machine-readable checks remain under logs/ml/side-*; research artifacts and
 private landmarks are not committed.
+
+## Form tracker — 18 November 2026
+
+The core now has `FormAnalyzer.analyze(frames, exercise, side, aspect, view)` for `squat` and
+`single_leg_squat`, plus `FormMetrics.toJson()` and the `:core:formBatch` JSON-lines task. This is
+core-only work: no screens, upload path, new dependency, angle calibration or learned model was added.
+`side` is null for two-leg squats and the anatomical `L` or `R` for single-leg squats. `view` reuses
+`JumpAnalyzer.View`; output records the resolved front/side view. The exact proposed JSON field list
+is in `/root/jumpscan/logs/form-fields.md` for the orchestrator; SPEC.md was not edited.
+
+### What is measured
+
+The tracker reuses the existing median-of-three coordinate smoothing, aspect correction, geometric
+view detection, angle, FPPA sign and visibility constants from JumpAnalyzer. Those helpers are now
+internal rather than private; jump behavior is unchanged. A side squat measures the leg with the
+most visible hip/knee/ankle triples (left on a tie); it does not need heels/toes. A single-leg squat
+always measures the requested side. The opposite knee and asymmetry stay null. Front single-leg
+FPPA needs both hips to establish the midline. Every one-leg measurement adds `single_leg_view`.
+
+A candidate is a local down-and-up cycle of smoothed image hip height, with a downward excursion
+of at least 5% of median projected thigh-plus-shank length. Local tops are tracked independently,
+rather than requiring every repetition to reach the tallest posture of the whole set. Return within
+2.5% of the local top bounds the ascent. A visible rise of at least 5% followed by a new descent of
+at least 5% can also bound the preceding ascent at its local top. Small hip motion below this gate
+is treated as sway. This assumes a fixed camera; camera motion is not independently estimated.
+
+A complete cycle requires **45 degrees minimum depth**. Depth is the mean of the independently
+measured peak flexions of the available legs, or the measured leg's peak when only one is observed.
+This threshold separates deliberate bends from small movements and the approximately 10–17 degree
+standing bias in prior jump validation. It is not a prescribed adequate squat depth or a clinical
+threshold. Fully bounded shallower candidates are `partial`, with `below_min_depth`. Front flexion
+uses world geometry; side flexion uses the aspect-corrected image plane. These remain estimates from
+a single-camera pose model, with the angle limitations documented above and in docs/validacia.md.
+
+FPPA for both measured legs is sampled at the same frame of greatest mean knee flexion; positive
+means medial, matching jumps. Each leg's peak flexion may occur at a different frame. Asymmetry is
+`abs(peak_l - peak_r) / max(peak_l, peak_r) * 100`, and zero for two straight legs. The timing bottom
+is the first maximum image hip y; it need not be the deepest knee-flexion frame. Descent and ascent
+span the observed top-zone boundary, hip bottom and observed return/local top. A flat bottom counts
+once; its hold belongs to ascent from the first maximum. With noise, the selected maximum can lie
+anywhere in the hold. These times do not establish precise physical movement onset or cessation.
+The side-only hip-below-knee flag means image hip y exceeded measured knee y at any cycle frame;
+it is not a calibrated assessment of pelvic anatomy or competition squat depth.
+
+Set medians include complete repetitions only; even-sized medians average the middle pair. Empty
+medians are null. `worst_repetition` explicitly means the shallowest complete cycle, earliest on a
+tie; it is a depth ordering, not a composite technique or injury score. Partial and unclear counts
+are separate. `hip_below_knee_count` is null in front view and counts complete cycles in side view.
+
+### Refusal and uncertainty
+
+Each measured joint must have finite required coordinates and visibility >=0.5. Front flexion also
+requires visible, finite world joints. The analyzer throws with fewer than ten usable frames,
+invalid exercise/side/aspect, malformed landmark shape or non-increasing timestamps. Required-joint
+visibility is averaged across all input frames, rejected frames included; front measured joints use
+the lower of image/world visibility. Mean quality <0.7 or any rejected frame adds `low_visibility`.
+
+Rejected frames and timestamp gaps above min(1.5 median intervals, 150 ms) split observations;
+smoothing never crosses them. Open boundaries (`incomplete_start`, `incomplete_end`), interruptions
+(`tracking_gap`), either phase shorter than 150 ms (`too_fast`), or zero-length segments
+(`degenerate_geometry`) produce `unclear` observations and `unclear_reps`. An initial mean flexion
+above 30 degrees conservatively marks an open beginning. No per-repetition measurements or bottom
+time are reported for unclear observations. The unclear count is the number of unresolved
+observations, not an inferred number of squats hidden by a gap: one interrupted squat can create
+two unclear halves, while an unobserved interval can hide several squats. An otherwise unrepresented
+gap gets an explicit unclear observation covering the clip. A batch refusal has status `error` and
+metrics null; it is never scored as a successful zero count.
+
+### Synthetic checks and development history
+
+The new synthetic tests prescribe image FPPA independently of world knee flexion and generate
+planted-ankle squat series. They check repetition count, independently known peak angles and
+asymmetry, a 44/35.2 degree partial cycle, a 400 ms bottom pause, small Gaussian landmark noise,
+isolated landmark spikes, both single-leg sides, positive/negative FPPA, side image/aspect behavior,
+automatic profile detection, true/false hip-below-knee flags, null fields, medians, incomplete
+boundaries, visibility/timestamp gaps, slow standing-height drift, malformed input, missing world
+observations, degenerate geometry, insufficient visible frames, still-pose behavior, and equivalent
+plain/compressed batch tracks with explicit malformed-file refusal.
+
+The initial global-top design passed synthetic checks but returned **0 complete cycles on both real
+inputs**, versus visual counts 4 and 9. Those failed predictions are retained in
+`logs/form/initial-results.jsonl`. After seeing that failure, both clips were designated development
+checks. The correction tracks each local top using the same numerical thresholds, with a new
+synthetic drift guard. Therefore the final results on those two clips are **in-sample development
+checks**, not held-out accuracy. No numerical threshold was selected by searching their counts.
+The protocol, initial/final source hashes, annotation notes, rendered sheets, scripts and full JSON
+outputs remain in uncommitted `logs/form/`; no private landmarks were copied into the repository.
+
+### Visual repetition reference and available data
+
+The stock fixture `squat_jumps_one_person.csv.gz` has 300 frames, 0–9976 ms, at 30000/1001 fps,
+400x720 crop of the man in Pexels video 5034571. Before looking at analyzer outputs, Visual inspection
+counted chronological landmark skeletons rendered every third frame (about 100 ms). Four fully
+bounded cycles were labelled, approximately frames 43–86, 100–145, 159–199 and 211–250, with bottom
+frames approximately 63, 120, 174 and 228. The file starts crouched and its last return is clipped;
+those two boundary motions were labelled incomplete. This is a visual annotation, **not an
+independent human rater** and not a reference for exact angles, depth threshold or phase times.
+
+The already installed `/work/jumpscan-samples/pexels-5034571-hd.mp4` supplies another athlete in the
+same recording. The woman was extracted at crop x=690,y=0,width=400,height=720 using the existing
+heavy MediaPipe model and app detection/presence/tracking confidence 0.5; all 483 frames yielded
+poses. Before scoring, full-video contact sheets at 2 fps and landmark sheets every third frame
+were inspected. Nine fully bounded cycles plus two clipped boundary motions were labelled; bottom
+frames approximately 63, 120, 177, 231, 285, 312, 343, 387 and 421. The dense sequence resolves the
+fast separate cycles near 10 and 11 seconds. This shares scene and camera with the stock fixture.
+
+After the local-top correction, an unscored temporal tail of the man was extracted at
+x=350,y=0,width=400,height=720, source frames 300–482 (10010–16082 ms). Every second landmark frame
+(about 67 ms) was visually inspected before scoring. Three fully bounded down/up cycles plus a final
+clipped descent were labelled. Approximate exported-frame intervals: 20–58, 80–106 and 120–154;
+bottoms approximately 34, 90 and 138. The second cycle rises into a visible jump, so this is a
+**temporal stress check with shared development athlete/source**, not an independent pure-squat
+validation. The tracker was frozen before scoring this segment and was not tuned to its result.
+
+The kit inventory under `/work/jumpscan-data/commons-*` and `kaggle-*` contains **no retained squat
+or lunge video/track**. Commons' staggered-squat-jump instruction video has only a contact sheet,
+ffprobe and rejection metadata; SOURCE.txt explicitly says the source video was not retained.
+Kaggle has only jump_in_place, jump_left, jump_right, looking_down and still_pose classes. Those
+were not relabelled as squat tests. Other installed sample videos show a burpee or box jumps with
+cropped bodies and were not substituted for pure-squat validation. No clips were downloaded and
+no packages were installed. No independent squat/lunge test source is available on this kit.
+
+### Results and practical limits
+
+| Clip / role | Visual complete count | Detected complete | Detected partial | Detected unclear | Visual incomplete boundary motions |
+|---|---:|---:|---:|---:|---:|
+| Stock man, first 10 s — development | 4 | 5 | 0 | 1 | 2 |
+| Pexels 5034571 woman, full source — development | 9 | 8 | 0 | 2 | 2 |
+| Pexels 5034571 man, frames 300–482 — unscored temporal stress check | 3 | 3 | 0 | 1 | 1 |
+
+All three resolve to front view, have no analyzer refusal, and return `unclear_reps`. The final
+stock return is accepted by the counter's top tolerance while the stricter visual annotation leaves
+it incomplete. The woman's fast sequence contains a missed cycle. Neither mismatch was tuned away.
+The warning records open boundary observations; it does **not** independently identify every missed
+interior cycle. Matching the count on one shared-source tail segment is insufficient to establish
+reliable squat counting across athletes, cameras, views, loads or exercise speeds.
+
+No independent real single-leg squat, side squat, lunge, or squat angle/FPPA/asymmetry/tempo reference
+is installed. Those measurements have synthetic geometry checks only. The previously measured jump
+angle errors are not a validation of squat angles. Independent squat/lunge counting and physical
+metric accuracy remain blocked by data availability; no clinical or source-independent accuracy
+claim is made.
+
+Final core validation on `android-build-kit` in the isolated `/work/jumpscan-form` copy: **65 tests
+passed, zero failures, errors or skips**, including ten new form tests, existing public benchmark
+checks and all existing private-fixture checks. Private fixtures remained on the kit. All Gradle
+invocations in this copy were serial, nice level 15, one worker, one active CPU and a 768 MB heap;
+free memory and uptime were checked. The emulator and `/work/jumpscan-app` were not used. The final
+analyzer and batch source SHA256 values match the freeze made before the tail test.
+
+Reproduce the core tests and both batches on the kit:
+
+```sh
+cd /work/jumpscan-form
+JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=1 nice -n 15 ./gradlew --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx768m -XX:ActiveProcessorCount=1 -Dfile.encoding=UTF-8" :core:test
+JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=1 nice -n 15 ./gradlew --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx768m -XX:ActiveProcessorCount=1 -Dfile.encoding=UTF-8" :core:formBatch -Pin=/work/jumpscan-form/form-validation/input -Pout=/work/jumpscan-form/form-validation/development-results.jsonl
+JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=1 nice -n 15 ./gradlew --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx768m -XX:ActiveProcessorCount=1 -Dfile.encoding=UTF-8" :core:formBatch -Pin=/work/jumpscan-form/form-validation/heldout -Pout=/work/jumpscan-form/form-validation/heldout-results.jsonl
+```
+
+The development input directory contains exactly the repository stock gzip and the second-person
+export; the temporal directory contains exactly the man-tail export. Scripts to regenerate those
+public exports using the already installed model and environment are
+`logs/form/extract_second_person.py` and `logs/form/extract_man_tail.py`; the model path is recorded
+there. `logs/form/render_landmarks.py` regenerates the annotation sheets. Extraction produced
+483/483 and 183/183 pose frames respectively, using source timestamps at 30000/1001 fps. Pexels
+source/license provenance is retained in `/work/jumpscan-samples/SOURCE.txt` (Pexels video 5034571).
+The batch accepts plain/gzipped app-format landmark CSVs and optional `-Pexercise=single_leg_squat`,
+`-Pside=L` or `R`, and `-Pview=FRONT` or `SIDE`. It writes one JSON record per clip with full metrics
+or an explicit refusal. Test XML, build logs, both final JSON outputs, initial failed outputs,
+inventory and visual count notes are retained under `/root/jumpscan/logs/form/`.

@@ -10,8 +10,8 @@ import kotlin.math.sqrt
 
 object JumpAnalyzer {
     private const val LANDMARKS = 33
-    private const val MIN_VISIBILITY = 0.5f      // minimum visibility of each measured joint or observed foot point
-    private const val MIN_USABLE_FRAMES = 10
+    internal const val MIN_VISIBILITY = 0.5f      // minimum visibility of each measured joint or observed foot point
+    internal const val MIN_USABLE_FRAMES = 10
     private const val AIRBORNE_FRACTION = 0.025  // minimum displacement as a fraction of the local leg length
     private const val MIN_AIRBORNE_FRAMES = 2    // a single airborne frame is jitter, not a jump
     private const val WINDOW_MS = 500L           // landing window after initial contact
@@ -21,10 +21,10 @@ object JumpAnalyzer {
     private const val LOW_FPS = 24.0
     private const val LOW_QUALITY = 0.7
     private const val G = 9.81
-    private val LEFT = Leg(hip = 23, knee = 25, ankle = 27)
-    private val RIGHT = Leg(hip = 24, knee = 26, ankle = 28)
+    internal val LEFT = Leg(hip = 23, knee = 25, ankle = 27)
+    internal val RIGHT = Leg(hip = 24, knee = 26, ankle = 28)
 
-    private class Leg(val hip: Int, val knee: Int, val ankle: Int)
+    internal class Leg(val hip: Int, val knee: Int, val ankle: Int)
 
     enum class View { AUTO, FRONT, SIDE }
 
@@ -32,7 +32,7 @@ object JumpAnalyzer {
      * Landmark positions of one frame. Image poses have x already multiplied by the aspect ratio and z = 0
      * (image plane only); world poses are metres with the real z (depth).
      */
-    private class Pose(val x: DoubleArray, val y: DoubleArray, val z: DoubleArray)
+    internal class Pose(val x: DoubleArray, val y: DoubleArray, val z: DoubleArray)
 
     /**
      * [aspect] = image width / height (default 9/16, portrait video). Normalised x and y are not in the
@@ -308,7 +308,7 @@ object JumpAnalyzer {
         else rules to true
     }
 
-    private fun isSideView(frames: List<Frame>, aspect: Float): Boolean {
+    internal fun isSideView(frames: List<Frame>, aspect: Float): Boolean {
         val widths = frames.mapNotNull { f ->
             val p = f.landmarks
             if (listOf(11, 12, 23, 24).any { p[it].visibility < MIN_VISIBILITY }) return@mapNotNull null
@@ -323,7 +323,7 @@ object JumpAnalyzer {
     }
 
     /** Median of three neighbouring frames per coordinate: removes jitter spikes, keeps landing edges sharp. */
-    private fun smooth(raw: List<Pose>): List<Pose> = raw.indices.map { i ->
+    internal fun smooth(raw: List<Pose>): List<Pose> = raw.indices.map { i ->
         if (i == 0 || i == raw.lastIndex) raw[i]
         else Pose(DoubleArray(LANDMARKS) { median3(raw[i - 1].x[it], raw[i].x[it], raw[i + 1].x[it]) },
             DoubleArray(LANDMARKS) { median3(raw[i - 1].y[it], raw[i].y[it], raw[i + 1].y[it]) },
@@ -337,16 +337,16 @@ object JumpAnalyzer {
 
     private fun median3(a: Double, b: Double, c: Double) = max(min(a, b), min(max(a, b), c))
 
-    private fun median(values: List<Double>) = values.sorted()[values.size / 2]
+    internal fun median(values: List<Double>) = values.sorted()[values.size / 2]
 
-    private fun dist(p: Pose, a: Int, b: Int) = hypot(p.x[a] - p.x[b], p.y[a] - p.y[b])
+    internal fun dist(p: Pose, a: Int, b: Int) = hypot(p.x[a] - p.x[b], p.y[a] - p.y[b])
 
     /**
      * Angle in degrees between thigh (hip to knee) and shank (knee to ankle); 0 = straight leg.
      * On a world pose this is knee flexion (180 - 3D hip-knee-ankle angle); on an image pose (z = 0) it is the
      * image-plane angle that FPPA is built from.
      */
-    private fun deviation(p: Pose, leg: Leg): Double {
+    internal fun deviation(p: Pose, leg: Leg): Double {
         val tx = p.x[leg.knee] - p.x[leg.hip]
         val ty = p.y[leg.knee] - p.y[leg.hip]
         val tz = p.z[leg.knee] - p.z[leg.hip]
@@ -362,7 +362,7 @@ object JumpAnalyzer {
      * Signed FPPA: [deviation] is positive when the knee lies on the body-midline side of the hip-ankle line.
      * The midline is the midpoint of the hips, so the sign is right for both legs whatever the left/right labelling.
      */
-    private fun fppa(p: Pose, leg: Leg): Double {
+    internal fun fppa(p: Pose, leg: Leg): Double {
         val hx = p.x[leg.hip]
         val dy = p.y[leg.ankle] - p.y[leg.hip]
         val lineX = if (abs(dy) < 1e-9) hx else hx + (p.x[leg.ankle] - hx) * (p.y[leg.knee] - p.y[leg.hip]) / dy

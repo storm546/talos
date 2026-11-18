@@ -28,3 +28,19 @@ tasks.register('batch', JavaExec) {
         args rootProject.file(project.property('in')).path, rootProject.file(project.property('out')).path
     }
 }
+
+// Usage: :core:formBatch -Pin=<dir> -Pout=<file.jsonl> [-Pexercise=single_leg_squat -Pside=L -Pview=FRONT]
+tasks.register('formBatch', JavaExec) {
+    group = 'verification'
+    description = 'Scores squat landmark CSVs, retaining every repetition and refusal in JSON lines.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'jumpscan.core.FormBatch'
+    doFirst {
+        if (!project.hasProperty('in') || !project.hasProperty('out')) {
+            throw new GradleException('Usage: :core:formBatch -Pin=<dir> -Pout=<file.jsonl>')
+        }
+        args rootProject.file(project.property('in')).path, rootProject.file(project.property('out')).path,
+            project.findProperty('exercise') ?: 'squat', project.findProperty('side') ?: 'none',
+            project.findProperty('view') ?: 'AUTO'
+    }
+}
