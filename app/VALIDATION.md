@@ -345,7 +345,9 @@ task and were left untouched. The mock API was stopped by its recorded PID and t
 `adb emu kill`. A final check found no adb device, no qemu or mock process, and port 8765 refused
 connections. No deployment, publication, push or service restart occurred.
 
-## Release build — 18 November 2026 (blocked)
+## Release build — 18 November 2026
+
+### Initial attempt (blocked)
 
 Release preparation adds optional signing through `-PjumpscanKeystore`, keeps versionCode 1,
 sets versionName to 1.0.0, disables minification, and restricts release native libraries to
@@ -419,6 +421,152 @@ available, no adb device, no Gradle or emulator process, and the signing file pe
 task's waiting shell was stopped. No unrelated workload, service or package was changed. The
 signed jury APK and all pending emulator checks must be completed before calling this release
 validated; the newer committed detector also has its separately documented test failures.
+
+### Completion check — 18 November 2026
+
+The continuation built the current `stage` app and core sources, starting at
+`9193520560fd047c6359f3488b6e4a5569506034`, rather than the earlier isolated snapshot.
+Sources were synced to `/work/jumpscan-app` on `android-build-kit` with
+`rsync --exclude local.properties`, excluding Git metadata, build products and logs.
+The existing external keystore was reused. No signing secret or private video was copied
+into the repository. Signing directories and files still have modes 700 and 600 respectively.
+
+The kit initially had 5 GiB available and low load. Builds ran sequentially with JDK 17,
+`/opt/android-sdk` and one Gradle worker:
+
+```sh
+cd /work/jumpscan-app
+timeout 1200 nice -n 15 ./gradlew --no-daemon --max-workers=1 \
+  :core:test :app:assembleDebug :app:assembleRelease \
+  -PjumpscanKeystore=/work/jumpscan-keys/keystore.properties
+```
+
+The build passed in 2m 3s. All 53 core tests passed, with zero failures, errors or skips.
+Both debug and signed release APKs assembled successfully. No additional app code fix was
+needed in this continuation. The build log and per-suite test counts are retained in
+`logs/release/current-build.log` and `logs/release/core-test-results.txt`.
+
+The ARM release APK was preserved before building the emulator variant. Verification passed:
+
+```sh
+/opt/android-sdk/build-tools/35.0.0/apksigner verify --print-certs /work/jumpscan-release-arm.apk
+/opt/android-sdk/build-tools/35.0.0/zipalign -c 4 /work/jumpscan-release-arm.apk
+```
+
+Only the certificate SHA-256 digest was printed from `apksigner` output:
+`a1e6b96890cf936dab8c9d98456e94be84c0930058bd38749b09c35525782cfc`.
+Signature verification returned exit 0 and zip alignment passed. The APK is 60,730,924 bytes
+(57.92 MiB) and contains exactly `arm64-v8a` and `armeabi-v7a` native libraries. Its only bundled
+model is `assets/pose_landmarker_heavy.task`, 30,664,242 bytes (29.24 MiB), stored uncompressed.
+
+The signed jury artifact is `/root/jumpscan/logs/release/jumpscan-1.0.apk`. Its SHA-256 is
+`ed62bb9e8991e8b7bfab179ca86af333a2337a40c2b2c1ae6db246b3554072cf`.
+The copy matched the preserved kit APK, and `sha256sum -c SHA256SUMS` passed in
+`logs/release/`. The APK was not published.
+
+#### Fresh ordinary analyses
+
+Both private source clips were analysed afresh through ordinary VIEW intents on the debug
+build, with no `analysis_mode` extra or replay input. The helper copied each clip directly
+from `/work/jumpscan-samples/private/` to the emulator, never through this repository:
+
+```sh
+python3 logs/release/run-fresh.py 1
+python3 logs/release/run-fresh.py 2
+```
+
+The wrapper captures full logcat and runs `emulator_check.py --tag fresh --mode default`.
+Each run waited for new decode, full-pass and metric logs and the result UI tree. The heavy
+model processed every source frame. The API 34 `jumpscan-worker-a` guest had 2048 MB RAM,
+two cores and a 720 × 1280 display. Emulator 37 otherwise raises the RAM request to 2560 MB,
+so `-qemu -m 2048` kept the actual guest at the intended normal size. No 1024 MB guest was
+used for either analysis.
+
+Memory was checked with `free -g` and `uptime`. The continuation waited whenever the start
+gate was below 3 GiB. Both analysis starts recorded 3 GiB available; the host sometimes fell
+to 2 GiB during jump1. Only this task's emulator instances and waiting shells were stopped;
+no unrelated job, service or resource limit was changed. Earlier renderer and boot attempts
+waited below the gate and did not run analyses.
+
+| Check | jump1 | jump2 |
+| --- | ---: | ---: |
+| Frames | 232 | 247 |
+| Analysis timer (s) | 268.979 | 311.905 |
+| Decode timer (s) | 242.166 | 283.619 |
+| Inference timer (s) | 24.325 | 26.675 |
+| Contact / preview (ms) | 4027 / 4027 | 5847 / 5847 |
+
+The analysis timer ends before core scoring and preview rendering. These are individual
+shared-host runs, not benchmark medians. All 14 exported metric fields follow:
+
+| Field | jump1 | jump2 |
+| --- | ---: | ---: |
+| test | cmj | cmj |
+| fps | 24.91 | 24.97 |
+| flight_time_ms | 280.00 | 360.00 |
+| jump_height_cm | 9.61 | 15.89 |
+| knee_flexion_contact_l | 25.34 | 30.01 |
+| knee_flexion_contact_r | 12.96 | 28.27 |
+| knee_flexion_peak_l | 34.93 | 48.42 |
+| knee_flexion_peak_r | 29.51 | 46.62 |
+| fppa_peak_l | -17.62 | -29.32 |
+| fppa_peak_r | 11.65 | 3.16 |
+| knee_ankle_ratio | 0.61 | 0.82 |
+| flexion_asymmetry_pct | 15.52 | 3.73 |
+| quality | 0.87 | 0.89 |
+| warnings | [uncertain_timing] | [uncertain_timing] |
+
+Both flights exactly match the reviewed 280 / 360 ms references, within one source frame
+(about 40 ms). Numeric fields match the earlier full reference; the current detector reports
+`uncertain_timing` on both clips, so the warning arrays are not identical to the older empty
+arrays. Neither result was manually edited.
+
+Full logcat again contains `FrameDecoder` errors `err -11`, preceded by
+`Received error -11 (WOULD_BLOCK) instead of output` and followed by another decoder attempt.
+Both ordinary runs nevertheless completed all frames, core metrics and preview extraction.
+No fatal exception or failed analysis occurred. The log entries were recoverable platform
+decoder attempts in these runs; their presence alone does not demonstrate an app failure.
+This does not establish the cause of the earlier aborted run. No speculative decoder change
+was made. Full logs, landmarks, metrics and result XML are in `logs/release/fresh-jump1*`
+and `fresh-jump2*`. An experimental EGL renderer produced black debug screen captures;
+those captures are not visual evidence. The release checks below used the standard renderer.
+
+#### Release UI and cleanup
+
+The x86_64 AVD used a temporary release build with its ABI filters cleared by an external
+init script. The repository's ARM filters were never edited:
+
+```sh
+cd /work/jumpscan-app
+nice -n 15 ./gradlew --no-daemon --max-workers=1 \
+  --init-script /work/jumpscan-release-emulator.gradle \
+  :app:assembleRelease -PjumpscanKeystore=/work/jumpscan-keys/keystore.properties
+```
+
+That one unfiltered build passed in 17s. It was installed after uninstalling debug. The
+lightweight release UI checks used a 1024 MB guest, two cores, the standard SwiftShader
+renderer, a 720 × 1280 display and at least 3 GiB available on the host. This smaller guest
+was used only for UI checks, after both normal-size fresh analyses had completed. An initial
+UI-driver attempt found the package absent after a guest restart; reinstalling the same
+release variant in the current guest resolved that setup error.
+
+The release app started at the login screen. Entering `http://example.invalid` and tapping
+Sign in visibly produced `Enter an https:// server URL.` No credentials were entered.
+The Toast is visible in `logs/release/http-refusal.png`; Android's later UI dump did not
+include it. Continue offline opened home, and Pick video opened the filming guide, including
+the body-framing diagram and 60 fps / slow-motion guidance. The startup, refusal and guide
+screenshots were all opened and inspected. The UI driver, dumps, screenshots and logcat are
+retained in `logs/release/`. No real server or account was used.
+
+Debug app data and both emulator copies of the private clips were removed by clearing and
+uninstalling debug and deleting `/data/local/tmp/jumpscan-ref.mp4`. The release app and old
+instrumentation package were also cleared and uninstalled, remaining test files were removed,
+and the guest filesystem was synced. The temporary unfiltered APK and ABI init script were
+removed from the kit after validation. The emulator was stopped. Final checks found no
+JumpScan package, no copied test video in `/data/local/tmp`, no emulator process and no adb
+device. The kit's original private source clips and external signing files were retained.
+No requested release check remains pending; validation on a physical ARM phone is outside
+this emulator check.
 
 ## Learned detector, second integration — 18 November 2026
 
