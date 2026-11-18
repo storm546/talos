@@ -210,6 +210,8 @@ def build_tools(h, operations):
     read("team_summaries", "athletes", "List scoped athletes and jump summaries (staff only).", **paging)
     read("athlete_summary", "athlete_summary", "Get one athlete's jump summary.", **target)
     read("list_jumps", "jumps", "Read scoped jump history.", **optional_target, **paging)
+    read("list_form_sets", "list_form_sets", "Read scoped squat form history, newest first.",
+         **optional_target, **paging)
     read("list_sessions", "list_sessions", "List visible jump-test sessions.", **session_dates, **paging)
     read("session_report", "session_report", "Read a visible session's jump report.", session_id=(record_id, ...))
     read("list_checkins", "list_checkins", "Read scoped check-ins by athlete and date.", **optional_target, **days)

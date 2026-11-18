@@ -99,6 +99,16 @@ def init_db(path):
                 metrics TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS jumps_athlete ON jumps(athlete_id, created_at);
+            CREATE TABLE IF NOT EXISTS form_sets (
+                id INTEGER PRIMARY KEY,
+                athlete_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL,
+                metrics TEXT NOT NULL,
+                client_id TEXT
+            );
+            CREATE INDEX IF NOT EXISTS form_sets_athlete ON form_sets(athlete_id, created_at);
+            CREATE UNIQUE INDEX IF NOT EXISTS form_sets_client ON form_sets(athlete_id, client_id)
+                WHERE client_id IS NOT NULL;
             CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor_id INTEGER,
                 action TEXT NOT NULL, target TEXT NOT NULL, detail TEXT NOT NULL
@@ -350,6 +360,111 @@ class Jump(StrictModel):
     client_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
+MAX_FORM_REPETITIONS = 100
+FormTime = Annotated[int, Field(ge=0, le=2**63 - 1)]
+FormCount = Annotated[int, Field(ge=0, le=MAX_FORM_REPETITIONS)]
+FormIndex = Annotated[int, Field(ge=1, le=MAX_FORM_REPETITIONS)]
+Percentage = Annotated[float | None, Field(ge=0, le=100)]
+FormReason = Literal["below_min_depth", "incomplete_start", "incomplete_end", "tracking_gap", "too_fast",
+                     "degenerate_geometry"]
+
+
+class FormRepetition(StrictModel):
+    index: FormIndex
+    status: Literal["complete", "partial", "unclear"]
+    reasons: list[FormReason] = Field(max_length=5)
+    start_ms: FormTime
+    bottom_ms: FormTime | None
+    end_ms: FormTime
+    depth: Angle
+    knee_flexion_peak_l: Angle
+    knee_flexion_peak_r: Angle
+    fppa_l: FrontalAngle
+    fppa_r: FrontalAngle
+    flexion_asymmetry_pct: Percentage
+    descent_time_ms: FormTime | None
+    ascent_time_ms: FormTime | None
+    hip_below_knee: bool | None
+
+    @model_validator(mode="after")
+    def check_cycle(self):
+        if self.end_ms < self.start_ms:
+            raise ValueError("Repetition ends before it starts")
+        if self.status == "unclear":
+            if not self.reasons or "below_min_depth" in self.reasons:
+                raise ValueError("Unclear repetitions require an unclear reason")
+            if self.model_dump(exclude={"index", "status", "reasons", "start_ms", "end_ms"}, exclude_none=True):
+                raise ValueError("Unclear repetitions cannot include measurements")
+            return self
+        if self.reasons != (["below_min_depth"] if self.status == "partial" else []):
+            raise ValueError("Reasons must match repetition status")
+        if self.bottom_ms is None or not self.start_ms <= self.bottom_ms <= self.end_ms:
+            raise ValueError("Repetition bottom must be between start and end")
+        if (self.descent_time_ms != self.bottom_ms - self.start_ms
+                or self.ascent_time_ms != self.end_ms - self.bottom_ms):
+            raise ValueError("Repetition phase durations must match timestamps")
+        return self
+
+
+class FormSummary(StrictModel):
+    repetition_count: FormCount
+    partial_count: FormCount
+    unclear_count: FormCount
+    median_depth: Angle
+    median_knee_flexion_peak_l: Angle
+    median_knee_flexion_peak_r: Angle
+    median_fppa_l: FrontalAngle
+    median_fppa_r: FrontalAngle
+    median_flexion_asymmetry_pct: Percentage
+    median_descent_time_ms: float | None = Field(ge=0, le=2**63 - 1)
+    median_ascent_time_ms: float | None = Field(ge=0, le=2**63 - 1)
+    hip_below_knee_count: FormCount | None
+    worst_repetition: FormIndex | None
+
+
+class FormSet(StrictModel):
+    exercise: Literal["squat", "single_leg_squat"]
+    side: Literal["L", "R"] | None
+    view: Literal["front", "side"]
+    fps: float = Field(gt=0, le=480)
+    quality: float = Field(ge=0, le=1)
+    summary: FormSummary
+    warnings: list[Literal["low_visibility", "unclear_reps", "single_leg_view"]] = Field(max_length=3)
+    repetitions: list[FormRepetition] = Field(max_length=MAX_FORM_REPETITIONS)
+    client_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def check_set(self):
+        if (self.exercise == "single_leg_squat") != (self.side is not None):
+            raise ValueError("Single-leg squat requires side L or R; squat requires null side")
+        if any(rep.index != index for index, rep in enumerate(self.repetitions, 1)):
+            raise ValueError("Repetition indices must start at 1 and follow array order")
+        summary = self.summary
+        complete = [rep for rep in self.repetitions if rep.status == "complete"]
+        if (summary.repetition_count != len(complete)
+                or summary.partial_count != sum(rep.status == "partial" for rep in self.repetitions)
+                or summary.unclear_count != sum(rep.status == "unclear" for rep in self.repetitions)):
+            raise ValueError("Summary counts must match repetition statuses")
+        if (complete and summary.worst_repetition not in {rep.index for rep in complete}
+                or not complete and summary.worst_repetition is not None):
+            raise ValueError("Worst repetition must reference a complete repetition, if any")
+        if self.view == "front":
+            if summary.hip_below_knee_count is not None or any(
+                    rep.hip_below_knee is not None for rep in self.repetitions):
+                raise ValueError("Hip-below-knee measurements require side view")
+        else:
+            if summary.hip_below_knee_count != sum(rep.hip_below_knee is True for rep in complete):
+                raise ValueError("Hip-below-knee count must match complete repetitions")
+            if any(value is not None for value in (summary.median_fppa_l, summary.median_fppa_r)) or any(
+                    rep.fppa_l is not None or rep.fppa_r is not None for rep in self.repetitions):
+                raise ValueError("FPPA measurements require front view")
+        if self.view == "side" or self.side is not None:
+            if summary.median_flexion_asymmetry_pct is not None or any(
+                    rep.flexion_asymmetry_pct is not None for rep in self.repetitions):
+                raise ValueError("Flexion asymmetry requires both legs")
+        return self
+
+
 def get_db(request: Request):
     with database(request.app.state.db_path) as db:
         yield db
@@ -504,6 +619,16 @@ def jump_rows(db, athlete_id):
                 "SELECT * FROM jumps WHERE athlete_id = ? ORDER BY created_at, id", (athlete_id,))]
 
 
+def form_set_rows(rows):
+    return [{"id": row["id"], "athlete_id": row["athlete_id"], "created_at": row["created_at"],
+             "client_id": row["client_id"], **json.loads(row["metrics"])} for row in rows]
+
+
+def athlete_form_sets(db, athlete_id):
+    return form_set_rows(db.execute(
+        "SELECT * FROM form_sets WHERE athlete_id = ? ORDER BY created_at, id", (athlete_id,)))
+
+
 def summary(rows):
     numeric = [key for key in Jump.model_fields if key not in ("test", "warnings", "session_id", "client_id")]
     def peak_mean(row):  # side-view jumps measure one leg; the other is null
@@ -578,7 +703,7 @@ def session_viewers(db, session):
 
 
 def athlete_viewers(db, athlete):
-    """User ids whose stream should receive an athlete-scoped event (jump/checkin/comment)."""
+    """User ids whose stream should receive an athlete-scoped event."""
     viewers = staff_viewers(db, athlete["club_id"])
     viewers.add(athlete["id"])
     return viewers
@@ -597,11 +722,12 @@ class RequestBodyLimit:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
+        limit = 64 * 1024 if (scope.get("method"), scope.get("path")) == ("POST", "/api/form") else 16 * 1024
         too_large = JSONResponse(status_code=413, content={"detail": "Request body too large"})
         for name, value in scope["headers"]:
             if name.lower() == b"content-length":
                 try:
-                    if int(value) > 16 * 1024:
+                    if int(value) > limit:
                         return await too_large(scope, receive, send)
                 except ValueError:
                     pass
@@ -611,7 +737,7 @@ class RequestBodyLimit:
             if message["type"] == "http.disconnect":
                 return
             chunk = message.get("body", b"")
-            if len(body) + len(chunk) > 16 * 1024:
+            if len(body) + len(chunk) > limit:
                 return await too_large(scope, receive, send)
             body.extend(chunk)
             if not message.get("more_body", False):
@@ -880,6 +1006,44 @@ def create_app(db_path=None):
                  "created_at": row["created_at"], "session_id": row["session_id"],
                  "client_id": row["client_id"]} for row in rows]
 
+    @app.post("/api/form", status_code=201)
+    def add_form_set(body: FormSet, user=Depends(current_user), db=Depends(get_db)):
+        require_role(user, "athlete")
+        with write_transaction(db, app.state.events) as emit:
+            athlete = athlete_access(db, user, user["id"])
+            if not athlete["consent_recorded"]:
+                raise HTTPException(403, "Consent must be recorded by a coach or admin before uploading form sets")
+            if body.client_id is not None:
+                previous = db.execute(
+                    "SELECT id, created_at FROM form_sets WHERE athlete_id = ? AND client_id = ?",
+                    (athlete["id"], body.client_id)).fetchone()
+                if previous is not None:
+                    return JSONResponse(status_code=200, content=dict(previous))
+            created_at = now_iso()
+            cursor = db.execute(
+                "INSERT INTO form_sets(athlete_id, created_at, metrics, client_id) VALUES (?, ?, ?, ?)",
+                (athlete["id"], created_at, body.model_dump_json(exclude={"client_id"}), body.client_id))
+            form_id = cursor.lastrowid
+            audit(db, athlete["id"], "form_logged", form_id)
+            emit(athlete_viewers(db, athlete), {"type": "form", "id": form_id, "athlete_id": athlete["id"],
+                                              "club_id": athlete["club_id"], "at": created_at})
+        return JSONResponse(status_code=201, content={"id": form_id, "created_at": created_at})
+
+    @app.get("/api/form")
+    def list_form_sets(athlete_id: Annotated[int | None, Query(gt=0, le=2**63 - 1)] = None,
+                       limit: Annotated[int, Query(ge=1, le=500)] = 100,
+                       offset: Annotated[int, Query(ge=0, le=2**63 - 1)] = 0,
+                       user=Depends(current_user), db=Depends(get_db)):
+        if user["role"] == "athlete" and athlete_id is None:
+            athlete_id = user["id"]
+        if athlete_id is not None:
+            athlete_access(db, user, athlete_id)
+        return form_set_rows(db.execute(
+            "SELECT form_sets.* FROM form_sets JOIN users ON users.id = form_sets.athlete_id "
+            "WHERE (? IS NULL OR form_sets.athlete_id = ?) AND (? != 'coach' OR users.club_id = ?) "
+            "ORDER BY form_sets.created_at DESC, form_sets.id DESC LIMIT ? OFFSET ?",
+            (athlete_id, athlete_id, user["role"], user["club_id"], limit, offset)))
+
     @app.delete("/api/me/data", status_code=204)
     def delete_data(user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "athlete")
@@ -888,6 +1052,7 @@ def create_app(db_path=None):
         training_nutrition_api.delete_data(db, user["id"])
         assistant_api.delete_data(db, user["id"])
         db.execute("DELETE FROM jumps WHERE athlete_id = ?", (user["id"],))
+        db.execute("DELETE FROM form_sets WHERE athlete_id = ?", (user["id"],))
         audit(db, user["id"], "data_deleted", user["id"])
         db.commit()
 
@@ -920,7 +1085,8 @@ def create_app(db_path=None):
             "WHERE athlete_id = ? ORDER BY created_at, id", (user["id"],))]
         profile["under_18"] = bool(user["under_18"])
         result = {"user": profile, "jumps": jump_rows(db, user["id"]), "checkins": checkins,
-                  "comments": comments, **training_nutrition_api.export_data(db, user["id"]),
+                  "comments": comments, "form_sets": athlete_form_sets(db, user["id"]),
+                  **training_nutrition_api.export_data(db, user["id"]),
                   "exported_at": now_iso()}
         audit(db, user["id"], "json_export", user["id"])
         db.commit()
@@ -942,6 +1108,23 @@ def create_app(db_path=None):
         db.commit()
         return Response(output.getvalue(), media_type="text/csv",
                         headers={"Content-Disposition": f'attachment; filename="athlete-{athlete_id}.csv"'})
+
+    @app.get("/api/athletes/{athlete_id}/form.csv")
+    def form_csv(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+        require_role(user, "admin", "coach")
+        athlete = athlete_access(db, user, athlete_id)
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        fields = ["id", "athlete_id", "athlete_name", "created_at", "client_id", "exercise", "side", "view",
+                  "fps", "quality", *FormSummary.model_fields, "warnings", "repetitions"]
+        writer.writerow(fields)
+        for row in athlete_form_sets(db, athlete_id):
+            row.update(row.pop("summary"), athlete_name=athlete["name"])
+            writer.writerow([csv_cell(row.get(field)) for field in fields])
+        audit(db, user["id"], "csv_export", athlete_id, {"kind": "form"})
+        db.commit()
+        return Response(output.getvalue(), media_type="text/csv",
+                        headers={"Content-Disposition": f'attachment; filename="athlete-{athlete_id}-form.csv"'})
 
     @app.get("/api/clubs")
     def clubs(user=Depends(current_user), db=Depends(get_db)):
@@ -1452,7 +1635,7 @@ def create_app(db_path=None):
 
     assistant_api.install(app, sys.modules[__name__], {**training_tools, **{
         operation.__name__: operation for operation in (
-            athletes, athlete_summary, jumps, list_sessions, session_report, list_checkins,
+            athletes, athlete_summary, jumps, list_form_sets, list_sessions, session_report, list_checkins,
             team_checkins, list_comments, create_session, update_session, save_checkin, write_comment,
         )
     }})

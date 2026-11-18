@@ -12,6 +12,7 @@ import pytest
 
 from server import assistant_api, main
 from server.test_club_v2 import CHECKIN, today
+from server.test_form_api import FORM
 from server.test_server import api, auth, template, user_id
 from server.test_training_nutrition_api import SET, exercise_id, plan_body
 
@@ -93,6 +94,26 @@ def test_assistant_read_matches_rest_and_conversation_is_private(api, auth, fake
         "Follow-up answer.", first["reply"]]
     with main.database(path) as db:
         assert db.execute("SELECT COUNT(*) FROM assistant_proposals").fetchone()[0] == 0
+
+
+def test_assistant_form_history_matches_rest_scope(api, auth, fake_model):
+    client, path = api
+    for account in ("athlete1", "athlete2", "athlete3"):
+        assert client.post("/api/form", json=FORM, headers=auth(account)).status_code == 201
+    other_id = user_id(path, "athlete3")
+    for account, visible, status in (("athlete1", 1, 403), ("coach", 2, 404), ("admin", 3, 200)):
+        headers = auth(account)
+        observed = fake_model(calls(("list_form_sets", {}), ("list_form_sets", {"athlete_id": other_id})), "Done.")
+        response = chat(client, headers, "Show squat form history.")
+        assert response.status_code == 200, response.text
+        assert response.json()["proposal"] is None
+        history, targeted = results(observed)
+        assert history == {"data": client.get("/api/form", headers=headers).json()}
+        assert len(history["data"]) == visible
+        rest = client.get(f"/api/form?athlete_id={other_id}", headers=headers)
+        assert rest.status_code == status
+        assert targeted == ({"data": rest.json()} if status == 200
+                            else {"status": status, "error": rest.json()["detail"]})
 
 
 def test_assistant_proposes_then_confirms_in_order_once(api, auth, fake_model):

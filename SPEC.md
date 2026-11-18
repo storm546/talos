@@ -192,7 +192,8 @@ included. Mutations, exports and their audit entries commit before a success res
 
 Security: bearer token in `Authorization`; parameterized SQL; strict validation and unknown-field rejection;
 object checks on every read and management operation; login limit of 5 failures per email per 15 minutes;
-constant-time credential checks; no stack traces or submitted secrets in errors; 16 KiB body limit.
+constant-time credential checks; no stack traces or submitted secrets in errors; 16 KiB body limit
+(64 KiB for form uploads, section 6.1).
 Paginated lists accept limits 1–500 and nonnegative offsets. Exports and summaries include all jumps.
 CSV quotes text cells starting with formula characters (`=`, `+`, `-`, `@`), including hidden whitespace
 prefixes, and leading tab/newline controls with an apostrophe; CSV quoting handles delimiters and newlines.
@@ -304,7 +305,7 @@ or injury wording; texts speak of training, testing and how the athlete feels.
 | `GET /api/comments?athlete_id=&limit=&offset=` | scope as jumps | the thread, newest first, with author name and role |
 | `GET /api/me/unread` | athlete | `{comments: n}` written by others and not yet read |
 | `POST /api/me/read` | athlete | marks all comments by others as read; returns 204 |
-| `GET /api/events` | all | Server-Sent Events stream (`text/event-stream`) of `jump`, `checkin`, `comment`, `session` events visible to the caller (same scope rules), each with `{type, id, athlete_id?, club_id, at}` and no metric values or text; a comment line every 25 s keeps it open; at most 3 open streams per user |
+| `GET /api/events` | all | Server-Sent Events stream (`text/event-stream`) of `jump`, `form`, `checkin`, `comment`, `session` events visible to the caller (same scope rules), each with `{type, id, athlete_id?, club_id, at}` and no metric values or text; a comment line every 25 s keeps it open; at most 3 open streams per user |
 
 Athlete JSON export adds check-ins, comments and session ids of jumps. `DELETE /api/me/data` also deletes
 the athlete's check-ins and their comment thread. CSV export adds a session column. Paginated lists keep
@@ -355,7 +356,7 @@ wording (no diagnosis, treatment, "cure", "fat-loss plan"; numbers are for discu
 Nothing in this section may use code, data, names or designs taken from another product; methods are the
 published, general ones named below, apart from the owner's own weight-trend model in 6.3.
 
-### 6.1 Form tracker (core + app; on the phone, numbers only)
+### 6.1 Form tracker (on-device analysis; server stores numbers only)
 
 Exercises: `squat` (bodyweight or loaded, two legs) and `single_leg_squat` (left or right). The athlete
 films a set; the phone runs the same pose model as for jumps and the core computes, per repetition: depth
@@ -371,16 +372,31 @@ same honesty rules as `docs/validacia.md`.
 
 Form JSON (produced by `core`, stored by `server` at `POST /api/form`, charted by app and dashboard;
 field list from the core contract, `logs/form-fields.md`): top level `exercise` ("squat"|"single_leg_squat"),
-`side` ("L"|"R"|null), `view` ("front"|"side"), `fps`, `quality` (0-1), `repetitions[]`, `summary`, and
+`side` ("L"|"R" required for single-leg squat, null for squat), `view` ("front"|"side"), `fps` (>0 and ≤480),
+`quality` (0–1), `repetitions[]` (up to 100 candidate cycles), `summary`, and
 `warnings[]` (any of `low_visibility`, `unclear_reps`, `single_leg_view`). Each `repetitions[]` entry:
-`index` (1-based), `status` ("complete"|"partial"|"unclear"), `reasons[]` (empty, `below_min_depth`, or the
-unclear reasons), `start_ms`, `bottom_ms` (int|null), `end_ms`, `depth` (deg|null), `knee_flexion_peak_l/_r`
-(deg|null), `fppa_l/_r` (-90..90|null, front only), `flexion_asymmetry_pct` (0-100|null, both legs only),
-`descent_time_ms`/`ascent_time_ms` (int|null), `hip_below_knee` (bool|null, side only). `summary` holds the
-counts (complete/partial/unclear), the medians of the per-rep numbers over complete reps, and
-`worst_repetition` (the `index` with the greatest FPPA or asymmetry). The server stores this athlete-scoped
-with consent, audit and idempotency like jumps; `GET /api/form` lists an athlete's form sets in the caller's
-scope; the assistant gets a `list_form_sets` read tool.
+`index` (1-based), `status` ("complete"|"partial"|"unclear"), `reasons[]` (empty for complete, only
+`below_min_depth` for partial, up to five of `incomplete_start`, `incomplete_end`, `tracking_gap`, `too_fast`,
+`degenerate_geometry` for unclear), `start_ms`, `bottom_ms` (int|null), `end_ms`, `depth` (0–180°|null),
+`knee_flexion_peak_l/_r` (0–180°|null), `fppa_l/_r` (−90–90°|null, front only),
+`flexion_asymmetry_pct` (0–100|null, both legs only), `descent_time_ms`/`ascent_time_ms` (int|null),
+`hip_below_knee` (bool|null, side only). Unclear candidates have null measurements and `bottom_ms`.
+`summary` holds `repetition_count`, `partial_count`, `unclear_count`, and `median_` fields for `depth`,
+`knee_flexion_peak_l`/`knee_flexion_peak_r`, `fppa_l`/`fppa_r`, `flexion_asymmetry_pct`,
+`descent_time_ms` and `ascent_time_ms`, calculated on complete repetitions only (null if unavailable).
+It also has `hip_below_knee_count` (side view only) and `worst_repetition` (index of the shallowest
+complete repetition; earliest on ties; null without complete repetitions). This is not a composite score.
+
+- `POST /api/form` is for athletes with recorded consent. It accepts optional `client_id` as in 5.6 and
+  returns `{id, created_at}` with 201 on insert or 200 on retry. It audits `form_logged` and publishes a
+  scoped `form` event after commit, only for a new set. Unknown fields are rejected at every level.
+- `GET /api/form?athlete_id=&limit=100&offset=0` returns the form JSON plus `id`, `athlete_id`, `created_at`
+  and `client_id`, newest first (ID descending on ties). Athletes see only their own data; coaches see
+  their club's athletes (cross-club targets return 404); admins see all. Staff can omit `athlete_id` to
+  list all sets in scope. The assistant's `list_form_sets` tool uses the same scope.
+- Athlete JSON export includes `form_sets`; `DELETE /api/me/data` removes them. Scoped staff export
+  `GET /api/athletes/{id}/form.csv` lists all sets oldest first, with summary columns and warnings and
+  repetitions as JSON cells.
 
 ### 6.2 Training (server, dashboard, app)
 
@@ -492,10 +508,9 @@ scope; the assistant gets a `list_form_sets` read tool.
   for example a local `/v1` endpoint), `JUMPSCAN_LLM_MODEL`, and optional bearer-key file
   `JUMPSCAN_LLM_KEY_FILE`. There is no default host or key. An unconfigured or unavailable model returns
   503 from chat; history, confirmation, and the rest of the site do not depend on the model.
-- Read tools cover the caller's scoped jump and team summaries, jumps, sessions and reports, check-ins,
+- Read tools cover the caller's scoped jump and team summaries, jumps, form sets, sessions and reports, check-ins,
   exercises, plans, set logs and training summaries, food and weight logs, food search, nutrition estimates,
-  targets, summaries, programs and expenditure, and comments. Form sets are not exposed until there is a
-  scoped REST history endpoint for them (6.1).
+  targets, summaries, programs and expenditure, and comments.
 - Write tools can propose logging a set, food, or weight, saving a check-in, creating or editing a session,
   assigning or replacing a plan, setting a nutrition target or goal and rate, or adding a staff note.
   Tools use the same scoped operations and input validation as REST, running as the caller. Comments and
