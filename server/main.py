@@ -16,6 +16,7 @@ import sqlite3
 from statistics import median
 import threading
 import time
+import unicodedata
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -148,6 +149,8 @@ def init_db(path):
         for name, declaration in {"session_id": "INTEGER REFERENCES sessions(id)", "client_id": "TEXT"}.items():
             if name not in columns:
                 db.execute(f"ALTER TABLE jumps ADD COLUMN {name} {declaration}")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS jumps_client ON jumps(athlete_id, client_id) "
+                   "WHERE client_id IS NOT NULL")
 
 
 def password_hash(password, salt):
@@ -265,10 +268,12 @@ class SessionBody(StrictModel):
     @classmethod
     def valid_timestamp(cls, value):
         try:
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
             raise ValueError("starts_at must be an ISO 8601 timestamp") from None
-        return value
+        if parsed.utcoffset() is None or not 2000 <= parsed.year <= 2100:
+            raise ValueError("starts_at must include a timezone and a year from 2000 to 2100")
+        return parsed.astimezone(timezone.utc).isoformat()
 
 
 class Checkin(StrictModel):
@@ -441,11 +446,14 @@ class EventBus:
         self._subscribers = {}
         self._lock = threading.Lock()
 
-    def open(self, user_id):
-        queue = asyncio.Queue()
+    def try_open(self, user_id, limit):
         with self._lock:
-            self._subscribers.setdefault(int(user_id), []).append(queue)
-        return queue
+            subscriptions = self._subscribers.setdefault(int(user_id), [])
+            if len(subscriptions) >= limit:
+                return None
+            queue = asyncio.Queue()
+            subscriptions.append(queue)
+            return queue
 
     def close(self, user_id, queue):
         with self._lock:
@@ -513,6 +521,7 @@ def csv_cell(value):
 
 def ical_escape(text):
     """Escape a TEXT value per RFC 5545 section 3.3.11."""
+    text = "".join(c for c in text if c in "\r\n" or unicodedata.category(c) not in ("Cc", "Zl", "Zp"))
     text = text.replace("\\", "\\\\")
     text = text.replace(";", "\\;")
     text = text.replace(",", "\\,")
@@ -597,13 +606,11 @@ class RequestBodyLimit:
         await self.app(scope, buffered_receive, send)
 
 
-def client_address(request, use_proxy_headers):
-    if use_proxy_headers and request.headers.get("x-forwarded-for"):
-        return request.headers["x-forwarded-for"].split(",")[0].strip()
+def client_address(request):
     return request.client.host if request.client else "unknown"
 
 
-def create_app(db_path=None, proxy_headers=False):
+def create_app(db_path=None):
     @asynccontextmanager
     async def lifespan(app):
         init_db(app.state.db_path)
@@ -613,7 +620,6 @@ def create_app(db_path=None, proxy_headers=False):
                   description="Club landing mechanics, consent, personal baselines and coach discussions. No video is stored.",
                   lifespan=lifespan, debug=False)
     app.state.db_path = db_path if db_path is not None else database_path()
-    app.state.proxy_headers = proxy_headers
     app.add_middleware(RequestBodyLimit)
     app.state.events = EventBus()
     app.mount("/static", StaticFiles(directory=Path(__file__).with_name("static")), name="static")
@@ -670,7 +676,7 @@ def create_app(db_path=None, proxy_headers=False):
     @app.post("/api/auth/login")
     def login(body: Login, request: Request, db: sqlite3.Connection = Depends(get_db)):
         now = time.time()
-        address = client_address(request, app.state.proxy_headers)
+        address = client_address(request)
         # Keep write transactions short; scrypt must not hold the write lock.
         db.execute("BEGIN IMMEDIATE")
         # Prune expired tokens and stale failures; the per-address window binds the failure tables.
@@ -716,7 +722,6 @@ def create_app(db_path=None, proxy_headers=False):
             db.commit()
             raise HTTPException(401, "Invalid email or password")
         db.execute("DELETE FROM login_failures WHERE email = ?", (body.email,))
-        db.execute("DELETE FROM address_failures WHERE address = ?", (address,))
         token = secrets.token_urlsafe(32)
         db.execute("INSERT INTO tokens(token_hash, user_id, expires_at) VALUES (?, ?, ?)",
                    (token_hash(token), user["id"], now + 30 * 86400))
@@ -791,10 +796,6 @@ def create_app(db_path=None, proxy_headers=False):
         require_role(user, "athlete")
         if not user["consent_recorded"]:
             raise HTTPException(403, "Consent must be recorded by a coach or admin before uploading jumps")
-        if body.session_id is not None:
-            session = scoped_session(db, user, body.session_id)
-            if session["cancelled"]:
-                raise HTTPException(422, "Cannot upload to a cancelled session")
         if body.client_id is not None:
             previous = db.execute(
                 "SELECT id, created_at FROM jumps WHERE athlete_id = ? AND client_id = ?",
@@ -802,12 +803,28 @@ def create_app(db_path=None, proxy_headers=False):
             if previous is not None:
                 return JSONResponse(status_code=200,
                                     content={"id": previous["id"], "created_at": previous["created_at"]})
+        if body.session_id is not None:
+            session = db.execute("SELECT * FROM sessions WHERE id = ?", (body.session_id,)).fetchone()
+            if session is None or not session_visible(db, user, session):
+                raise HTTPException(422, "Session not found")
+            if session["cancelled"]:
+                raise HTTPException(422, "Cannot upload to a cancelled session")
         created_at = now_iso()
         metrics = {key: value for key, value in body.model_dump().items()
                    if key not in ("session_id", "client_id")}
-        cursor = db.execute(
-            "INSERT INTO jumps(athlete_id, created_at, metrics, session_id, client_id) VALUES (?, ?, ?, ?, ?)",
-            (user["id"], created_at, json.dumps(metrics), body.session_id, body.client_id))
+        try:
+            cursor = db.execute(
+                "INSERT INTO jumps(athlete_id, created_at, metrics, session_id, client_id) VALUES (?, ?, ?, ?, ?)",
+                (user["id"], created_at, json.dumps(metrics), body.session_id, body.client_id))
+        except sqlite3.IntegrityError:
+            db.rollback()
+            previous = db.execute(
+                "SELECT id, created_at FROM jumps WHERE athlete_id = ? AND client_id = ?",
+                (user["id"], body.client_id)).fetchone()
+            if previous is None:
+                raise
+            return JSONResponse(status_code=200,
+                                content={"id": previous["id"], "created_at": previous["created_at"]})
         jump_id = cursor.lastrowid
         athlete = db.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
         db.commit()
@@ -1053,15 +1070,15 @@ def create_app(db_path=None, proxy_headers=False):
             params = (user["club_id"], user["id"])
         where = [clause]
         if from_ is not None:
-            where.append("sessions.starts_at >= ?")
+            where.append("julianday(sessions.starts_at) >= julianday(?)")
             params = (*params, from_)
         if to is not None:
-            where.append("sessions.starts_at <= ?")
+            where.append("julianday(sessions.starts_at) <= julianday(?)")
             params = (*params, to)
         sql = ("SELECT sessions.*, (SELECT COUNT(*) FROM jumps WHERE jumps.session_id = sessions.id "
                "AND jumps.athlete_id IN (SELECT id FROM users WHERE (? = 'admin' OR (users.club_id = ?)) "
                "AND (? = 'admin' OR users.club_id = ?))) AS scope_jump_count FROM sessions WHERE "
-               + " AND ".join(where) + " ORDER BY sessions.starts_at, sessions.id LIMIT ? OFFSET ?")
+               + " AND ".join(where) + " ORDER BY julianday(sessions.starts_at), sessions.id LIMIT ? OFFSET ?")
         rows = db.execute(sql, (user["role"], user["club_id"], user["role"], user["club_id"],
                                 *params, limit, offset)).fetchall()
         result = []
@@ -1082,7 +1099,7 @@ def create_app(db_path=None, proxy_headers=False):
     @app.post("/api/sessions", status_code=201)
     def add_session(body: SessionBody, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
-        group_id = validated_group_id(db, user, body.group_id)
+        group_id = validated_group_id(db, user, body.group_id, require_club=user["club_id"])
         cursor = db.execute(
             "INSERT INTO sessions(club_id, group_id, title, starts_at, place, test, trials, notes, "
             "created_by, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1124,6 +1141,8 @@ def create_app(db_path=None, proxy_headers=False):
         if user["role"] == "athlete" and user["id"] not in session_athletes(db, session):
             raise HTTPException(404, "Session not found")
         athletes = session_athletes(db, session)
+        if user["role"] == "athlete":
+            athletes = [user["id"]]
         numeric = [key for key in Jump.model_fields
                    if key not in ("test", "warnings", "session_id", "client_id")]
         rows = []
@@ -1154,12 +1173,19 @@ def create_app(db_path=None, proxy_headers=False):
             params = (user["club_id"], user["id"])
         from_day = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
         sessions = db.execute(
-            "SELECT * FROM sessions WHERE starts_at >= ? AND " + clause + " ORDER BY starts_at, id",
+            "SELECT * FROM sessions WHERE julianday(starts_at) >= julianday(?) AND "
+            + clause + " ORDER BY julianday(starts_at), id",
             (from_day, *params)).fetchall()
         now = datetime.now(timezone.utc)
         lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//JumpScan//Club Platform//EN"]
         for session in sessions:
-            start = datetime.fromisoformat(session["starts_at"].replace("Z", "+00:00")).astimezone(timezone.utc)
+            try:
+                start = datetime.fromisoformat(session["starts_at"].replace("Z", "+00:00"))
+                if start.utcoffset() is None:
+                    continue
+                start = start.astimezone(timezone.utc)
+            except (ValueError, OverflowError):
+                continue  # Invalid timestamps saved before validation must not break the feed.
             dtstart = start.strftime("%Y%m%dT%H%M%SZ")
             dtstamp = now.strftime("%Y%m%dT%H%M%SZ")
             summary = ical_escape(session["title"])
@@ -1193,23 +1219,20 @@ def create_app(db_path=None, proxy_headers=False):
         today = datetime.now(timezone.utc).date()
         if not (today - timedelta(days=6) <= day_date <= today):
             raise HTTPException(422, "Check-in day must be within the last 7 days")
+        day = day_date.isoformat()
         now = now_iso()
+        db.execute("BEGIN IMMEDIATE")
         existing = db.execute("SELECT * FROM checkins WHERE athlete_id = ? AND day = ?",
                               (user["id"], day)).fetchone()
-        if existing is None:
-            db.execute(
-                "INSERT INTO checkins(athlete_id, day, sleep, fatigue, soreness, stress, mood, "
-                "training_minutes, rpe, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (user["id"], day, body.sleep, body.fatigue, body.soreness, body.stress, body.mood,
-                 body.training_minutes, body.rpe, now, now))
-            status = 201
-        else:
-            db.execute(
-                "UPDATE checkins SET sleep = ?, fatigue = ?, soreness = ?, stress = ?, mood = ?, "
-                "training_minutes = ?, rpe = ?, updated_at = ? WHERE athlete_id = ? AND day = ?",
-                (body.sleep, body.fatigue, body.soreness, body.stress, body.mood, body.training_minutes,
-                 body.rpe, now, user["id"], day))
-            status = 200
+        db.execute(
+            "INSERT INTO checkins(athlete_id, day, sleep, fatigue, soreness, stress, mood, "
+            "training_minutes, rpe, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(athlete_id, day) DO UPDATE SET sleep = excluded.sleep, fatigue = excluded.fatigue, "
+            "soreness = excluded.soreness, stress = excluded.stress, mood = excluded.mood, "
+            "training_minutes = excluded.training_minutes, rpe = excluded.rpe, updated_at = excluded.updated_at",
+            (user["id"], day, body.sleep, body.fatigue, body.soreness, body.stress, body.mood,
+             body.training_minutes, body.rpe, now, now))
+        status = 201 if existing is None else 200
         db.commit()
         app.state.events.publish(athlete_viewers(db, user),
                                  {"type": "checkin", "id": user["id"], "athlete_id": user["id"],
@@ -1277,7 +1300,8 @@ def create_app(db_path=None, proxy_headers=False):
                     if checkin["rpe"] is not None and checkin["training_minutes"] is not None else None)
             previous = [row for row in db.execute(
                 "SELECT sleep, fatigue, soreness, stress, mood FROM checkins "
-                "WHERE athlete_id = ? AND day < ? ORDER BY day DESC LIMIT 14", (athlete["id"], day))]
+                "WHERE athlete_id = ? AND day < ? AND day >= date(?, '-14 day') ORDER BY day DESC",
+                (athlete["id"], day, day))]
             below = None
             if wellbeing is not None and len(previous) >= 5:
                 previous_sums = []
@@ -1314,6 +1338,7 @@ def create_app(db_path=None, proxy_headers=False):
             "INSERT INTO comments(athlete_id, author_id, jump_id, session_id, body, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (body.athlete_id, user["id"], body.jump_id, body.session_id, body.body, now))
+        audit(db, user["id"], "comment_created", cursor.lastrowid)
         db.commit()
         app.state.events.publish(athlete_viewers(db, athlete),
                                  {"type": "comment", "id": cursor.lastrowid, "athlete_id": body.athlete_id,
@@ -1356,23 +1381,28 @@ def create_app(db_path=None, proxy_headers=False):
 
     @app.get("/api/events")
     async def events(request: Request, user=Depends(current_user)):
-        count = int(request.app.state.events.open_count(user["id"]))
-        if count >= 3:
+        queue = request.app.state.events.try_open(user["id"], 3)
+        if queue is None:
             raise HTTPException(429, "Too many open event streams")
 
         async def stream():
-            queue = request.app.state.events.open(user["id"])
             try:
                 while True:
                     try:
                         event = await asyncio.wait_for(queue.get(), timeout=25)
-                        yield f"data: {json.dumps(event)}\n\n"
                     except asyncio.TimeoutError:
-                        yield ": keep-alive\n\n"
+                        event = None
+                    with database(request.app.state.db_path) as db:
+                        try:
+                            current_user(request.headers.get("authorization"), db)
+                        except HTTPException:
+                            break
+                    yield f"data: {json.dumps(event)}\n\n" if event is not None else ": keep-alive\n\n"
             finally:
                 request.app.state.events.close(user["id"], queue)
 
-        return StreamingResponse(stream(), media_type="text/event-stream")
+        return StreamingResponse(stream(), media_type="text/event-stream",
+                                 headers={"X-Accel-Buffering": "no"})
 
     return app
 

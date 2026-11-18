@@ -8,6 +8,7 @@ services:
     restart: unless-stopped
     environment:
       JUMPSCAN_DB: /data/jumpscan.db
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:?Set FORWARDED_ALLOW_IPS to the trusted proxy address}
     volumes:
       - jumpscan-data:/data
     ports:

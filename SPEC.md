@@ -271,7 +271,8 @@ or injury wording; texts speak of training, testing and how the athlete feels.
 - `groups(id, club_id, name)`: training groups inside a club; name 1–80 characters, unique per club.
 - `group_members(group_id, user_id)`: athletes of the same club; an athlete may be in several groups.
 - `sessions(id, club_id, group_id NULL, title, starts_at, place, test, trials, notes, created_by, cancelled)`:
-  a scheduled test session. `starts_at` is an ISO 8601 UTC timestamp; `test` is `cmj` or `drop_jump`;
+  a scheduled test session. `starts_at` requires an ISO 8601 timestamp with a timezone and a year from
+  2000 through 2100, stored normalized to UTC; `test` is `cmj` or `drop_jump`;
   `trials` 1–5 (default 3); title 1–100, place 0–100, notes 0–1000 characters; `group_id` null means the
   whole club.
 - `jumps` gains `session_id NULL` (the session the jump belongs to) and `client_id NULL` (section 5.6).
@@ -317,7 +318,9 @@ limits 1–500. Unknown fields are rejected as in section 3.
 - Expired tokens and login failures older than 15 minutes are deleted on each login.
 - Responses add `Strict-Transport-Security: max-age=31536000` (browsers honour it only over HTTPS).
 - The events stream authenticates with the same bearer header (the dashboard reads it with `fetch`, not
-  `EventSource`, so the token never appears in a URL).
+  `EventSource`, so the token never appears in a URL). Each keep-alive tick rechecks authentication;
+  revocation, expiry or deactivation ends the stream. Stream slots are reserved before a response starts;
+  a fourth stream returns 429. Proxy buffering is disabled for events.
 
 ### 5.4 Dashboard (additions)
 

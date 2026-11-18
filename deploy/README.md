@@ -28,7 +28,16 @@ git checkout main          # deploy reviewed code, not the working branch
 
 ## 2. Build and start
 
+Set `FORWARDED_ALLOW_IPS` in the shell or a Compose `.env` file to the trusted reverse proxy's
+address as seen by uvicorn. Both Docker and systemd start uvicorn with `--proxy-headers` and
+`--forwarded-allow-ips` using this value. Do not use `*`: only trusted proxies may supply client addresses.
+For Docker bridge networking, a proxy on the same host normally appears as the Docker bridge gateway
+(inspect the network's gateway); a proxy container on a shared network appears as that container's IP.
+Use a stable proxy address and set that value, rather than assuming host loopback reaches the container.
+For a direct Docker run, pass `-e FORWARDED_ALLOW_IPS=<proxy address>`; Compose requires the variable too.
+
 ```sh
+export FORWARDED_ALLOW_IPS=<proxy-address-as-seen-by-the-container>
 docker compose up -d --build
 docker compose ps
 curl -i http://127.0.0.1:8171/        # expect HTTP/1.1 200 and the dashboard HTML
@@ -49,11 +58,15 @@ git clone <repository-url> /srv/jumpscan && cd /srv/jumpscan && git checkout mai
 python3 -m venv .venv && .venv/bin/pip install -r server/requirements.txt
 cp deploy/jumpscan.service /etc/systemd/system/
 # If the reverse proxy runs on another machine, set HOST in the unit to this machine's LAN address.
+# Also set FORWARDED_ALLOW_IPS in the unit to that proxy's address.
 systemctl daemon-reload && systemctl enable --now jumpscan
 curl -i http://127.0.0.1:8171/        # expect HTTP/1.1 200
 ```
 
 The database is `/var/lib/jumpscan/jumpscan.db` (systemd creates the directory for the service user).
+When the proxy is on the same host and connects over loopback, use `FORWARDED_ALLOW_IPS=127.0.0.1`
+(the unit's default). This also applies to Docker with host networking when the proxy connects via
+`127.0.0.1`; the supplied Compose deployment uses bridge networking instead.
 For the commands below, replace `docker compose exec jumpscan python` with
 `sudo -u jumpscan env JUMPSCAN_DB=/var/lib/jumpscan/jumpscan.db /srv/jumpscan/.venv/bin/python`, run from
 `/srv/jumpscan`. Undo: `systemctl disable --now jumpscan`, remove the unit file, `/srv/jumpscan`,
@@ -92,10 +105,8 @@ history. Then log in on the dashboard with that email and password.
 
 Login is limited both per email (5 failures per 15 minutes) and per client address (30 failures per
 15 minutes). Behind a reverse proxy the address is taken from the proxy's `X-Forwarded-For` header, so
-start the server with `--proxy-headers --forwarded-allow-ips <proxy address>` (see the systemd notes and
-the nginx example below); without these flags the header is ignored. All three flags must be set
-together: `--proxy-headers` alone trusts nobody, and `--forwarded-allow-ips` names the proxy that may
-supply the header.
+configure `FORWARDED_ALLOW_IPS` as described above. Uvicorn accepts forwarded headers only from the
+listed proxy addresses; untrusted clients cannot set their own rate-limit address through that header.
 
 Role model for the rest: an admin creates coaches and athletes (`POST /api/users`), a coach creates
 athletes in their own club. An admin, or a coach for athletes of their own club, sets a new password with
@@ -142,6 +153,14 @@ server {
 
     client_max_body_size 64k;          # the API caps requests at 16 KB
     add_header Strict-Transport-Security "max-age=31536000" always;   # browsers stay on HTTPS
+
+    location = /api/events {
+        proxy_pass http://127.0.0.1:8171;
+        proxy_buffering off;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:8171;
@@ -214,5 +233,5 @@ directory finishes the job — nothing else on the host was touched.
   to `127.0.0.1` on purpose.
 - Login is rate limited to 5 failures per email and 30 failures per client address per 15 minutes;
   request bodies are capped at 16 KB. The address limit needs `--proxy-headers --forwarded-allow-ips`
-  (already set in the systemd unit) to see through the reverse proxy.
+  (set in both startup paths using `FORWARDED_ALLOW_IPS`) to see through the reverse proxy.
 - No video or image ever reaches the server, so there is nothing large to store and nothing to redact.

@@ -12,11 +12,12 @@ WorkingDirectory=/srv/jumpscan
 Environment=JUMPSCAN_DB=/var/lib/jumpscan/jumpscan.db
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=HOST=127.0.0.1
+Environment=FORWARDED_ALLOW_IPS=127.0.0.1
 # --proxy-headers + --forwarded-allow-ips let the login per-address limit use the
 # reverse proxy's X-Forwarded-For. The proxy here is the local nginx (127.0.0.1);
-# change the allow-ips value if the proxy runs on another host.
+# set FORWARDED_ALLOW_IPS to the proxy address if it runs on another host.
 ExecStart=/srv/jumpscan/.venv/bin/uvicorn server.main:app --host ${HOST} --port 8171 \
-    --no-server-header --proxy-headers --forwarded-allow-ips 127.0.0.1
+    --no-server-header --proxy-headers --forwarded-allow-ips ${FORWARDED_ALLOW_IPS}
 Restart=on-failure
 # The service only needs to write its database directory.
 StateDirectory=jumpscan
