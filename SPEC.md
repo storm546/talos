@@ -353,7 +353,7 @@ Same rules as sections 3 and 5: roles and club scope on every read and write, co
 is stored, strict validation, audit of every change, Bulgarian and English, no medical or diet-prescription
 wording (no diagnosis, treatment, "cure", "fat-loss plan"; numbers are for discussion with the coach).
 Nothing in this section may use code, data, names or designs taken from another product; methods are the
-published, general ones named below.
+published, general ones named below, apart from the owner's own weight-trend model in 6.3.
 
 ### 6.1 Form tracker (core + app; on the phone, numbers only)
 
@@ -371,34 +371,77 @@ same honesty rules as `docs/validacia.md`.
 
 ### 6.2 Training (server, dashboard, app)
 
-- `exercises(id, club_id, name, kind)`: club exercise list (kind `strength`, `plyometric`, `mobility`,
-  `conditioning`), seeded with common names; coaches add their own.
-- `plans(id, club_id, title, group_id NULL, athlete_id NULL, starts_on, weeks, notes)` and
-  `plan_items(plan_id, weekday, exercise_id, sets, reps, load_kg NULL, rpe_target NULL, order)`: a weekly
-  template assigned to a group or one athlete by a coach.
+- `exercises(id, club_id, name, kind, lower_body)`: club exercise list (kind `strength`, `plyometric`, `mobility`,
+  `conditioning`; `lower_body` marks the exercises where a coach allows the +5 kg step), seeded with common
+  names by `python -m server.seed`; coaches add their own.
+- `plans(id, club_id, title, group_id NULL, athlete_id NULL, starts_on, weeks, notes, created_by)` and
+  `plan_items(id, plan_id, weekday, exercise_id, sets, reps, reps_max, load_kg NULL, rpe_target NULL, position)`:
+  a weekly template assigned by a coach to one group or one athlete (both null: the whole club, both set: 422).
+  `weekday` 0 is Monday; `reps` is the bottom and `reps_max` the top of the rep range (default: equal).
+  The column is `position`, not `order`, which is an SQL keyword. Deleting a group deletes its plans.
 - `set_logs(id, athlete_id, day, exercise_id, set_no, reps, load_kg NULL, rpe NULL, plan_id NULL,
-  client_id)`: what was actually done; idempotent like jumps (section 5.6).
-- Progression suggestion (shown, never applied automatically): double progression per exercise — when every
-  planned set reached the top of the rep range at RPE ≤ target in the last two sessions, suggest +2.5 kg
-  (lower body +5 kg allowed by the coach), when two sessions missed the bottom of the range, suggest −5 %.
-  Weekly volume (sets × reps × load) and the existing session-RPE load are summarised per athlete.
+  client_id NULL, created_at)`: what was actually done; idempotent like jumps (section 5.6): a repeated
+  `client_id` returns 200 with the stored row. `day` from 30 days before today through tomorrow (UTC), wider
+  than check-ins because the offline queue may send late. Athletes delete only their own sets.
+- Progression suggestion (shown, never applied automatically): double progression per exercise, from the
+  plan item and the last two logged sessions (days with sets for that exercise). A session reached the top
+  when at least the planned number of sets were done, each of the planned sets reached `reps_max` and, when
+  the item has an RPE target, was logged at or below it. It missed the bottom when any set was below `reps`.
+  Two sessions at the top: suggest +2.5 kg on the last load (+5 kg for `lower_body` exercises). Two sessions
+  missing the bottom: suggest −5 %. Otherwise keep; fewer than two sessions: keep, `need_two_sessions`.
+  Weekly volume (sets, sum of reps × load, sets without a load counted apart) and the existing session-RPE
+  load (`rpe × training_minutes` of the check-ins) are summarised per athlete and calendar week (Monday).
+- API: `GET/POST /api/exercises`, `DELETE /api/exercises/{id}` (409 when in use); `GET/POST /api/plans`,
+  `GET/PUT/DELETE /api/plans/{id}`; `POST /api/set-logs`, `GET /api/set-logs?athlete_id=&from=&to=`,
+  `DELETE /api/set-logs/{id}`; `GET /api/athletes/{id}/training?weeks=` (weekly volume and suggestions);
+  `GET /api/athletes/{id}/training.csv` (staff). Roles and club scope as for jumps and sessions: coach own club,
+  athlete own data (plans: those assigned to them, their groups or the whole club), admin all, cross-club 404.
+  Athlete writes need recorded consent. Audit actions: `exercise_created`, `exercise_deleted`, `plan_created`,
+  `plan_changed`, `plan_deleted`, `set_logged`, `set_deleted`. A new set publishes a `set` event.
 
 ### 6.3 Nutrition (server, dashboard, app)
 
-- Food list: a subset of USDA FoodData Central "Foundation" and "SR Legacy" foods (public domain, CC0;
-  source and date recorded), per 100 g: energy, protein, carbohydrate, fat, fibre; plus club or athlete
-  custom foods. Bulgarian display names for the common foods.
-- `food_logs(id, athlete_id, day, meal, food_id, grams, client_id)` and `weights(id, athlete_id, day, kg)`.
-- Weight trend: exponentially smoothed moving average with 10 % weight per day (the "Hacker's Diet" trend,
-  J. Walker), shown beside the daily values.
-- Expenditure estimate (energy balance): over the last 14–28 days with at least 10 logged food days and 8
-  weigh-ins, estimate = mean logged intake − (trend change in kg × 7700 kcal) / days, with the window and
-  the data count shown and the words "estimate from your own logs". Below that data threshold: no estimate.
-- Targets: kcal, protein, carbohydrate, fat per day, set by the coach or the athlete. Guardrails: for
-  athletes marked under 18 the target can never be below the current estimate (no deficit) unless a
-  coach sets it; for everyone never below 1500 kcal; protein suggestion 1.4–2.0 g per kg body weight as a
-  range, not a prescription. The app says these are numbers to discuss with the coach.
-- Daily summary: totals against targets; weekly averages.
+- Food list: a subset of about 330 USDA FoodData Central "Foundation" (2025-12-18) and "SR Legacy" (2018-04)
+  foods (public domain, CC0; source and release recorded in the header of `server/data/foods.csv`), per
+  100 g: energy, protein, carbohydrate, fat, fibre (missing fibre stored as 0); Bulgarian display name, USDA
+  description and FDC id. The file is loaded idempotently at startup (`INSERT OR IGNORE` on the FDC id).
+  Club foods (staff) and personal foods (athletes, consent needed) are added with the same five values.
+- `food_logs(id, athlete_id, day, meal, food_id, grams, client_id, created_at)` (meal `breakfast`, `lunch`,
+  `dinner`, `snack`; idempotent by `client_id`, same day window as sets) and `weights(id, athlete_id, day, kg)`
+  (unique per day, like check-ins: `PUT /api/me/weights/{day}` 201 on create, 200 on replace; 20–400 kg).
+- Weight trend: the owner's own numeric trend model, reconstructed from measured behaviour and reimplemented
+  in original Python (`server/weight_trend/`, exponential trend smoothing over daily bodyweight). It replaces
+  the plain moving average first considered here and is the only code in this section not written from a
+  published general method. Dated kilograms (the last 180 days up to the latest weigh-in, UTC midnight) go in;
+  `trend_kg`, `transient_kg` and `sigma_kg` come out for every calendar day between the first and the last
+  weigh-in, shown beside the daily values. Fewer than two weigh-ins: no trend. The numbers are those of the
+  original model; a test compares both implementations on a fixed series.
+- Expenditure estimate (energy balance): over the last 28 days (shortened to start at the first logged day,
+  never below 14) with at least 10 logged food days and 8 weigh-ins inside the window, estimate = mean
+  logged intake (mean of the daily kcal of days with food logged) − (trend change in kg × 7700 kcal) / days,
+  where the trend change runs from the first to the last weigh-in of the window and days is the span between
+  them. The response shows the window, the food-day and weigh-in counts and the words "estimate from your own
+  logs". Below the data threshold: no estimate (`available: false`, `not_enough_data`).
+- Targets: `nutrition_targets(athlete_id, kcal, protein_g, carbs_g, fat_g, set_by, updated_at)`, set by the coach
+  or the athlete (`PUT /api/athletes/{id}/nutrition/target`, consent needed). `users.under_18` (athlete profile,
+  default false) is set by a coach or admin with `PATCH /api/users/{id}/profile` and shown in user lists and the
+  export. Guardrails: nobody can set less than 1500 kcal (422); an athlete marked under 18 cannot set a target
+  below the current estimate, or any target while there is no estimate (a coach or admin can, above 1500);
+  protein suggestion 1.4–2.0 g per kg of trend weight as a range, not a prescription. The app says these are
+  numbers to discuss with the coach.
+- Daily summary: totals and kcal per meal against the target, remaining amounts, and averages over the 7 days
+  ending at the chosen day (logged days only).
+- API: `GET /api/foods?q=` (system, club and own foods), `POST /api/foods`, `DELETE /api/foods/{id}` (own or club
+  custom foods, 409 in use); `POST /api/food-logs`, `GET /api/food-logs?athlete_id=&from=&to=`,
+  `DELETE /api/food-logs/{id}`; `PUT/DELETE /api/me/weights/{day}`, `GET /api/athletes/{id}/weights`;
+  `GET /api/athletes/{id}/nutrition/estimate`, `GET /api/athletes/{id}/nutrition/target`,
+  `PUT /api/athletes/{id}/nutrition/target`, `GET /api/athletes/{id}/nutrition/summary?day=`;
+  `GET /api/athletes/{id}/nutrition.csv` and `weights.csv` (staff). Scope as in 6.2. Audit actions:
+  `food_created`, `food_deleted`, `food_logged`, `food_deleted_log`, `weight_logged`, `weight_deleted`,
+  `target_set`, `profile_changed`; CSV exports are audited as `csv_export` with the kind. New meals and
+  weights publish `food` and `weight` events (no values).
+- The athlete JSON export adds `set_logs`, `custom_foods`, `food_logs`, `weights`, `nutrition_target` and
+  `under_18`; `DELETE /api/me/data` also deletes them, retaining the account, consent and plans.
 
 ### 6.4 Assistant ("AI помощник")
 

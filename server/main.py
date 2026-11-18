@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import secrets
 import sqlite3
+import sys
 from statistics import median
 import threading
 import time
@@ -26,6 +27,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from . import training_nutrition_api
+
 
 def database_path():
     return os.environ.get("JUMPSCAN_DB", str(Path(__file__).with_name("jumpscan.db")))
@@ -37,6 +40,8 @@ def database(path):
     connection = sqlite3.connect(path, timeout=10, check_same_thread=False)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    # SQLite LIKE/lower() only fold ASCII; expose Unicode case folding for Cyrillic search.
+    connection.create_function("casefold", 1, lambda s: s.casefold() if isinstance(s, str) else s, deterministic=True)
     try:
         with connection:
             yield connection
@@ -151,6 +156,7 @@ def init_db(path):
                 db.execute(f"ALTER TABLE jumps ADD COLUMN {name} {declaration}")
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS jumps_client ON jumps(athlete_id, client_id) "
                    "WHERE client_id IS NOT NULL")
+        training_nutrition_api.init_schema(db)  # training and nutrition tables (SPEC 6.2, 6.3)
 
 
 def password_hash(password, salt):
@@ -622,6 +628,7 @@ def create_app(db_path=None):
     app.state.db_path = db_path if db_path is not None else database_path()
     app.add_middleware(RequestBodyLimit)
     app.state.events = EventBus()
+    training_nutrition_api.install(app, sys.modules[__name__])
     app.mount("/static", StaticFiles(directory=Path(__file__).with_name("static")), name="static")
 
     csp = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -764,7 +771,7 @@ def create_app(db_path=None):
         require_role(user, "admin", "coach")
         rows = db.execute(
             "SELECT users.id, users.name, users.club_id, users.active, users.consent_recorded, "
-            "users.consent_by, users.consent_at, COUNT(jumps.id) AS jump_count, "
+            "users.consent_by, users.consent_at, users.under_18, COUNT(jumps.id) AS jump_count, "
             "MAX(jumps.created_at) AS last_jump_at FROM users LEFT JOIN jumps ON jumps.athlete_id = users.id "
             "WHERE users.role = 'athlete' AND (? = 'admin' OR users.club_id = ?) "
             "GROUP BY users.id ORDER BY users.name, users.id LIMIT ? OFFSET ?",
@@ -786,7 +793,8 @@ def create_app(db_path=None):
                                 "athlete_id": jump["athlete_id"], "created_at": jump["created_at"],
                                 "session_id": jump["session_id"], "client_id": jump["client_id"]}
                                for jump in histories[row["id"]]])["metrics"]
-            result.append({**dict(row), "active": bool(row["active"]), **consent_fields(row),
+            result.append({**dict(row), "active": bool(row["active"]), "under_18": bool(row["under_18"]),
+                           **consent_fields(row),
                            "changes": {key: changes[key] for key in
                                        ("knee_ankle_ratio", "knee_flexion_peak_mean", "flexion_asymmetry_pct")}})
         return result
@@ -861,6 +869,7 @@ def create_app(db_path=None):
         require_role(user, "athlete")
         db.execute("DELETE FROM comments WHERE athlete_id = ?", (user["id"],))
         db.execute("DELETE FROM checkins WHERE athlete_id = ?", (user["id"],))
+        training_nutrition_api.delete_data(db, user["id"])
         db.execute("DELETE FROM jumps WHERE athlete_id = ?", (user["id"],))
         audit(db, user["id"], "data_deleted", user["id"])
         db.commit()
@@ -892,8 +901,10 @@ def create_app(db_path=None):
         comments = [dict(row) for row in db.execute(
             "SELECT id, author_id, jump_id, session_id, body, created_at, read_at FROM comments "
             "WHERE athlete_id = ? ORDER BY created_at, id", (user["id"],))]
+        profile["under_18"] = bool(user["under_18"])
         result = {"user": profile, "jumps": jump_rows(db, user["id"]), "checkins": checkins,
-                  "comments": comments, "exported_at": now_iso()}
+                  "comments": comments, **training_nutrition_api.export_data(db, user["id"]),
+                  "exported_at": now_iso()}
         audit(db, user["id"], "json_export", user["id"])
         db.commit()
         return JSONResponse(result, headers={"Content-Disposition": 'attachment; filename="jumpscan-data.json"'})
@@ -918,7 +929,7 @@ def create_app(db_path=None):
     @app.get("/api/clubs")
     def clubs(user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin")
-        return [dict(row) for row in db.execute("SELECT * FROM clubs ORDER BY name, id")]
+        return [dict(row) for row in db.execute("SELECT * FROM clubs ORDER BY id")]
 
     @app.post("/api/clubs", status_code=201)
     def add_club(body: NewClub, user=Depends(current_user), db=Depends(get_db)):
@@ -937,7 +948,8 @@ def create_app(db_path=None):
         require_role(user, "admin", "coach")
         rows = db.execute("SELECT * FROM users WHERE (? = 'admin' OR club_id = ?) ORDER BY name, id LIMIT ? OFFSET ?",
                           (user["role"], user["club_id"], limit, offset))
-        return [{**public_user(row), "email": row["email"], "active": bool(row["active"]), **consent_fields(row)} for row in rows]
+        return [{**public_user(row), "email": row["email"], "active": bool(row["active"]),
+                 "under_18": bool(row["under_18"]), **consent_fields(row)} for row in rows]
 
     @app.patch("/api/users/{target_id}")
     def user_status(target_id: int, body: UserStatus, user=Depends(current_user), db=Depends(get_db)):

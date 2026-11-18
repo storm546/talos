@@ -176,7 +176,104 @@ def seed(path=None):
             db.execute("INSERT INTO comments(athlete_id, author_id, body, created_at) VALUES (?, ?, ?, ?)",
                        (athlete1, athlete1, "Ще обърна внимание, благодаря!", (now - timedelta(days=1, hours=2)).isoformat()))
 
+        seed_training_nutrition(db, user_ids, athlete_ids, groups)
         db.commit()
+
+
+EXERCISES = (  # name, kind, lower body
+    ("Клякане със щанга", "strength", 1), ("Румънска тяга", "strength", 1), ("Напади с дъмбели", "strength", 1),
+    ("Лег преса", "strength", 1), ("Лежанка", "strength", 0), ("Набирания", "strength", 0),
+    ("Подскоци от приклякване", "plyometric", 1), ("Скокове през бариери", "plyometric", 1),
+    ("Скок от платформа", "plyometric", 1), ("Мобилност за глезени", "mobility", 0), ("Планк", "mobility", 0),
+    ("Леко бягане", "conditioning", 0), ("Скачане на въже", "conditioning", 0),
+)
+# weekday (0 = Monday), exercise, sets, reps, reps_max, load_kg, rpe_target; two group plans share the layout
+PLAN_ITEMS = (
+    (0, "Клякане със щанга", 3, 6, 8, 60, 8), (0, "Румънска тяга", 3, 8, 10, 50, 8), (0, "Планк", 2, 1, 1, None, None),
+    (2, "Напади с дъмбели", 3, 8, 10, 20, 8), (2, "Лежанка", 3, 6, 8, 40, 8), (2, "Набирания", 3, 5, 8, None, 8),
+    (4, "Скок от платформа", 3, 5, 5, None, None), (4, "Подскоци от приклякване", 3, 6, 6, None, None),
+    (4, "Мобилност за глезени", 2, 10, 10, None, None),
+)
+MEAL_PLAN = (  # meal, food (Bulgarian name from the food list), grams
+    ("breakfast", "Овесени ядки", 80), ("breakfast", "Кисело мляко 3.6", 200), ("breakfast", "Банани", 120),
+    ("lunch", "Ориз бял сварен", 220), ("lunch", "Пилешки гърди печени", 150), ("lunch", "Домати", 150),
+    ("lunch", "Зехтин", 10), ("dinner", "Картофи печени", 250), ("dinner", "Пъстърва", 150),
+    ("dinner", "Бял хляб", 60), ("snack", "Ябълки", 180), ("snack", "Орехи", 30),
+)
+
+
+def seed_training_nutrition(db, user_ids, athlete_ids, groups):
+    """Exercises, group plans, two weeks of sets, meals and weights; synthetic, only into an empty set of tables."""
+    exercise_ids = {}
+    for club in db.execute("SELECT id FROM clubs").fetchall():
+        for name, kind, lower in EXERCISES:
+            db.execute("INSERT OR IGNORE INTO exercises(club_id, name, kind, lower_body) VALUES (?, ?, ?, ?)",
+                       (club["id"], name, kind, lower))
+    demo_club_id = db.execute("SELECT club_id FROM users WHERE email = 'coach@demo.test'").fetchone()[0]
+    for row in db.execute("SELECT id, name FROM exercises WHERE club_id = ?", (demo_club_id,)):
+        exercise_ids[row["name"]] = row["id"]
+    today = datetime.now(timezone.utc).date()
+    if db.execute("SELECT COUNT(*) FROM plans").fetchone()[0]:
+        return
+    starts_on = (today - timedelta(days=today.weekday() + 14)).isoformat()
+    plans = {}
+    for group_name, title in (("Юноши", "Сила и скокове: юноши"), ("Състезатели", "Сила и скокове: състезатели")):
+        cursor = db.execute(
+            "INSERT INTO plans(club_id, title, group_id, athlete_id, starts_on, weeks, notes, created_by) "
+            "VALUES (?, ?, ?, NULL, ?, 6, ?, ?)",
+            (demo_club_id, title, groups[group_name], starts_on, "Демо план: синтетични данни",
+             user_ids.get("coach")))
+        for position, (weekday, name, sets, reps, reps_max, load, rpe) in enumerate(PLAN_ITEMS):
+            db.execute(
+                "INSERT INTO plan_items(plan_id, weekday, exercise_id, sets, reps, reps_max, load_kg, rpe_target, "
+                "position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (cursor.lastrowid, weekday, exercise_ids[name], sets, reps, reps_max, load, rpe, position))
+        plans[group_name] = cursor.lastrowid
+    members = {"Юноши": ("athlete1", "athlete2", "athlete4"), "Състезатели": ("athlete5", "athlete6", "athlete7")}
+    weekdays = sorted({item[0] for item in PLAN_ITEMS})
+    food_ids = {name: db.execute("SELECT id FROM foods WHERE name_bg = ? AND owner_id IS NULL",
+                                 (name,)).fetchone()[0] for _, name, _ in MEAL_PLAN}
+    for group_name, accounts in members.items():
+        for account in accounts:
+            athlete_id, variant = athlete_ids[account], int(account[-1])
+            rng = random.Random(1000 + variant)
+            for session, days_ago in enumerate((12, 10, 8, 5, 3, 1)):
+                day = (today - timedelta(days=days_ago)).isoformat()
+                for weekday, name, sets, reps, reps_max, load, rpe in PLAN_ITEMS:
+                    if weekday != weekdays[session % len(weekdays)]:
+                        continue
+                    for set_no in range(1, sets + 1):
+                        if variant == 1:  # reaches the top of every range: a progression suggestion
+                            done, effort = reps_max, (rpe - 1 if rpe else None)
+                        elif variant == 2:  # stays below the bottom of the range: a lighter suggestion
+                            done, effort = max(1, reps - 1), (rpe + 1 if rpe else None)
+                        else:
+                            done, effort = rng.randint(reps, reps_max), (rpe + rng.choice((-1, -.5, 0, .5)) if rpe else None)
+                        db.execute(
+                            "INSERT INTO set_logs(athlete_id, day, exercise_id, set_no, reps, load_kg, rpe, plan_id, "
+                            "client_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (athlete_id, day, exercise_ids[name], set_no, done, load, effort, plans[group_name],
+                             f"seed-set-{athlete_id}-{day}-{exercise_ids[name]}-{set_no}", now_isos(today - timedelta(days=days_ago))))
+            base = 60 + variant * 3 + rng.random()
+            for days_ago in range(14):
+                day = today - timedelta(days=days_ago)
+                if days_ago != 5:  # one day without a meal log
+                    for meal, food, grams in MEAL_PLAN:
+                        db.execute(
+                            "INSERT INTO food_logs(athlete_id, day, meal, food_id, grams, client_id, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (athlete_id, day.isoformat(), meal, food_ids[food], round(grams * rng.uniform(.85, 1.15)),
+                             f"seed-food-{athlete_id}-{day.isoformat()}-{food}", now_isos(day)))
+                if days_ago not in (4, 9):  # two days without a weigh-in
+                    db.execute("INSERT INTO weights(athlete_id, day, kg) VALUES (?, ?, ?)",
+                               (athlete_id, day.isoformat(), round(base + days_ago * .04 + rng.gauss(0, .3), 1)))
+    db.execute("UPDATE users SET under_18 = 1 WHERE email = 'athlete7@demo.test'")
+    for account, kcal in (("athlete1", 2200), ("athlete7", 2600)):
+        db.execute(
+            "INSERT INTO nutrition_targets(athlete_id, kcal, protein_g, carbs_g, fat_g, set_by, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (athlete_ids[account], kcal, 130, round(kcal * .5 / 4), round(kcal * .3 / 9), user_ids.get("coach"),
+             datetime.now(timezone.utc).isoformat()))
 
 
 def now_isos(day):
