@@ -30,7 +30,7 @@ def check():
                 page.screenshot(path=str(output / 'login-failure.png'), full_page=True)
                 print('Login state:', page.locator('#message').inner_text(), 'page errors:', errors, flush=True)
                 raise
-            page.get_by_role('navigation').wait_for()
+            page.locator('main nav').first.wait_for()
 
         login('coach')
         assert page.locator('table tbody tr').count() == 6
@@ -43,8 +43,8 @@ def check():
         page.locator('.name-button').first.click()
         page.locator('svg').nth(3).wait_for()
         assert page.evaluate('document.activeElement.tagName') == 'H1'
-        assert page.locator('svg').count() == 4
-        assert page.locator('svg rect').count() == 10
+        assert page.locator('svg').count() == 6
+        assert page.locator('svg rect').count() == 17
         assert page.locator('table').last.locator('tbody tr').count() == 10
         page.screenshot(path=str(output / 'athlete-desktop.png'), full_page=True)
         page.locator('#language').select_option('en')
@@ -78,6 +78,8 @@ def check():
         # Club platform: groups, sessions, wellbeing, feedback (section 5.4).
         login('coach')
         page.get_by_role('button', name='Групи', exact=True).click()
+        page.get_by_role('heading', name='Групи', exact=True).wait_for()
+        page.locator('.group-row').first.wait_for()
         assert page.locator('.group-row').count() == 2
         page.locator('summary', has_text='Добави група').click()
         page.locator('form input[name=name]').fill('Браузър група')
@@ -93,18 +95,42 @@ def check():
         page.locator('.report-panel table').wait_for()
         page.get_by_role('button', name='Самочувствие', exact=True).click()
         page.get_by_role('heading', name='Самочувствие', exact=True).wait_for()
-        assert page.get_by_text('под обичайното', exact=True).count() == 1
+        page.locator('table tbody tr').first.wait_for()
+        assert page.locator('table tbody tr').count() == 6  # one row per club athlete
+        assert page.get_by_text('под обичайното', exact=True).count() <= 1  # at most one; depends on the day's window
         # athlete page: feedback thread visible for staff
         page.get_by_role('button', name='Отбор', exact=True).click()
         page.locator('.name-button').first.click()
         page.locator('.comment-box').wait_for()
+        # Training, nutrition and form sections for the selected athlete (SPEC section 6).
+        page.locator('.subnav').get_by_role('button', name='Тренировки', exact=True).click()
+        page.get_by_role('button', name='Към отбора', exact=True).wait_for()
+        page.get_by_role('heading', name='Дневник на сериите', exact=True).wait_for()
+        page.locator('.subnav').get_by_role('button', name='Хранене', exact=True).click()
+        page.locator('.daypicker').wait_for()
+        page.locator('figure svg').first.wait_for()
+        page.screenshot(path=str(output / 'coach-nutrition.png'), full_page=True)
+        page.locator('.subnav').get_by_role('button', name='Техника', exact=True).click()
+        page.get_by_role('button', name='Към отбора', exact=True).wait_for()
+        # staff plan and exercise management
+        page.get_by_role('button', name='Планове', exact=True).click()
+        page.get_by_role('heading', name='Планове', exact=True).wait_for()
+        page.get_by_role('heading', name='Упражнения', exact=True).wait_for()
+        page.get_by_role('button', name='Добави план', exact=True).click()
+        page.locator('#plan-title').wait_for()
+        assert page.evaluate('document.activeElement.id') == 'plan-title'
+        page.locator('.plan-item').first.wait_for()
+        page.get_by_role('button', name='Отказ', exact=True).click()
+        # assistant panel present on every page
+        assert page.locator('.assistant-panel').count() == 1
         page.get_by_role('button', name='Изход', exact=True).click()
         page.locator('#login-form').wait_for()
 
         login('athlete1')
         page.get_by_role('button', name='Моите сесии', exact=True).wait_for()
         page.get_by_role('button', name='Моите отбелязвания', exact=True).click()
-        page.locator('table').wait_for()
+        page.get_by_role('heading', name='Моите отбелязвания', exact=True).wait_for()
+        page.locator('table').first.wait_for()
         page.get_by_role('button', name='Моите скокове', exact=True).click()
         page.locator('.comment-box').wait_for()
         assert page.get_by_role('textbox', name='Коментар').count() == 1
@@ -131,6 +157,20 @@ def check():
         login('athlete1')
         page.locator('svg').nth(3).wait_for()
         assert page.get_by_role('button', name='Отбор', exact=True).count() == 0
+        # Athlete training, nutrition and form sections plus the assistant panel (SPEC section 6).
+        page.locator('.subnav').get_by_role('button', name='Тренировки', exact=True).click()
+        page.get_by_role('heading', name='Дневник на сериите', exact=True).wait_for()
+        page.locator('.subnav').get_by_role('button', name='Хранене', exact=True).click()
+        page.locator('.daypicker').wait_for()
+        page.locator('figure svg').first.wait_for()
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        page.locator('.subnav').get_by_role('button', name='Техника', exact=True).click()
+        page.get_by_text('Още няма записи на техника.', exact=True).wait_for()
+        assert page.locator('.assistant-panel').count() == 1
+        page.locator('.assistant-panel > summary').click()
+        page.locator('#assistant-input').wait_for()
+        page.locator('.subnav').get_by_role('button', name='Моите скокове', exact=True).click()
+        page.locator('svg').nth(3).wait_for()
         with page.expect_download() as result:
             page.get_by_role('button', name='Изтегли моите данни (JSON)', exact=True).click()
         assert result.value.suggested_filename.endswith('.json')
@@ -139,7 +179,7 @@ def check():
         page.get_by_text('Всички ваши скокове ще бъдат изтрити окончателно. Профилът ви остава.', exact=True).wait_for()
         page.get_by_role('button', name='Отказ', exact=True).click()
         assert page.evaluate('document.activeElement.dataset.action') == 'delete'
-        assert page.locator('svg').count() == 4
+        assert page.locator('svg').count() == 6
         page.get_by_role('button', name='Изтрий моите скокове', exact=True).click()
         page.get_by_role('button', name='Потвърди изтриването', exact=True).click()
         page.get_by_text('Скоковете са изтрити.', exact=True).wait_for()

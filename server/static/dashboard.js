@@ -51,7 +51,44 @@ const dictionary = {
     referTo:'За кой скок или сесия', aboutJump:'за скок', aboutSession:'за сесия', reply:'Отговори',
     wellbeingChart:'Самочувствие и натоварване', loadLegend:'Точки: самочувствие · квадратчета: натоварване',
     mySessions:'Моите сесии', myCheckins:'Моите отбелязвания', noJumpRef:'Без връзка', noSessionRef:'Без сесия',
-    saveCheckin:'Запиши отбелязването', checkinNote:'Оценките са от 1 до 5, където 5 е най-добре. Пишете как се чувствате днес.'
+    saveCheckin:'Запиши отбелязването', checkinNote:'Оценките са от 1 до 5, където 5 е най-добре. Пишете как се чувствате днес.',
+    training:'Тренировки', nutrition:'Хранене', formView:'Техника', plans:'Планове', exercisesTitle:'Упражнения',
+    assistant:'AI помощник', sectionLinks:'Раздели', selectAthleteFirst:'Изберете състезател от „Отбор".',
+    weekdays:['Пон','Вт','Ср','Чет','Пет','Съб','Нед'],
+    assignedPlan:'Назначен план', weekday:'Ден', exercise:'Упражнение', setsCol:'Серии', repsRange:'Повторения',
+    loadKg:'Тежест (кг)', rpeTarget:'Целеви RPE', setHistory:'Дневник на сериите', setNo:'Серия №', repsDone:'Повторения',
+    progressionTitle:'Предложение за прогресия', suggestion:'Предложение', planned:'Планирано',
+    increase:'Увеличи', decrease:'Намали', keep:'Запази', suggestedLoad:'Предложена тежест', fromLoad:'От',
+    top_of_range_twice:'Горна граница два пъти', below_range_twice:'Под долната граница два пъти',
+    need_two_sessions:'Нужни са две тренировки', no_change:'Без промяна',
+    weeklyVolume:'Седмичен обем', weekCol:'Седмица', volumeKg:'Обем (кг)', unloadedSets:'Серии без тежест',
+    sessionLoadCol:'Натоварване (RPE)', trainingNote:'Предложенията не се прилагат автоматично. Обсъдете ги с треньора.',
+    noTraining:'Още няма тренировъчни данни.', noPlan:'Няма назначен план.', noPlans:'Няма планове.',
+    noExercises:'Няма упражнения.', addPlan:'Добави план', createPlan:'Създай план', editPlan:'Редактирай',
+    deletePlan:'Изтрий', savePlan:'Запиши план', assignTo:'Назначи на', startsOn:'Начална дата', weeksCol:'Седмици',
+    addItem:'Добави ред', removeItem:'Премахни', addExercise:'Добави упражнение', kind:'Вид', lowerBody:'Долна част',
+    strength:'Сила', plyometric:'Плиометрия', mobility:'Подвижност', conditioning:'Кондиция', confirmDeletePlan:'Да изтрия ли плана?',
+    foodLog:'Хранителен дневник', meal:'Хранене', breakfast:'Закуска', lunch:'Обяд', dinner:'Вечеря', snack:'Междинно',
+    food:'Храна', grams:'Грамове', kcal:'Калории', protein:'Белтъчини (г)', carbs:'Въглехидрати (г)', fat:'Мазнини (г)',
+    fibre:'Фибри (г)', dailyTotals:'Общо за деня', nutritionTarget:'Дневна цел', remaining:'Остава', perMeal:'По хранения',
+    weeklyAverage:'Средно за 7 дни', bodyweight:'Телесно тегло', trendLine:'Тренд', weightKg:'Тегло (кг)',
+    expenditure:'Разход на енергия', expenditureNote:'Адаптивна оценка от вашите записи, не измерване.',
+    programTitle:'Програма', goal:'Цел', maintain:'Поддържане', lose:'Сваляне', gain:'Качване', rate:'Темп (кг/седмица)',
+    recommended:'Препоръчано', appliedBadge:'Приложено', notAppliedBadge:'Не е приложено', estimateKcal:'Оценен разход',
+    proteinRange:'Препоръчан белтък', setTarget:'Задай цел', setProgram:'Задай цел и темп', dayComplete:'Отбележи деня завършен',
+    under18:'Под 18 г.', noProgram:'Няма програма. Задайте цел и темп.', notEnoughData:'Недостатъчно записи за оценка.',
+    guardrailNote:'Препоръката не минава правилата (под 18 г. или под 1500 kcal) и не е записана — обсъдете с треньора.',
+    nutritionNote:'Числата са за обсъждане с треньора, не са предписание.', noNutrition:'Още няма данни за хранене.',
+    formHistoryTitle:'История на техниката', squat:'Клек', single_leg_squat:'Клек на един крак', repetition:'Повторение',
+    depth:'Дълбочина (°)', fppa:'Ъгъл в челната равнина (°)', repStatus:'Състояние', complete:'Пълно', partial:'Частично',
+    unclear:'Неясно', repsCount:'Повторения', partialCount:'Частични', unclearCount:'Неясни', worstRep:'Най-слабо',
+    side:'Страна', viewLabel:'Изглед', front:'Отпред', sideView:'Отстрани', unclear_reps:'Неясни повторения',
+    hipBelowKnee:'Таз под коляното', noForm:'Още няма записи на техника.', formWarnNote:'Частичните и неясните повторения се броят отделно.',
+    assistantIntro:'Питайте за тренировки, хранене и тестове. Всяка промяна се потвърждава от вас.',
+    assistantPlaceholder:'Напишете съобщение…', messageLabel:'Съобщение', ask:'Питай', assistantReply:'Отговор',
+    proposalTitle:'Предложени действия', proposalNote:'Нищо не се записва, докато не потвърдите.', confirm:'Потвърди',
+    assistantUnavailable:'AI помощникът не е наличен в момента. Опитайте по-късно.', assistantApplied:'Действията са приложени.',
+    proposalGone:'Предложението е използвано или изтекло.', assistantError:'Помощникът не успя да отговори.'
   },
   en: {
     language:'Language', title:'Landing mechanics', intro:'Your team’s history and change against each athlete’s own baseline.',
@@ -104,11 +141,51 @@ const dictionary = {
     referTo:'About a jump or session', aboutJump:'about jump', aboutSession:'about session', reply:'Reply',
     wellbeingChart:'Wellbeing and load', loadLegend:'Dots: wellbeing · squares: load',
     mySessions:'My sessions', myCheckins:'My check-ins', noJumpRef:'No link', noSessionRef:'No session',
-    saveCheckin:'Save check-in', checkinNote:'Scores are 1 to 5, where 5 is best. Say how you feel today.'
+    saveCheckin:'Save check-in', checkinNote:'Scores are 1 to 5, where 5 is best. Say how you feel today.',
+    training:'Training', nutrition:'Nutrition', formView:'Form', plans:'Plans', exercisesTitle:'Exercises',
+    assistant:'AI assistant', sectionLinks:'Sections', selectAthleteFirst:'Choose an athlete from Team first.',
+    weekdays:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+    assignedPlan:'Assigned plan', weekday:'Day', exercise:'Exercise', setsCol:'Sets', repsRange:'Reps',
+    loadKg:'Load (kg)', rpeTarget:'Target RPE', setHistory:'Set log', setNo:'Set #', repsDone:'Reps',
+    progressionTitle:'Progression suggestion', suggestion:'Suggestion', planned:'Planned',
+    increase:'Increase', decrease:'Decrease', keep:'Keep', suggestedLoad:'Suggested load', fromLoad:'From',
+    top_of_range_twice:'Top of range twice', below_range_twice:'Below range twice',
+    need_two_sessions:'Two sessions needed', no_change:'No change',
+    weeklyVolume:'Weekly volume', weekCol:'Week', volumeKg:'Volume (kg)', unloadedSets:'Sets without load',
+    sessionLoadCol:'Session load (RPE)', trainingNote:'Suggestions are not applied automatically. Discuss them with your coach.',
+    noTraining:'No training data yet.', noPlan:'No plan assigned.', noPlans:'No plans yet.',
+    noExercises:'No exercises yet.', addPlan:'Add plan', createPlan:'Create plan', editPlan:'Edit',
+    deletePlan:'Delete', savePlan:'Save plan', assignTo:'Assign to', startsOn:'Start date', weeksCol:'Weeks',
+    addItem:'Add row', removeItem:'Remove', addExercise:'Add exercise', kind:'Type', lowerBody:'Lower body',
+    strength:'Strength', plyometric:'Plyometric', mobility:'Mobility', conditioning:'Conditioning', confirmDeletePlan:'Delete this plan?',
+    foodLog:'Food log', meal:'Meal', breakfast:'Breakfast', lunch:'Lunch', dinner:'Dinner', snack:'Snack',
+    food:'Food', grams:'Grams', kcal:'Calories', protein:'Protein (g)', carbs:'Carbs (g)', fat:'Fat (g)',
+    fibre:'Fibre (g)', dailyTotals:'Daily totals', nutritionTarget:'Daily target', remaining:'Remaining', perMeal:'By meal',
+    weeklyAverage:'7-day average', bodyweight:'Bodyweight', trendLine:'Trend', weightKg:'Weight (kg)',
+    expenditure:'Energy expenditure', expenditureNote:'An adaptive estimate from your own logs, not a measurement.',
+    programTitle:'Program', goal:'Goal', maintain:'Maintain', lose:'Lose', gain:'Gain', rate:'Rate (kg/week)',
+    recommended:'Recommended', appliedBadge:'Applied', notAppliedBadge:'Not applied', estimateKcal:'Estimated expenditure',
+    proteinRange:'Protein range', setTarget:'Set target', setProgram:'Set goal and rate', dayComplete:'Mark day complete',
+    under18:'Under 18', noProgram:'No program yet. Set a goal and weekly rate.', notEnoughData:'Not enough logged data for an estimate.',
+    guardrailNote:'The recommendation does not pass the guardrails (under 18, or below 1500 kcal) and was not saved — ask your coach.',
+    nutritionNote:'Numbers to discuss with your coach, not a prescription.', noNutrition:'No nutrition data yet.',
+    formHistoryTitle:'Form history', squat:'Squat', single_leg_squat:'Single-leg squat', repetition:'Repetition',
+    depth:'Depth (°)', fppa:'Frontal angle (°)', repStatus:'Status', complete:'Complete', partial:'Partial',
+    unclear:'Unclear', repsCount:'Reps', partialCount:'Partial', unclearCount:'Unclear', worstRep:'Worst',
+    side:'Side', viewLabel:'View', front:'Front', sideView:'Side', unclear_reps:'Unclear reps',
+    hipBelowKnee:'Hips below knee', noForm:'No form sets yet.', formWarnNote:'Partial and unclear repetitions are counted separately.',
+    assistantIntro:'Ask about training, nutrition and testing. Every change is confirmed by you.',
+    assistantPlaceholder:'Type a message…', messageLabel:'Message', ask:'Ask', assistantReply:'Reply',
+    proposalTitle:'Proposed actions', proposalNote:'Nothing is saved until you confirm.', confirm:'Confirm',
+    assistantUnavailable:'The AI assistant is unavailable right now. Try again later.', assistantApplied:'The actions were applied.',
+    proposalGone:'The proposal was already used or has expired.', assistantError:'The assistant could not reply.'
   }
 };
 const $ = id => document.getElementById(id);
-const state = {language:'bg', token:null, user:null, view:'team', athletes:[], users:[], clubs:[], audit:[], offset:0, selected:null, jumps:[], summary:null, sort:'name', ascending:true, consent:null, reset:null, deleting:false, groups:[], groupEdit:null, membersEdit:null, sessions:[], sessionEdit:null, sessionReport:null, wellbeing:[], wellbeingDay:null, checkins:[], sessionsMine:[], comments:[], live:'idle', liveGeneration:0};
+const state = {language:'bg', token:null, user:null, view:'team', athletes:[], users:[], clubs:[], audit:[], offset:0, selected:null, jumps:[], summary:null, sort:'name', ascending:true, consent:null, reset:null, deleting:false, groups:[], groupEdit:null, membersEdit:null, sessions:[], sessionEdit:null, sessionReport:null, wellbeing:[], wellbeingDay:null, checkins:[], sessionsMine:[], comments:[], live:'idle', liveGeneration:0,
+  training:null, setLogs:[], exercises:[], plansData:[], nutritionDay:null, nutSummary:null, weightsData:null,
+  expenditure:null, program:null, nutTarget:null, foodLogs:[], foods:[], formSets:[], planEdit:null,
+  assistant:{open:false, conversationId:null, reply:null, proposal:null, note:null, error:null}};
 const t = key => dictionary[state.language][key] ?? key;
 const locale = () => state.language === 'bg' ? 'bg-BG' : 'en-GB';
 // Shown precision follows what a 30-60 fps phone clip can resolve: whole ms, tenths of a degree or cm.
@@ -148,7 +225,7 @@ async function api(path, options={}) {
   if (!response.ok) {
     const code = response.status;
     if (code === 401 && state.token) {signedOut(); throw new Error('expired');}
-    throw new Error(({401:'invalidLogin',403:'forbidden',404:'notFound',409:'conflict',422:'badInput',429:'rateLimit'})[code] || 'error');
+    throw new Error(({401:'invalidLogin',403:'forbidden',404:'notFound',409:'conflict',422:'badInput',429:'rateLimit',503:'assistantUnavailable'})[code] || 'error');
   }
   if (options.download) return response.blob();
   return response.status === 204 ? null : response.json();
@@ -208,6 +285,7 @@ function refreshFor(event) {
   if (!relevant(event, view)) return;
   const active = document.activeElement;
   if (active && active.name === 'body' && active.value.trim()) return;  // keep typed, unsent comment
+  if (active && active.id === 'assistant-input' && active.value.trim()) return;  // keep typed assistant message
   const activeId = active && active.id;
   const scroll = window.scrollY;
   if (state.user.role === 'athlete' && event.type === 'comment' && view === 'history' &&
@@ -230,13 +308,21 @@ function relevant(event, view) {
   if (view === 'team') return event.type === 'checkin' || event.type === 'jump' || event.type === 'comment';
   if (view === 'wellbeing') return event.type === 'checkin';
   if (view === 'sessions' || view === 'sessionsMine') return event.type === 'session' || event.type === 'jump';
+  if (view === 'training' || view === 'nutrition' || view === 'form') {
+    const target = athleteTarget(); if (!target) return false;
+    const map = {training:['set','jump','checkin'], nutrition:['food','weight','coaching','nutrition_day','checkin'], form:['form']};
+    return map[view].includes(event.type) && String(event.athlete_id) === String(target.id);
+  }
   return false;
 }
 function signedOut() {
   state.liveGeneration++;
-  Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],live:'idle'});
+  Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],live:'idle',training:null,setLogs:[],exercises:[],plansData:[],nutritionDay:null,nutSummary:null,weightsData:null,expenditure:null,program:null,nutTarget:null,foodLogs:[],foods:[],formSets:[],planEdit:null,assistant:{open:false,conversationId:null,reply:null,proposal:null,note:null,error:null}});
   setLive('idle');
   render();
+}
+function athleteTarget() {
+  return state.user && state.user.role === 'athlete' ? state.user : state.selected;
 }
 let loadVersion = 0;
 async function load(view=state.view) {
@@ -274,6 +360,37 @@ async function load(view=state.view) {
     data = {wellbeing:await api('/api/checkins/team?day=' + day), wellbeingDay:day};
   }
   if (view === 'checkins') data = {checkins:await allPages('/api/checkins?athlete_id=' + state.user.id)};
+  if (view === 'training') {
+    const target = athleteTarget();
+    if (target) {
+      const id = target.id;
+      const [training, plansData, setLogs, exercises] = await Promise.all([
+        api('/api/athletes/' + id + '/training?weeks=4'), api('/api/plans'),
+        api('/api/set-logs?athlete_id=' + id + '&limit=500'), api('/api/exercises')]);
+      data = {training, plansData, setLogs, exercises};
+    } else data = {training:null, plansData:[], setLogs:[], exercises:[]};
+  }
+  if (view === 'plans') {
+    const [plansData, exercises, athletes, groups] = await Promise.all([
+      api('/api/plans'), api('/api/exercises'), allPages('/api/athletes'), api('/api/groups')]);
+    data = {plansData, exercises, athletes, groups};
+  }
+  if (view === 'nutrition') {
+    const target = athleteTarget();
+    if (target) {
+      const id = target.id;
+      const day = state.nutritionDay || apiDay();
+      const [nutSummary, weightsData, expenditure, program, nutTarget, foodLogs] = await Promise.all([
+        api('/api/athletes/' + id + '/nutrition/summary?day=' + day), api('/api/athletes/' + id + '/weights'),
+        api('/api/athletes/' + id + '/nutrition/expenditure'), api('/api/athletes/' + id + '/nutrition/program'),
+        api('/api/athletes/' + id + '/nutrition/target'), api('/api/food-logs?athlete_id=' + id + '&limit=500')]);
+      data = {nutSummary, weightsData, expenditure, program, nutTarget, foodLogs, nutritionDay:day};
+    } else data = {nutSummary:null, weightsData:null, expenditure:null, program:null, nutTarget:null, foodLogs:[]};
+  }
+  if (view === 'form') {
+    const target = athleteTarget();
+    data = target ? {formSets:await api('/api/form?athlete_id=' + target.id + '&limit=100')} : {formSets:[]};
+  }
   if (version !== loadVersion || !state.user) return;
   Object.assign(state, data, {view}); message(''); render('h1');
 }
@@ -389,7 +506,7 @@ function history(content) {
   if(!own)content.append(button('back',()=>load('team'),'secondary back'));
   const head=heading(athlete.name,t('history')+' · '+format(state.summary.jump_count)+' · '+t('firstJump')+': '+date(state.summary.first_jump_at));
   const actions=node('div',null,'actions');actions.append(own?button('export',()=>download('/api/me/export','jumpscan-data.json')):button('csv',()=>download('/api/athletes/'+athlete.id+'/export.csv','athlete-'+athlete.id+'.csv')));
-  head.append(actions);content.append(head,node('p',t('chartNote'),'muted'));
+  head.append(actions);content.append(head);athleteSubnav(content,'history');content.append(node('p',t('chartNote'),'muted'));
   if(!state.summary.baseline_complete)content.append(node('p',t('provisional'),'warning'));
   if(state.jumps.length){
     const charts=node('div',null,'charts');charts.append(chart('ratio',['knee_ankle_ratio']),chart('flexion',['knee_flexion_peak_l','knee_flexion_peak_r']),chart('asymmetry',['flexion_asymmetry_pct']),chart('height',['jump_height_cm']));content.append(charts);
@@ -806,9 +923,516 @@ function audit(content) {
   for(const entry of state.audit){const row=node('tr');row.append(node('td',dateTime(entry.at)),node('td',entry.actor_email??(entry.actor_id==null?'—':String(entry.actor_id))),node('td',t(entry.action)),node('td',entry.target),node('td',Object.keys(entry.detail).length?JSON.stringify(entry.detail):'—','audit-detail'));grid.body.append(row);}content.append(state.audit.length?grid.wrap:node('p',t('noRows'),'empty'));
   const paging=node('div',null,'actions pagination');const previous=button('previous',()=>{state.offset=Math.max(0,state.offset-50);return load();});previous.disabled=!state.offset;const next=button('next',()=>{state.offset+=50;return load();});next.disabled=state.audit.length<50;paging.append(previous,next);content.append(paging);
 }
+// --- training, nutrition, form, assistant (SPEC section 6) ---
+const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'];
+function svgChart(title, labels, series) {
+  const figure = node('figure'); figure.append(node('figcaption', title));
+  const values = series.flatMap(s => s.data.map(d => d.v)).filter(v => v != null);
+  if (!values.length) { figure.append(node('p', t('noData'))); return figure; }
+  const svg = svgNode('svg', {viewBox:'0 0 480 180', role:'img', 'aria-label':title});
+  const min = Math.min(...values), max = Math.max(...values), span = (max - min) || 1;
+  const lo = min - span * 0.15, hi = max + span * 0.15;
+  const n = labels.length;
+  const y = v => 138 - (v - lo) / (hi - lo) * 116;
+  const x = i => n <= 1 ? 256 : 54 + i / (n - 1) * 404;
+  for (const g of [lo, (lo + hi) / 2, hi]) svg.append(
+    svgNode('line', {x1:54, x2:458, y1:y(g), y2:y(g), class:'chart-grid'}),
+    svgNode('text', {x:46, y:y(g)+4, 'text-anchor':'end', 'font-size':12, fill:'currentColor'}, formatNumber(g)));
+  for (const s of series) {
+    if (s.type === 'line') {
+      let path = [];
+      const draw = () => { if (path.length > 1) svg.append(svgNode('polyline', {points:path.join(' '), class:'series-line ' + s.cls})); path = []; };
+      for (const d of s.data) { if (d.v == null) { draw(); continue; } path.push(x(d.i) + ',' + y(d.v)); }
+      draw();
+    } else {
+      for (const d of s.data) {
+        if (d.v == null) continue;
+        svg.append(s.cls === 'right-dot'
+          ? svgNode('rect', {x:x(d.i)-3, y:y(d.v)-3, width:6, height:6, class:'right-dot'})
+          : svgNode('circle', {cx:x(d.i), cy:y(d.v), r:3, class:s.cls || 'chart-dot'}));
+      }
+    }
+  }
+  if (n > 1) svg.append(
+    svgNode('text', {x:54, y:164, 'font-size':12, fill:'currentColor'}, labels[0]),
+    svgNode('text', {x:458, y:164, 'text-anchor':'end', 'font-size':12, fill:'currentColor'}, labels[n-1]));
+  figure.append(svg); return figure;
+}
+function athleteSubnav(content, current) {
+  const own = state.user.role === 'athlete';
+  const nav = node('nav', null, 'subnav'); nav.setAttribute('aria-label', t('sectionLinks'));
+  for (const [v, key] of [['history', own ? 'ownHistory' : 'history'], ['training', 'training'],
+                          ['nutrition', 'nutrition'], ['form', 'formView']]) {
+    const b = button(key, () => load(v)); if (current === v) b.setAttribute('aria-current', 'page'); nav.append(b);
+  }
+  content.append(nav);
+}
+function beginAthleteView(content, current, subtitle) {
+  const athlete = athleteTarget();
+  if (!athlete) { content.append(node('p', t('selectAthleteFirst'), 'empty')); return null; }
+  if (state.user.role !== 'athlete') content.append(button('back', () => load('team'), 'secondary back'));
+  content.append(heading(athlete.name, subtitle));
+  athleteSubnav(content, current);
+  return athlete;
+}
+function exerciseName(id) { const e = state.exercises.find(x => x.id === id); return e ? e.name : '#' + id; }
+function planCard(plan) {
+  const wrap = node('details'); wrap.open = true;
+  wrap.append(node('summary', plan.title + ' · ' + date(plan.starts_on) + ' · ' + plan.weeks + ' ' + t('weeksCol')));
+  const grid = table(['weekday', 'exercise', 'setsCol', 'repsRange', 'loadKg', 'rpeTarget'], plan.title);
+  grid.wrap.classList.add('club-table');
+  for (const it of plan.items) {
+    const tr = node('tr');
+    tr.append(node('td', t('weekdays')[it.weekday] ?? String(it.weekday)));
+    tr.append(node('td', it.exercise));
+    tr.append(node('td', String(it.sets), 'num'));
+    tr.append(node('td', it.reps_max && it.reps_max !== it.reps ? it.reps + '–' + it.reps_max : String(it.reps), 'num'));
+    tr.append(node('td', it.load_kg == null ? '—' : format(it.load_kg, 'load_kg'), 'num'));
+    tr.append(node('td', it.rpe_target == null ? '—' : format(it.rpe_target, 'rpe_target'), 'num'));
+    grid.body.append(tr);
+  }
+  wrap.append(grid.wrap);
+  if (plan.notes) wrap.append(node('p', plan.notes, 'muted'));
+  return wrap;
+}
+function volumeCharts(weeks) {
+  const labels = weeks.map(w => date(w.week_start));
+  const vol = weeks.map((w, i) => ({i, v: w.volume_kg || null}));
+  const load = weeks.map((w, i) => ({i, v: w.session_load || null}));
+  const wrap = node('div', null, 'charts');
+  wrap.append(
+    svgChart(t('volumeKg'), labels, [{type:'line', cls:'series-left', data:vol}, {type:'dots', cls:'chart-dot', data:vol}]),
+    svgChart(t('sessionLoadCol'), labels, [{type:'line', cls:'series-right', data:load}, {type:'dots', cls:'right-dot', data:load}]));
+  return wrap;
+}
+function volumeTable(weeks) {
+  const grid = table(['weekCol', 'setsCol', 'volumeKg', 'unloadedSets', 'sessionLoadCol'], t('weeklyVolume'));
+  grid.wrap.classList.add('club-table');
+  for (const w of weeks) {
+    const tr = node('tr');
+    tr.append(node('td', date(w.week_start)), node('td', String(w.sets), 'num'),
+      node('td', formatNumber(w.volume_kg), 'num'), node('td', String(w.unloaded_sets), 'num'),
+      node('td', formatNumber(w.session_load), 'num'));
+    grid.body.append(tr);
+  }
+  return grid.wrap;
+}
+function progressionTable(rows) {
+  const section = node('section'); section.append(node('h2', t('progressionTitle')));
+  const grid = table(['exercise', 'planned', 'suggestion'], t('progressionTitle'));
+  grid.wrap.classList.add('club-table');
+  for (const r of rows) {
+    const tr = node('tr');
+    tr.append(node('td', r.exercise || exerciseName(r.exercise_id)));
+    const p = r.planned;
+    const reps = p.reps_max && p.reps_max !== p.reps ? p.reps + '–' + p.reps_max : String(p.reps);
+    tr.append(node('td', p.sets + '×' + reps + (p.rpe_target != null ? ' @RPE ' + format(p.rpe_target, 'rpe_target') : '')));
+    const cell = node('td');
+    cell.append(node('span', t(r.action), 'badge' + (r.action === 'decrease' ? ' pending' : '')));
+    cell.append(document.createTextNode(' · ' + t(r.reason)));
+    if (r.suggested_load_kg != null) cell.append(node('div',
+      t('fromLoad') + ' ' + format(r.from_load_kg, 'load_kg') + ' → ' + format(r.suggested_load_kg, 'load_kg'), 'muted'));
+    tr.append(cell); grid.body.append(tr);
+  }
+  section.append(grid.wrap); return section;
+}
+function setLogTable(rows) {
+  const section = node('section'); section.append(node('h2', t('setHistory')));
+  const grid = table(['date', 'exercise', 'setNo', 'repsDone', 'loadKg', 'rpe'], t('setHistory'));
+  grid.wrap.classList.add('club-table');
+  for (const s of rows) {
+    const tr = node('tr');
+    tr.append(node('td', date(s.day)), node('td', exerciseName(s.exercise_id)), node('td', String(s.set_no), 'num'),
+      node('td', String(s.reps), 'num'), node('td', s.load_kg == null ? '—' : format(s.load_kg, 'load_kg'), 'num'),
+      node('td', s.rpe == null ? '—' : format(s.rpe, 'rpe'), 'num'));
+    grid.body.append(tr);
+  }
+  section.append(grid.wrap); return section;
+}
+function training(content) {
+  const athlete = beginAthleteView(content, 'training', t('training'));
+  if (!athlete) return;
+  content.append(node('p', t('trainingNote'), 'muted'));
+  const own = state.user.role === 'athlete';
+  const plans = own ? state.plansData : state.plansData.filter(p => p.athlete_id === athlete.id || (p.athlete_id == null));
+  if (plans.length) for (const plan of plans) content.append(planCard(plan));
+  else content.append(node('p', t('noPlan'), 'empty'));
+  const tr = state.training;
+  if (tr && tr.weekly_volume && tr.weekly_volume.some(w => w.sets)) {
+    content.append(volumeCharts(tr.weekly_volume), volumeTable(tr.weekly_volume));
+  }
+  if (tr && tr.progression && tr.progression.length) content.append(progressionTable(tr.progression));
+  if (state.setLogs.length) content.append(setLogTable(state.setLogs));
+  else if (!plans.length) content.append(node('p', t('noTraining'), 'empty'));
+}
+function planAssignLabel(plan) {
+  if (plan.athlete_id != null) { const a = state.athletes.find(x => x.id === plan.athlete_id); return a ? a.name : '#' + plan.athlete_id; }
+  if (plan.group_id != null) { const g = state.groups.find(x => x.id === plan.group_id); return g ? g.name : '#' + plan.group_id; }
+  return t('wholeClub');
+}
+function miniNum(name, aria, value, min, max, step) {
+  const i = node('input', null, 'mini'); i.type = 'number'; i.name = name; i.value = value === '' || value == null ? '' : String(value);
+  i.min = min; i.max = max; if (step) i.step = step; i.required = false; i.setAttribute('aria-label', aria); return i;
+}
+function miniSelect(name, aria, choices, value) {
+  const s = node('select', null, 'mini'); s.name = name; s.setAttribute('aria-label', aria);
+  for (const [v, label] of choices) { const o = node('option', label); o.value = String(v); s.append(o); }
+  if (value != null) s.value = String(value); return s;
+}
+function planItemRow(it) {
+  const row = node('div', null, 'plan-item');
+  row.append(miniSelect('weekday', t('weekday'), t('weekdays').map((l, i) => [i, l]), it ? it.weekday : 0));
+  row.append(miniSelect('exercise_id', t('exercise'), state.exercises.map(e => [e.id, e.name]),
+    it ? it.exercise_id : (state.exercises[0] && state.exercises[0].id)));
+  row.append(miniNum('sets', t('setsCol'), it ? it.sets : 3, 1, 20));
+  row.append(miniNum('reps', t('repsRange'), it ? it.reps : 5, 1, 100));
+  row.append(miniNum('reps_max', 'max ' + t('repsRange'), it && it.reps_max != null ? it.reps_max : '', 1, 100));
+  row.append(miniNum('load_kg', t('loadKg'), it && it.load_kg != null ? it.load_kg : '', 0, 1000, '0.5'));
+  row.append(miniNum('rpe_target', t('rpeTarget'), it && it.rpe_target != null ? it.rpe_target : '', 0, 10, '0.5'));
+  const rm = button('removeItem', () => row.remove(), 'secondary'); rm.classList.add('mini'); row.append(rm);
+  return row;
+}
+function planItemValues(row) {
+  const get = n => row.querySelector('[name=' + n + ']');
+  const exId = Number(get('exercise_id').value);
+  if (!exId) return null;
+  const item = {weekday: Number(get('weekday').value), exercise_id: exId,
+    sets: Number(get('sets').value), reps: Number(get('reps').value)};
+  const rm = get('reps_max').value; if (rm !== '') item.reps_max = Number(rm);
+  const ld = get('load_kg').value; if (ld !== '') item.load_kg = Number(ld);
+  const rp = get('rpe_target').value; if (rp !== '') item.rpe_target = Number(rp);
+  return item;
+}
+function planEditor(existing) {
+  const edit = existing.id ? existing : null;
+  const panel = node('section', null, 'inline-panel');
+  panel.append(node('h2', edit ? t('editPlan') : t('addPlan')));
+  const form = node('form');
+  const title = inputField(form, 'sessionTitle', 'title', 'text', edit ? edit.title : '', {maxLength:100}); title.id = 'plan-title';
+  const assign = selectField(form, 'assignTo', 'assign',
+    [['club', t('wholeClub')], ...state.groups.map(g => ['g:' + g.id, g.name]), ...state.athletes.map(a => ['a:' + a.id, a.name])]);
+  assign.value = edit ? (edit.athlete_id != null ? 'a:' + edit.athlete_id : edit.group_id != null ? 'g:' + edit.group_id : 'club') : 'club';
+  inputField(form, 'startsOn', 'starts_on', 'date', edit ? edit.starts_on : apiDay(), {});
+  inputField(form, 'weeksCol', 'weeks', 'number', String(edit ? edit.weeks : 4), {min:1, max:52, step:'1'});
+  const notes = node('textarea'); notes.name = 'notes'; notes.maxLength = 1000; notes.rows = 2; if (edit) notes.value = edit.notes || '';
+  const nl = node('label', t('notes')); nl.append(notes); form.append(nl);
+  const itemsWrap = node('div', null, 'plan-items');
+  form.append(itemsWrap);
+  const addRow = it => itemsWrap.append(planItemRow(it));
+  if (edit && edit.items.length) edit.items.forEach(addRow); else addRow(null);
+  form.append(button('addItem', () => addRow(null)));
+  submit(form, edit ? 'savePlan' : 'createPlan', async data => {
+    const items = [...itemsWrap.querySelectorAll('.plan-item')].map(planItemValues).filter(Boolean);
+    const assignVal = String(data.get('assign'));
+    const body = {title: String(data.get('title') || '').trim(), starts_on: String(data.get('starts_on') || ''),
+      weeks: Number(data.get('weeks')), notes: String(data.get('notes') || ''), items,
+      group_id: assignVal.startsWith('g:') ? Number(assignVal.slice(2)) : null,
+      athlete_id: assignVal.startsWith('a:') ? Number(assignVal.slice(2)) : null};
+    if (edit) await api('/api/plans/' + edit.id, {method:'PUT', body:JSON.stringify(body)});
+    else await api('/api/plans', {method:'POST', body:JSON.stringify(body)});
+    state.planEdit = null; await load(); message('saved');
+  });
+  form.append(button('cancel', () => { state.planEdit = null; render(); }));
+  panel.append(form); return panel;
+}
+function exerciseManager() {
+  const panel = node('section', null, 'inline-panel');
+  panel.append(node('h2', t('exercisesTitle')));
+  if (state.exercises.length) {
+    const grid = table(['exercise', 'kind', 'lowerBody', 'actions'], t('exercisesTitle'));
+    grid.wrap.classList.add('club-table');
+    for (const e of state.exercises) {
+      const tr = node('tr');
+      tr.append(node('td', e.name), node('td', t(e.kind)), node('td', e.lower_body ? '✓' : '—', 'num'));
+      const cell = node('td'); const act = node('div', null, 'cell-actions');
+      act.append(button('deletePlan', async () => { await api('/api/exercises/' + e.id, {method:'DELETE'}); await load(); message('saved'); }, 'danger'));
+      cell.append(act); tr.append(cell); grid.body.append(tr);
+    }
+    panel.append(grid.wrap);
+  } else panel.append(node('p', t('noExercises'), 'empty'));
+  const form = node('form');
+  field(form, 'name', 'name').id = 'exercise-name';
+  selectField(form, 'kind', 'kind', [['strength', t('strength')], ['plyometric', t('plyometric')],
+    ['mobility', t('mobility')], ['conditioning', t('conditioning')]]);
+  const lb = node('label', null, 'checkbox'); const cb = node('input'); cb.type = 'checkbox'; cb.name = 'lower_body';
+  lb.append(cb, document.createTextNode(t('lowerBody'))); form.append(lb);
+  submit(form, 'addExercise', async data => {
+    await api('/api/exercises', {method:'POST', body:JSON.stringify(
+      {name: String(data.get('name') || '').trim(), kind: data.get('kind'), lower_body: data.get('lower_body') === 'on'})});
+    await load(); message('saved');
+  });
+  panel.append(details('addExercise', form));
+  return panel;
+}
+function plans(content) {
+  content.append(heading(t('plans')));
+  if (state.planEdit) { content.append(planEditor(state.planEdit)); return; }
+  content.append(button('addPlan', () => { state.planEdit = {id:null}; render('#plan-title'); }));
+  if (state.plansData.length) {
+    const grid = table(['sessionTitle', 'assignTo', 'startsOn', 'weeksCol', 'actions'], t('plans'));
+    grid.wrap.classList.add('club-table');
+    for (const plan of state.plansData) {
+      const tr = node('tr');
+      tr.append(node('td', plan.title), node('td', planAssignLabel(plan)), node('td', date(plan.starts_on)), node('td', String(plan.weeks), 'num'));
+      const cell = node('td'); const act = node('div', null, 'cell-actions');
+      act.append(button('editPlan', () => { state.planEdit = plan; render('#plan-title'); }));
+      act.append(button('deletePlan', () => { if (window.confirm(t('confirmDeletePlan'))) run(async () => { await api('/api/plans/' + plan.id, {method:'DELETE'}); await load(); message('saved'); }); }, 'danger'));
+      cell.append(act); tr.append(cell); grid.body.append(tr);
+    }
+    content.append(grid.wrap);
+  } else content.append(node('p', t('noPlans'), 'empty'));
+  content.append(exerciseManager());
+}
+function dayPickerInto(content, day, onPick, id) {
+  const picker = node('div', null, 'daypicker');
+  const input = node('input'); input.type = 'date'; input.value = day; input.id = id;
+  picker.append(node('label', t('day')), input); content.append(picker);
+  const week = node('div', null, 'week');
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(); d.setUTCDate(d.getUTCDate() - i); const ds = apiDayOf(d);
+    const b = button(null, () => onPick(ds));
+    b.textContent = new Intl.DateTimeFormat(locale(), {weekday:'short', day:'numeric', month:'numeric'}).format(d);
+    b.setAttribute('aria-pressed', String(ds === day)); b.classList.add('secondary'); week.append(b);
+  }
+  content.append(week);
+  input.addEventListener('change', () => onPick(input.value));
+}
+function weightChart(data) {
+  const base = (data.trend.length ? data.trend.map(x => x.day) : data.weights.map(x => x.day));
+  const labels = base.map(date);
+  const idx = {}; base.forEach((d, i) => idx[d] = i);
+  const trendSeries = base.map((d, i) => ({i, v: null}));
+  data.trend.forEach(tt => { if (tt.day in idx) trendSeries[idx[tt.day]] = {i: idx[tt.day], v: tt.trend_kg}; });
+  const kgSeries = base.map((d, i) => ({i, v: null}));
+  data.weights.forEach(w => { if (w.day in idx) kgSeries[idx[w.day]] = {i: idx[w.day], v: w.kg}; });
+  const fig = svgChart(t('bodyweight'), labels,
+    [{type:'dots', cls:'chart-dot', data:kgSeries}, {type:'line', cls:'series-right', data:trendSeries}]);
+  fig.append(node('p', t('weightKg') + ' · ' + t('trendLine'), 'legend'));
+  return fig;
+}
+function expenditureChart(exp) {
+  const labels = exp.history.map(h => date(h.date));
+  const data = exp.history.map((h, i) => ({i, v: h.value_kcal}));
+  const fig = svgChart(t('expenditure'), labels, [{type:'line', cls:'series-left', data}, {type:'dots', cls:'chart-dot', data}]);
+  fig.append(node('p', t('expenditureNote'), 'legend'));
+  return fig;
+}
+function nutritionSummaryView(s) {
+  const section = node('section'); section.append(node('h2', t('dailyTotals') + ' · ' + date(s.day)));
+  const keys = [['kcal', 'kcal'], ['protein_g', 'protein'], ['carbs_g', 'carbs'], ['fat_g', 'fat'], ['fibre_g', 'fibre']];
+  const grid = table(['metric', 'dailyTotals', 'nutritionTarget', 'remaining'], t('dailyTotals'));
+  grid.wrap.classList.add('club-table');
+  for (const [k, label] of keys) {
+    const tr = node('tr');
+    tr.append(node('td', t(label)), node('td', formatNumber(s.totals[k]), 'num'));
+    const tv = s.target && s.target[k] != null ? s.target[k] : null;
+    tr.append(node('td', tv == null ? '—' : formatNumber(tv), 'num'));
+    const rem = s.remaining && s.remaining[k] != null ? s.remaining[k] : null;
+    const rc = node('td', rem == null ? '—' : formatNumber(rem), 'num'); if (rem != null && rem < 0) rc.classList.add('warning');
+    tr.append(rc); grid.body.append(tr);
+  }
+  section.append(grid.wrap);
+  section.append(node('p', MEAL_ORDER.map(m => t(m) + ': ' + formatNumber(s.by_meal_kcal[m])).join(' · ') + ' ' + t('kcal'), 'muted'));
+  if (s.weekly_average && s.weekly_average.days_logged) section.append(node('p',
+    t('weeklyAverage') + ' (' + s.weekly_average.days_logged + '): ' +
+    keys.map(([k, label]) => t(label) + ' ' + (s.weekly_average[k] == null ? '—' : formatNumber(s.weekly_average[k]))).join(' · '), 'muted'));
+  return section;
+}
+function foodLogView(logs, day) {
+  const section = node('section'); section.append(node('h2', t('foodLog') + ' · ' + date(day)));
+  const dayLogs = logs.filter(l => l.day === day);
+  if (!dayLogs.length) { section.append(node('p', t('noNutrition'), 'empty')); return section; }
+  const grid = table(['meal', 'food', 'grams', 'kcal', 'protein', 'carbs', 'fat'], t('foodLog'));
+  grid.wrap.classList.add('club-table');
+  for (const m of MEAL_ORDER) for (const l of dayLogs.filter(x => x.meal === m)) {
+    const tr = node('tr');
+    tr.append(node('td', t(l.meal)), node('td', state.language === 'bg' ? l.name_bg : (l.name_en || l.name_bg)),
+      node('td', formatNumber(l.grams), 'num'), node('td', formatNumber(l.kcal), 'num'),
+      node('td', formatNumber(l.protein_g), 'num'), node('td', formatNumber(l.carbs_g), 'num'), node('td', formatNumber(l.fat_g), 'num'));
+    grid.body.append(tr);
+  }
+  section.append(grid.wrap); return section;
+}
+function programForm(athlete, prog) {
+  const form = node('form');
+  const cur = prog && prog.program ? prog.program : null;
+  const rec = cur && cur.recommended_target ? cur.recommended_target : null;
+  const goal = selectField(form, 'goal', 'goal', [['maintain', t('maintain')], ['lose', t('lose')], ['gain', t('gain')]]);
+  if (cur) goal.value = cur.goal;
+  inputField(form, 'rate', 'rate_kg_week', 'number', cur ? String(cur.rate_kg_week) : '0', {min:0, max:2, step:'0.05'}).id = 'program-rate';
+  inputField(form, 'protein', 'protein_g', 'number', rec ? String(rec.protein_g) : '', {min:0, max:500, step:'1'});
+  inputField(form, 'fat', 'fat_g', 'number', rec ? String(rec.fat_g) : '', {min:0, max:500, step:'1'});
+  submit(form, 'setProgram', async data => {
+    await api('/api/athletes/' + athlete.id + '/nutrition/program', {method:'PUT', body:JSON.stringify(
+      {goal: data.get('goal'), rate_kg_week: Number(data.get('rate_kg_week')),
+       protein_g: Number(data.get('protein_g')), fat_g: Number(data.get('fat_g'))})});
+    await load(); message('saved');
+  });
+  return form;
+}
+function programView(prog, athlete) {
+  const section = node('section', null, 'inline-panel'); section.append(node('h2', t('programTitle')));
+  if (!prog || !prog.program) {
+    section.append(node('p', t('noProgram'), 'muted'));
+  } else {
+    const p = prog.program;
+    const meta = node('p');
+    meta.append(node('span', t(p.goal), 'badge'));
+    meta.append(document.createTextNode(' · ' + t('rate') + ': ' + format(p.rate_kg_week, 'rate') +
+      ' · ' + t('estimateKcal') + ': ' + formatNumber(p.expenditure_kcal) + ' ' + t('kcal')));
+    section.append(meta);
+    const rec = p.recommended_target;
+    section.append(node('p', t('recommended') + ': ' + formatNumber(rec.calories) + ' ' + t('kcal') + ' · ' +
+      t('protein') + ' ' + formatNumber(rec.protein_g) + ' · ' + t('carbs') + ' ' + formatNumber(rec.carbs_g) +
+      ' · ' + t('fat') + ' ' + formatNumber(rec.fat_g)));
+    const line = node('p');
+    line.append(node('span', t(prog.applied ? 'appliedBadge' : 'notAppliedBadge'), 'badge' + (prog.applied ? '' : ' pending')));
+    section.append(line);
+    if (!prog.applied && prog.guardrail) section.append(node('p', t('guardrailNote'), 'warning'));
+  }
+  section.append(details('setProgram', programForm(athlete, prog)));
+  return section;
+}
+function targetView(tgt, athlete) {
+  const section = node('section', null, 'inline-panel'); section.append(node('h2', t('nutritionTarget')));
+  if (tgt) {
+    if (tgt.under_18) section.append(node('span', t('under18'), 'badge pending'));
+    if (tgt.estimate_kcal != null) section.append(node('p', t('estimateKcal') + ': ' + formatNumber(tgt.estimate_kcal) + ' ' + t('kcal'), 'muted'));
+    if (tgt.protein_range_g) section.append(node('p', t('proteinRange') + ': ' +
+      formatNumber(tgt.protein_range_g.min) + '–' + formatNumber(tgt.protein_range_g.max) + ' ' + t('grams'), 'muted'));
+  }
+  const form = node('form');
+  const cur = tgt && tgt.target ? tgt.target : null;
+  inputField(form, 'kcal', 'kcal', 'number', cur ? String(cur.kcal) : '', {min:1, max:10000, step:'1'}).id = 'target-kcal';
+  inputField(form, 'protein', 'protein_g', 'number', cur && cur.protein_g != null ? String(cur.protein_g) : '', {min:0, max:1000, step:'1', required:false});
+  inputField(form, 'carbs', 'carbs_g', 'number', cur && cur.carbs_g != null ? String(cur.carbs_g) : '', {min:0, max:2000, step:'1', required:false});
+  inputField(form, 'fat', 'fat_g', 'number', cur && cur.fat_g != null ? String(cur.fat_g) : '', {min:0, max:1000, step:'1', required:false});
+  submit(form, 'setTarget', async data => {
+    const body = {kcal: Number(data.get('kcal'))};
+    for (const k of ['protein_g', 'carbs_g', 'fat_g']) { const v = data.get(k); if (v !== '') body[k] = Number(v); }
+    await api('/api/athletes/' + athlete.id + '/nutrition/target', {method:'PUT', body:JSON.stringify(body)});
+    await load(); message('saved');
+  });
+  section.append(details('setTarget', form));
+  return section;
+}
+function nutrition(content) {
+  const athlete = beginAthleteView(content, 'nutrition', t('nutrition'));
+  if (!athlete) return;
+  content.append(node('p', t('nutritionNote'), 'muted'));
+  const own = state.user.role === 'athlete';
+  const day = state.nutritionDay || apiDay();
+  dayPickerInto(content, day, d => { state.nutritionDay = d; load('nutrition'); }, 'nutrition-day');
+  const charts = node('div', null, 'charts');
+  if (state.weightsData && state.weightsData.weights.length) charts.append(weightChart(state.weightsData));
+  if (state.expenditure && state.expenditure.history && state.expenditure.history.length) charts.append(expenditureChart(state.expenditure));
+  if (charts.children.length) content.append(charts);
+  if (state.nutSummary) content.append(nutritionSummaryView(state.nutSummary));
+  content.append(foodLogView(state.foodLogs, day));
+  content.append(programView(state.program, athlete));
+  content.append(targetView(state.nutTarget, athlete));
+  if (own) { const panel = node('section', null, 'inline-panel');
+    panel.append(button('dayComplete', async () => { await api('/api/me/nutrition/days/' + day + '/complete', {method:'PUT'}); await load(); message('saved'); }));
+    content.append(panel); }
+}
+function formSetCard(set) {
+  const wrap = node('section', null, 'inline-panel');
+  wrap.append(node('h2', t(set.exercise) + (set.side ? ' · ' + set.side : '') + ' · ' +
+    t(set.view === 'front' ? 'front' : 'sideView') + ' · ' + dateTime(set.created_at)));
+  const s = set.summary;
+  wrap.append(node('p', t('repsCount') + ': ' + s.repetition_count + ' · ' + t('partialCount') + ': ' +
+    s.partial_count + ' · ' + t('unclearCount') + ': ' + s.unclear_count, 'muted'));
+  const reps = set.repetitions || [];
+  const labels = reps.map(r => '#' + r.index);
+  const depth = reps.map((r, i) => ({i, v: r.depth}));
+  const charts = node('div', null, 'charts');
+  charts.append(svgChart(t('depth'), labels, [{type:'line', cls:'series-left', data:depth}, {type:'dots', cls:'chart-dot', data:depth}]));
+  if (set.view === 'front') {
+    const fl = reps.map((r, i) => ({i, v: r.fppa_l})), fr = reps.map((r, i) => ({i, v: r.fppa_r}));
+    charts.append(svgChart(t('fppa'), labels, [{type:'line', cls:'series-left', data:fl},
+      {type:'line', cls:'series-right', data:fr}, {type:'dots', cls:'chart-dot', data:fl}, {type:'dots', cls:'right-dot', data:fr}]));
+  }
+  wrap.append(charts);
+  const grid = table(['repetition', 'repStatus', 'depth', 'fppa'], t('formHistoryTitle'));
+  grid.wrap.classList.add('club-table');
+  for (const r of reps) {
+    const tr = node('tr'); tr.append(node('td', '#' + r.index));
+    const st = node('td'); st.append(node('span', t(r.status), 'badge' + (r.status === 'complete' ? '' : ' pending'))); tr.append(st);
+    tr.append(node('td', r.depth == null ? '—' : format(r.depth, 'depth'), 'num'));
+    const fppa = r.fppa_l == null && r.fppa_r == null ? '—' : [r.fppa_l, r.fppa_r].map(v => v == null ? '—' : format(v, 'fppa')).join(' / ');
+    tr.append(node('td', fppa, 'num')); grid.body.append(tr);
+  }
+  wrap.append(grid.wrap);
+  if (set.warnings && set.warnings.length) wrap.append(node('p', t('warnings') + ': ' + set.warnings.map(w => t(w)).join(', '), 'warning'));
+  return wrap;
+}
+function form(content) {
+  const athlete = beginAthleteView(content, 'form', t('formView'));
+  if (!athlete) return;
+  content.append(node('p', t('formWarnNote'), 'muted'));
+  if (!state.formSets.length) { content.append(node('p', t('noForm'), 'empty')); return; }
+  for (const set of state.formSets) content.append(formSetCard(set));
+}
+function proposalView(p) {
+  const box = node('div', null, 'proposal');
+  box.append(node('h3', t('proposalTitle')));
+  const list = node('ul');
+  for (const act of p.actions) { const li = node('li'); li.textContent = act.human_summary; list.append(li); }
+  box.append(list, node('p', t('proposalNote'), 'muted'));
+  const btn = node('button', t('confirm')); btn.type = 'button'; btn.dataset.action = 'confirm';
+  btn.addEventListener('click', () => confirmProposal(p.proposal_id, btn));
+  box.append(btn);
+  return box;
+}
+async function askAssistant(msg, control) {
+  const a = state.assistant; a.error = null; a.note = null; control.disabled = true;
+  try {
+    const body = {message: msg}; if (a.conversationId) body.conversation_id = a.conversationId;
+    const res = await api('/api/assistant', {method:'POST', body:JSON.stringify(body)});
+    a.conversationId = res.conversation_id; a.reply = res.reply; a.proposal = res.proposal || null;
+  } catch (err) {
+    a.reply = null; a.proposal = null;
+    a.error = err.message === 'assistantUnavailable' ? 'assistantUnavailable' : 'assistantError';
+  } finally { control.disabled = false; a.open = true; renderAssistant(); }
+}
+async function confirmProposal(id, control) {
+  const a = state.assistant; control.disabled = true; a.error = null;
+  try {
+    await api('/api/assistant/confirm', {method:'POST', body:JSON.stringify({proposal_id: id})});
+    a.proposal = null; a.note = 'assistantApplied';
+    load().catch(() => {});
+  } catch (err) {
+    a.note = (err.message === 'conflict' || err.message === 'notFound') ? 'proposalGone' : 'assistantError';
+    a.proposal = null;
+  } finally { control.disabled = false; a.open = true; renderAssistant(); }
+}
+function renderAssistant() {
+  const host = $('assistant'); if (!host) return;
+  host.replaceChildren();
+  if (!state.user) return;
+  const a = state.assistant;
+  const panel = node('details', null, 'assistant-panel'); panel.open = a.open;
+  panel.addEventListener('toggle', () => { a.open = panel.open; });
+  panel.append(node('summary', t('assistant')));
+  const body = node('div', null, 'assistant-body');
+  body.append(node('p', t('assistantIntro'), 'muted'));
+  const form = node('form', null, 'assistant-form');
+  const ta = node('textarea'); ta.id = 'assistant-input'; ta.name = 'assistant-message'; ta.maxLength = 4000;
+  ta.required = true; ta.rows = 2; ta.placeholder = t('assistantPlaceholder');
+  const label = node('label', t('messageLabel')); label.append(ta); form.append(label);
+  const send = node('button', t('ask')); send.type = 'submit'; form.append(send);
+  form.addEventListener('submit', e => { e.preventDefault(); const msg = ta.value.trim(); if (!msg) { ta.focus(); return; } askAssistant(msg, send); });
+  body.append(form);
+  if (a.error) body.append(node('p', t(a.error), 'warning'));
+  if (a.note) body.append(node('p', t(a.note), 'muted'));
+  if (a.reply) { const r = node('div', null, 'assistant-reply'); r.append(node('h3', t('assistantReply')), node('p', a.reply)); body.append(r); }
+  if (a.proposal) body.append(proposalView(a.proposal));
+  panel.append(body); host.append(panel);
+}
 function render(focusSelector=null) {
   document.documentElement.lang=state.language;document.title='JumpScan · '+t('title');$('language-label').textContent=t('language');$('language').value=state.language;
   const content=$('content');content.replaceChildren();$('session').replaceChildren();$('guide').replaceChildren(node('h2',t('guideTitle')),node('p',t('guide')));
+  $('assistant')?.replaceChildren();
   if(!state.user){
     content.append(heading(t('title'),t('intro')));const panel=node('section',null,'login');panel.append(node('h2',t('signIn')));
     const form=node('form');form.id='login-form';const email=field(form,'email','email','email');email.id='email';email.autocomplete='username';const password=field(form,'password','password','password');password.id='password';password.minLength=1;password.autocomplete='current-password';
@@ -816,10 +1440,11 @@ function render(focusSelector=null) {
   }
   $('session').append(node('span',state.user.name+' · '+t(state.user.role)),button('signOut',async()=>{await api('/api/auth/logout',{method:'POST'});loadVersion++;signedOut();message('');}));
   const nav=node('nav');nav.setAttribute('aria-label',t('title'));
-  const views=state.user.role==='athlete'?[['history','ownHistory'],['sessionsMine','mySessions'],['checkins','myCheckins']]:[['team','team'],['groups','groups'],['sessions','sessions'],['wellbeing','wellbeingView'],['users','users'],...(state.user.role==='admin'?[['clubs','clubs'],['audit','audit']]:[])];
-  for(const [view,key]of views){const control=button(key,()=>load(view));if(state.view===view||(state.view==='history'&&view==='team'))control.setAttribute('aria-current','page');nav.append(control);}content.append(nav);
-  ({team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins})[state.view](content);
+  const views=state.user.role==='athlete'?[['history','ownHistory'],['sessionsMine','mySessions'],['checkins','myCheckins']]:[['team','team'],['plans','plans'],['groups','groups'],['sessions','sessions'],['wellbeing','wellbeingView'],['users','users'],...(state.user.role==='admin'?[['clubs','clubs'],['audit','audit']]:[])];
+  for(const [view,key]of views){const control=button(key,()=>load(view));if(state.view===view||(state.view==='history'&&view==='team')||(['training','nutrition','form'].includes(state.view)&&view==='team'))control.setAttribute('aria-current','page');nav.append(control);}content.append(nav);
+  ({team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans})[state.view](content);
   setLive(state.live);
+  renderAssistant();
   if(focusSelector)content.querySelector(focusSelector)?.focus();
 }
 $('language').addEventListener('change',event=>{state.language=event.target.value;message('');render();});
