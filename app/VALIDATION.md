@@ -568,6 +568,72 @@ device. The kit's original private source clips and external signing files were 
 No requested release check remains pending; validation on a physical ARM phone is outside
 this emulator check.
 
+### Club platform release 1.1.0 — 18 November 2026
+
+Rebuilt the current `stage` sources at `4a2e13b674803e12b6b87b95bfd2650d36aad0a8`
+with versionName `1.1.0` and versionCode `2`. This feature release includes sessions,
+check-ins, coach feedback and idempotent uploads. Sources were synced with
+`rsync --exclude local.properties`, excluding Git metadata, build products and logs,
+to `/work/jumpscan-app` on `android-build-kit` as `builder`. The existing external
+keystore was reused; its directory and files retained modes 700 and 600. No signing
+secret was printed or copied into the repository.
+
+The kit initially reported 5 GiB available. Memory and uptime were checked before
+build and emulator work, with a 3 GiB start gate. Builds ran sequentially with JDK 17,
+`ANDROID_HOME=/opt/android-sdk` and one Gradle worker:
+
+```sh
+cd /work/jumpscan-app
+timeout 1200 nice -n 15 ./gradlew --no-daemon --max-workers=1 \
+  :core:test :app:assembleRelease \
+  -PjumpscanKeystore=/work/jumpscan-keys/keystore.properties
+```
+
+The build passed in 56 seconds. `:core:test` was UP-TO-DATE; its existing XML reports
+contain 55 tests with zero failures, errors or skips. No fresh core test execution
+is claimed for this release build. The signed ARM APK was preserved before the
+emulator variant was built. `apksigner verify --print-certs` and `zipalign -c 4`
+both passed. Only the certificate SHA-256 digest was printed from certificate output:
+`a1e6b96890cf936dab8c9d98456e94be84c0930058bd38749b09c35525782cfc`.
+
+The APK is 60,753,932 bytes (57.94 MiB), with exactly `arm64-v8a` and `armeabi-v7a`
+native libraries. Its uncompressed `assets/pose_landmarker_heavy.task` remains
+30,664,242 bytes. Packaged output metadata confirms versionName `1.1.0` and versionCode `2`.
+The new APK replaces `logs/release/jumpscan-1.0.apk`; the filename is retained as requested.
+The prior artifact is preserved as `logs/release/jumpscan-1.0-preplatform.apk`.
+`logs/release/SHA256SUMS` now covers both, and `sha256sum -c SHA256SUMS` passed:
+
+- New: `f2f7d4925726192451788cdc69275c7c74c417f7094488f3d78e82404e52375e`.
+- Preplatform: `ed62bb9e8991e8b7bfab179ca86af333a2337a40c2b2c1ae6db246b3554072cf`.
+
+An external temporary Gradle init script cleared only release ABI filters; the
+repository's ARM filters were unchanged. That signed emulator build passed in
+14 seconds and included x86_64. Only AVD `jumpscan-worker-a` ran, headless, with a
+1024 MB guest, two cores, SwiftShader and a 720 × 1280 display at 320 dpi. Existing
+test packages in the guest were cleared and removed before installing the release.
+An initial Android System UI timeout dialog interrupted the first UI attempt;
+selecting Wait allowed the smoke test to proceed. No JumpScan code change was needed.
+
+The release app started at sign-in. Submitting `http://example.invalid` visibly
+showed `Enter an https:// server URL.` No credentials or server were used. Continue
+offline opened home with the Sessions block, disabled How I feel today check-in
+entry and `Sign in to see sessions, check-ins and coach feedback.` explanation.
+Pick video opened the filming guide with its diagram and frame-rate guidance.
+Startup, HTTP refusal, offline home and filming-guide screenshots are retained in
+`logs/release3/`; every saved screenshot was opened and inspected. The first refusal
+capture missed the toast, so it is retained separately as `http-refusal-before-toast.png`;
+the final `http-refusal.png` visibly contains the refusal. Final smoke logcat contains
+no fatal exception or JumpScan ANR, and the app process remained alive.
+
+Build, verification, UI-driver, logcat and cleanup evidence is in `logs/release3/`.
+Cleanup cleared and uninstalled the release, removed the UI dump, reset locale and
+display overrides, synced the guest and stopped the emulator. The temporary init
+script and unfiltered APK were removed from the kit. Final checks found no JumpScan
+package, adb device, emulator process or active Gradle build. No private clips were
+used, no host packages were installed and no unrelated process was stopped. The APK
+was not published. Physical ARM execution and live-server integration were outside
+this release smoke test; no requested check remains blocked.
+
 ## Learned detector, second integration — 18 November 2026
 
 The result screen still reports no flight when only the learned detector proposes one. Check frames
