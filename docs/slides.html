@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>JumpScan — презентация</title>
-<!-- Defence deck, 10 slides at 16:9; `node docs/build.cjs slides.html` prints one slide per PDF page.
+<!-- Defence deck, 11 slides at 16:9; `node docs/build.cjs slides.html` prints one slide per PDF page.
      Talk plan and timings: prezentacia.md. Replace the bracketed fields before the defence. -->
 <style>
 @page { size: 297mm 167.06mm; margin: 0; }
@@ -75,15 +75,27 @@ td.r, th.r { text-align: right; }
 </section>
 
 <section class="slide">
-  <p class="kicker">Архитектура</p>
-  <h1>Три части и един договор</h1>
-  <img src="img/arhitektura.svg" alt="Архитектура" style="width:100%; max-height:70mm">
-  <div class="cols3" style="margin-top:5mm">
-    <p><b>Администратор</b> — всички клубове, потребители, дневник</p>
-    <p><b>Треньор</b> — само своя клуб, съгласия, CSV</p>
-    <p><b>Спортист</b> — собствените записи, изтриване</p>
+  <p class="kicker">Клубна платформа</p>
+  <h1>Анализът е ядрото на една клубна платформа</h1>
+  <div class="cols3" style="margin-top:2mm">
+    <div class="card"><b>Сесии и групи</b><p>Планирани тестови сесии за група или целия клуб, с календар (.ics) и доклад на трите опита.</p></div>
+    <div class="card"><b>Самочувствие</b><p>Ежедневно отбелязване с пет оценки и натоварване; треньорът вижда отбора за деня.</p></div>
+    <div class="card"><b>Обратна връзка</b><p>Бележки от треньора за всеки спортист — за скок или сесия — с отговор в приложението.</p></div>
   </div>
+  <p class="note"><b style="color:#176148">Всичко се обновява на живо</b> в панела — нов скок, отбелязване или бележка опресняват отворения изглед без презареждане.</p>
   <span class="num">4</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Архитектура</p>
+  <h1>Три части, модули и един договор</h1>
+  <img src="img/arhitektura.svg" alt="Архитектура" style="width:100%; max-height:66mm">
+  <div class="cols3" style="margin-top:3mm">
+    <p><b>Администратор</b> — всички клубове, потребители, дневник</p>
+    <p><b>Треньор</b> — групи, сесии, самочувствие, бележки</p>
+    <p><b>Спортист</b> — скокове, сесии, самочувствие, отговори</p>
+  </div>
+  <span class="num">5</span>
 </section>
 
 <section class="slide">
@@ -110,7 +122,7 @@ td.r, th.r { text-align: right; }
       <p class="muted">t = 360 ms → h ≈ 15,9 cm</p>
     </div>
   </div>
-  <span class="num">5</span>
+  <span class="num">6</span>
 </section>
 
 <section class="slide">
@@ -120,7 +132,7 @@ td.r, th.r { text-align: right; }
     <div class="phone"><img src="img/app-editor.png" alt="Проверка на кадрите в приложението"></div>
     <img class="shot" src="img/dash-charts.png" alt="Графики в панела" style="max-width:150mm">
   </div>
-  <span class="num">6</span>
+  <span class="num">7</span>
 </section>
 
 <section class="slide">
@@ -141,7 +153,7 @@ td.r, th.r { text-align: right; }
       <p class="muted">Затова числата са за сравнение на спортиста със самия него, не за диагноза.</p>
     </div>
   </div>
-  <span class="num">7</span>
+  <span class="num">8</span>
 </section>
 
 <section class="slide">
@@ -161,19 +173,19 @@ td.r, th.r { text-align: right; }
       <li>CSP, без вграждане в чужди страници, тяло до 16 KB</li>
     </ul>
   </div>
-  <span class="num">8</span>
+  <span class="num">9</span>
 </section>
 
 <section class="slide">
   <p class="kicker">Тестове и качество</p>
   <h1>Една и съща математика навсякъде</h1>
   <div class="cols3">
-    <div class="card"><span class="big">254</span><p>автоматични теста на сървъра: права, граници, атаки, експорт</p></div>
-    <div class="card"><span class="big">53</span><p>теста на ядрото, включително истински клипове и лабораторния набор</p></div>
+    <div class="card"><span class="big">313</span><p>автоматични теста на сървъра: права, граници, атаки, експорт и модулите</p></div>
+    <div class="card"><span class="big">55</span><p>теста на ядрото, включително истински клипове и лабораторния набор</p></div>
     <div class="card"><span class="big">CI</span><p>двата набора се пускат при всяко качване в Git</p></div>
   </div>
   <p class="note">Числата във валидацията са получени от същия анализатор, който работи на телефона.</p>
-  <span class="num">9</span>
+  <span class="num">10</span>
 </section>
 
 <section class="slide">
@@ -182,15 +194,15 @@ td.r, th.r { text-align: right; }
   <div class="cols">
     <div>
       <h2>Готово</h2>
-      <ul><li>Анализ на телефона, без видео навън</li><li>Клубен сървър с три роли и панел</li><li>Валидация срещу лаборатория на девет души</li><li>Ръчна проверка на кадрите, кадър по кадър</li><li>Обучена мрежа, която потвърждава или предлага кадрите</li><li>Български и английски</li></ul>
+      <ul><li>Анализ на телефона, без видео навън</li><li>Групи, сесии с доклад и календар, самочувствие, бележки</li><li>Валидация срещу лаборатория на девет души</li><li>Ръчна проверка на кадрите, кадър по кадър</li><li>Обучена мрежа, която потвърждава или предлага кадрите</li><li>Български и английски</li></ul>
     </div>
     <div>
       <h2>Следва</h2>
-      <ul><li>Серия от три опита с медиана</li><li>По-точен страничен изглед</li><li>Измерване на реален телефон</li></ul>
+      <ul><li>По-точен страничен изглед</li><li>Измерване на реален телефон</li><li>Сървърен модел за страничния изглед, като избор</li></ul>
     </div>
   </div>
   <p class="note">[АДРЕС НА САЙТА] · код: [АДРЕС НА ХРАНИЛИЩЕТО] · GPL-3.0</p>
-  <span class="num">10</span>
+  <span class="num">11</span>
 </section>
 
 </body>

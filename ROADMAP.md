@@ -48,20 +48,22 @@ Status key: done, running, staged (built but not reviewed or not deployed), todo
 - done: validation against Twente; batch scorer
 - done: side view with one measured leg and image-plane angle; detector fixes; nine-subject benchmark (182 clips)
 - done: learned take-off/landing detector as a cross-check and frame suggester (16 289 weights, plain Kotlin)
-- todo: session of three trials with the median reported; final RTMPose report; YouTube slow-motion benchmark
+- todo: final RTMPose report; YouTube slow-motion benchmark
 
 ### B. Club server
 - done: auth, roles, jumps, delete-my-data, validation, rate limit, coach dashboard v1
 - done: consent record per athlete; baseline and change summary; CSV and JSON export; audit log; club and user administration; OpenAPI page
+- done: club platform — groups, sessions with calendar export and session report, daily wellbeing check-in, feedback threads, live events stream, idempotent uploads
 
 ### C. Coach and admin web dashboard
 - done: team overview with change against baseline, athlete page with trend charts, admin page, Bulgarian and English, phone-friendly layout
+- done: club platform views — groups, sessions with report and calendar download, wellbeing team table and athlete chart, feedback threads, live indicator
 
 ### D. Android app
 - done: login, record or pick video, on-device analysis, result, upload, history
 - done: Bulgarian and English texts, landing-frame skeleton overlay, filming guide, offline upload queue; checked on the emulator after the detector merge (280/360/360 ms on the own clips)
 - rejected: faster two-pass analysis (failed its accuracy check)
-- running: frame-confirm step, visual polish, signed release build (logs/run-confirm.sh)
+- running: club screens (next sessions, daily check-in, feedback thread) — another worker; frame-confirm step, visual polish, signed release build (logs/run-confirm.sh)
 - todo: timing on a real phone
 
 ### E. Operations
@@ -69,7 +71,8 @@ Status key: done, running, staged (built but not reviewed or not deployed), todo
 - needs the owner: public address and go-ahead to deploy; the rules require the project online from registration to the end of the tournament, with test accounts for every role
 
 ### F. Documents (Bulgarian)
-- done (drafts with placeholders for names): documentation (five A4 pages with figures), A4 flyer, ten-slide deck, talk plan, user guide, formula explainer, test-account sheet, submission checklist; `node docs/build.cjs` prints them
+- done (drafts with placeholders for names): documentation (five A4 pages with figures), A4 flyer, eleven-slide deck, talk plan, user guide, formula explainer, test-account sheet, submission checklist; `node docs/build.cjs` prints them
+- done: platform round — documentation rewritten around the club platform, coach/athlete sections in the user guide, demo-data and jury checks for the new modules, platform slide and live-demo script
 - needs the owner: names, school, supervisor, screenshots from the final build
 
 ### G. Things only the owner can do

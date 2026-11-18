@@ -69,7 +69,8 @@ The dashboard is at `http://127.0.0.1:8000/`. The database path comes from `JUMP
 Synthetic demo accounts (club "Демо клуб", password `demo1234` for all): `admin@demo.test`,
 `coach@demo.test` and six athletes `athlete1@demo.test`, `athlete2@demo.test`, `athlete4@demo.test` to
 `athlete7@demo.test`, plus a second club with `coach2@demo.test` and `athlete3@demo.test`. Ten generated
-jumps per athlete, four days apart.
+jumps per athlete, four days apart, plus two groups, five sessions, two weeks of check-ins and a
+feedback thread.
 
 ```sh
 server/.venv/bin/python -m server.seed
@@ -88,8 +89,8 @@ docker compose up -d --build      # http://127.0.0.1:8171/
 ## Tests
 
 ```sh
-server/.venv/bin/python -m pytest server -q      # 252 server tests
-./gradlew --no-daemon :core:test                 # core tests, JDK 17
+server/.venv/bin/python -m pytest server -q      # 313 server tests
+./gradlew --no-daemon :core:test                 # 55 core tests, JDK 17
 ```
 
 GitHub Actions runs three jobs on every push and pull request (`.github/workflows/ci.yml`): server
@@ -137,6 +138,26 @@ CC BY 4.0); Gesture Video Dataset for Jump Classification on Kaggle (daffasesara
 
 The honest reading: the numbers are good for comparing an athlete with themselves over time, not for
 absolute angles; in side view one leg is measured and flight timing is only indicative.
+
+## Platform
+
+Jump analysis is the core module of a club platform (specified in `SPEC.md` section 5). Around it, the
+same roles, consent rules, audit log and pagination carry the club's working day:
+
+| Module | What it does for the club | Endpoints |
+|---|---|---|
+| Groups | Training groups inside a club; an athlete may be in several | `GET/POST /api/groups`, `PATCH/DELETE /api/groups/{id}`, `PUT /api/groups/{id}/members` |
+| Sessions | Scheduled test sessions (group or club-wide, 1–5 trials), with past/upcoming list | `GET/POST /api/sessions`, `PATCH /api/sessions/{id}` |
+| Session report | Trials done vs planned and medians of each metric per athlete | `GET /api/sessions/{id}/report` |
+| Calendar export | iCalendar (.ics) of the caller's visible sessions | `GET /api/me/calendar.ics` |
+| Wellbeing check-in | Daily five-item 1–5 check-in plus optional training minutes and RPE; team table with a wellbeing sum (5–25), load and a neutral "below usual" mark | `PUT /api/me/checkins/{day}`, `GET /api/checkins`, `GET /api/checkins/team` |
+| Feedback | Coach comments per athlete, optionally about a jump or session; unread badge for athletes | `POST /api/comments`, `GET /api/comments`, `GET /api/me/unread`, `POST /api/me/read` |
+| Live events | Server-Sent Events of new jumps, check-ins, comments and sessions in scope, via `fetch` so the token never appears in a URL | `GET /api/events` |
+
+Jumps optionally attach to a session, and idempotent uploads use a client `client_id`. The Android app
+shows the next sessions, a daily check-in and the feedback thread; the coach dashboard (Bulgarian and
+English) adds Groups, Sessions with a report and calendar download, Wellbeing and Feedback, with a live
+indicator that refreshes the open view without a reload.
 
 ## Privacy
 
