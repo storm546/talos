@@ -254,3 +254,87 @@ never crash.
 
 Build and run on the kit: `ssh android-build-kit` (user builder, bash, JDK 17, SDK `/opt/android-sdk`,
 work dir `/work/jumpscan`, KVM available, x86_64 google_apis system image installed).
+
+## 5. Club platform (added 2026-11-18)
+
+Jump analysis is the core module of a club platform. The modules below reuse the roles, consent, audit,
+validation, security and pagination rules of section 3. Nothing here is medical: no diagnosis, risk score
+or injury wording; texts speak of training, testing and how the athlete feels.
+
+### 5.1 Data model (SQLite, idempotent startup migration as in section 3)
+
+- `groups(id, club_id, name)`: training groups inside a club; name 1–80 characters, unique per club.
+- `group_members(group_id, user_id)`: athletes of the same club; an athlete may be in several groups.
+- `sessions(id, club_id, group_id NULL, title, starts_at, place, test, trials, notes, created_by, cancelled)`:
+  a scheduled test session. `starts_at` is an ISO 8601 UTC timestamp; `test` is `cmj` or `drop_jump`;
+  `trials` 1–5 (default 3); title 1–100, place 0–100, notes 0–1000 characters; `group_id` null means the
+  whole club.
+- `jumps` gains `session_id NULL` (the session the jump belongs to) and `client_id NULL` (section 5.6).
+- `checkins(id, athlete_id, day, sleep, fatigue, soreness, stress, mood, training_minutes, rpe,
+  created_at, updated_at)`, unique `(athlete_id, day)`. `day` is a calendar date (YYYY-MM-DD). The five
+  wellbeing items are integers 1–5 where 5 is best (sleep quality, freshness, no soreness, calm, good mood).
+  `training_minutes` 0–600 and `rpe` 0–10 (session rating of perceived exertion) are both null or both set.
+- `comments(id, athlete_id, author_id, jump_id NULL, session_id NULL, body, created_at, read_at NULL)`:
+  feedback threads about one athlete; body 1–1000 characters; `read_at` is set when the athlete reads a
+  comment written by someone else.
+
+### 5.2 API (additions)
+
+| Method and path | Who | Does |
+|---|---|---|
+| `GET /api/groups` | admin, coach, athlete | coach: own club's groups with `member_ids`; admin: all (filter `club_id`); athlete: own groups without member lists |
+| `POST /api/groups` `{name, club_id?}` | admin, coach | create; coach in own club; audit `group_created` |
+| `PATCH /api/groups/{id}` `{name}`, `DELETE /api/groups/{id}` | admin, coach of club | rename or delete (memberships go, sessions become club-wide); audit `group_changed` / `group_deleted` |
+| `PUT /api/groups/{id}/members` `{athlete_ids: [...]}` | admin, coach of club | replace the member list; every id must be an athlete of the same club, else 422; audit `group_changed` |
+| `GET /api/sessions?from=&to=&limit=&offset=` | all | sessions visible to the caller, ordered by `starts_at`: coach own club, admin all, athlete own club where `group_id` is null or one of their groups; each with `jump_count` for the caller's scope |
+| `POST /api/sessions`, `PATCH /api/sessions/{id}` | admin, coach of club | create or change (also `cancelled: true`); `group_id` must belong to the same club; audit `session_created` / `session_changed` |
+| `GET /api/sessions/{id}/report` | admin, coach of club; athlete (own row only) | per athlete in scope: `trials_done`, `trials` and the median of each section 1 numeric field over that athlete's jumps in the session, plus `warnings_count`; athletes of the group without jumps appear with `trials_done: 0` |
+| `GET /api/me/calendar.ics` | all | iCalendar (RFC 5545) `text/calendar` file of the caller's visible sessions from 30 days ago on: one `VEVENT` per session with `UID`, `DTSTAMP`, `DTSTART` (UTC), 1 h `DURATION`, `SUMMARY`, `LOCATION`, `DESCRIPTION`, `STATUS:CANCELLED` when cancelled; CRLF line endings, lines folded at 75 octets, text escaped |
+| `POST /api/jumps` | athlete | section 3 behaviour plus optional `session_id` (must be visible to the athlete and not cancelled, else 422) and optional `client_id` (section 5.6) |
+| `PUT /api/me/checkins/{day}` | athlete | create or replace the caller's check-in for `day` (today or up to 6 days back in UTC, else 422); requires consent like jumps; returns the stored check-in; 201 on create, 200 on replace |
+| `GET /api/checkins?athlete_id=&from=&to=` | scope as jumps | check-ins, newest day first |
+| `GET /api/checkins/team?day=` | admin, coach | for each active athlete of the coach's club (admin: filter `club_id`): the check-in for `day` (default today) or null, `wellbeing` = sum of the five items (5–25), `load` = `rpe × training_minutes` (session RPE in arbitrary units), and `below_usual: true` when `wellbeing` is at least 3 below the median of the athlete's previous 14 days with at least 5 check-ins (null otherwise) |
+| `POST /api/comments` `{athlete_id, body, jump_id?, session_id?}` | admin, coach of club; athlete for themselves | add to the athlete's thread; a referenced jump must be that athlete's, a session visible to them; audit `comment_created` (no body in the audit) |
+| `GET /api/comments?athlete_id=&limit=&offset=` | scope as jumps | the thread, newest first, with author name and role |
+| `GET /api/me/unread` | athlete | `{comments: n}` written by others and not yet read |
+| `POST /api/me/read` | athlete | marks all comments by others as read; returns 204 |
+| `GET /api/events` | all | Server-Sent Events stream (`text/event-stream`) of `jump`, `checkin`, `comment`, `session` events visible to the caller (same scope rules), each with `{type, id, athlete_id?, club_id, at}` and no metric values or text; a comment line every 25 s keeps it open; at most 3 open streams per user |
+
+Athlete JSON export adds check-ins, comments and session ids of jumps. `DELETE /api/me/data` also deletes
+the athlete's check-ins and their comment thread. CSV export adds a session column. Paginated lists keep
+limits 1–500. Unknown fields are rejected as in section 3.
+
+### 5.3 Security additions
+
+- Login is limited both per email (section 3) and per client address: 30 failures per address per
+  15 minutes. Behind a reverse proxy the address comes from the proxy's `X-Forwarded-For` only when the
+  server is started with `--proxy-headers --forwarded-allow-ips <proxy address>` (deploy notes).
+- Expired tokens and login failures older than 15 minutes are deleted on each login.
+- Responses add `Strict-Transport-Security: max-age=31536000` (browsers honour it only over HTTPS).
+- The events stream authenticates with the same bearer header (the dashboard reads it with `fetch`, not
+  `EventSource`, so the token never appears in a URL).
+
+### 5.4 Dashboard (additions)
+
+New sections for staff: Groups (create, rename, delete, choose members), Sessions (list by date with
+past/upcoming, create and edit, cancel, calendar download, and a session report table with trials done and
+medians), Wellbeing (team table for a chosen day with the five items, wellbeing sum, load and a neutral
+"below usual" mark; athlete page gets a wellbeing and load chart), Feedback (thread on the athlete page,
+write a comment, optionally about a jump or session). Athletes see their sessions, their check-ins and
+their feedback thread with a reply box. A live indicator shows when the events stream is connected; new
+jumps, check-ins and comments refresh the open view without a reload. Bulgarian and English as before;
+same accessibility, `textContent` and CSP rules.
+
+### 5.5 App (additions)
+
+Home shows the next visible sessions; choosing one before recording or picking a video attaches the result
+to it and shows "attempt n of m". A daily check-in screen (five 1–5 choices with plain labels, optional
+training minutes and RPE 0–10) saves through `PUT /api/me/checkins/{today}` and works offline through the
+existing queue. A feedback screen shows the thread with an unread badge on home and a reply box; opening it
+marks comments read. Bulgarian and English.
+
+### 5.6 Idempotent uploads
+
+`client_id` is a random UUID the app creates once per result and sends with every attempt. Unique per
+`(athlete_id, client_id)`: a repeat returns 200 with the original `{id, created_at}` and stores nothing;
+a new one returns 201. The same applies to check-ins through their natural key `(athlete_id, day)`.
