@@ -32,8 +32,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The Android app is deliberately not built here: :app needs the Android
-      # SDK (compileSdk 35) plus its licence, which exists on the build kit only.
       # :core is plain Kotlin/JVM, so the core tests need nothing but a JDK.
       - uses: actions/setup-java@v4
         with:
@@ -42,3 +40,19 @@ jobs:
 
       - name: Run tests
         run: ./gradlew --no-daemon :core:test
+
+  app:
+    name: Android app build (debug)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # GitHub's Ubuntu runners ship the Android SDK (ANDROID_HOME) with its licences accepted.
+      # The release build is not made here: its signing key lives outside the repository.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build the debug APK
+        run: ./gradlew --no-daemon :app:assembleDebug

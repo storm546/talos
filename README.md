@@ -92,8 +92,9 @@ server/.venv/bin/python -m pytest server -q      # 252 server tests
 ./gradlew --no-daemon :core:test                 # core tests, JDK 17
 ```
 
-GitHub Actions runs both jobs on every push and pull request (`.github/workflows/ci.yml`). The Android
-app is not built in CI: `:app` needs the Android SDK and its licence, which live on the build kit.
+GitHub Actions runs three jobs on every push and pull request (`.github/workflows/ci.yml`): server
+tests, core tests and a debug build of the Android app (GitHub's Ubuntu runners include the Android SDK).
+The signed release build stays on the build machine, because its key is kept outside the repository.
 
 ## Building the Android app
 
