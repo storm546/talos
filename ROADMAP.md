@@ -20,7 +20,7 @@ not as a medical measurement.
 | Concrete problem, originality (General) | Clubs cannot afford lab screening; phone-only, privacy-first, with published validation |
 | Client and server technology, security, confidentiality, interoperability (category focus) | Android client with on-device ML, REST API with roles, token auth, rate limits, audit log, consent records, data export, OpenAPI description |
 | Architecture, UI separated from logic (Design) | Three parts with written contracts: `core` (pure maths, tested), `app`, `server`; the same analyzer runs on the phone and in the batch validator |
-| Code quality, tests, version control, error handling, attack protection (Implementation) | 318 server tests, 55 core tests including real-video fixtures, CI on every push, security review with fixes recorded |
+| Code quality, tests, version control, error handling, attack protection (Implementation) | 453 server tests, 65 core tests including real-video fixtures, CI on every push, security review with fixes recorded |
 | Evidence of testing (Presentation) | Accuracy table against the University of Twente lab dataset (91 jumps, 9 subjects), detection rates on 1000 public clips, own filmed jumps |
 | Language norms, UI (Implementation) | Bulgarian and English interface in app and dashboard |
 
@@ -54,10 +54,12 @@ Status key: done, running, staged (built but not reviewed or not deployed), todo
 - done: auth, roles, jumps, delete-my-data, validation, rate limit, coach dashboard v1
 - done: consent record per athlete; baseline and change summary; CSV and JSON export; audit log; club and user administration; OpenAPI page
 - done: club platform — groups, sessions with calendar export and session report, daily wellbeing check-in, feedback threads, live events stream, idempotent uploads
+- done: training, nutrition, form and assistant modules (SPEC section 6) — exercise form check (`POST /api/form`, numbers only); training plans with set logs, weekly volume and a double-progression suggestion shown but never auto-applied; nutrition with food/weight logs, own weight-trend model, adaptive expenditure estimate and a weekly target program with guardrails (1500 kcal floor, under-18 rule); on-prem AI assistant that proposes actions as the logged-in user and writes only after an explicit confirm. No medical or diet-prescription wording
 
 ### C. Coach and admin web dashboard
 - done: team overview with change against baseline, athlete page with trend charts, admin page, Bulgarian and English, phone-friendly layout
 - done: club platform views — groups, sessions with report and calendar download, wellbeing team table and athlete chart, feedback threads, live indicator
+- done: training, nutrition and form tabs (plans, set logs, food/weight diary with weight trend and adaptive expenditure, the weekly program, squat form history) and an AI assistant panel with the confirm step, on every page
 
 ### D. Android app
 - done: login, record or pick video, on-device analysis, result, upload, history
@@ -73,6 +75,7 @@ Status key: done, running, staged (built but not reviewed or not deployed), todo
 ### F. Documents (Bulgarian)
 - done (drafts with placeholders for names): documentation (five A4 pages with figures), A4 flyer, eleven-slide deck, talk plan, user guide, formula explainer, test-account sheet, submission checklist; `node docs/build.cjs` prints them
 - done: platform round — documentation rewritten around the club platform, coach/athlete sections in the user guide, demo-data and jury checks for the new modules, platform slide and live-demo script
+- done: training/nutrition/form/assistant round — docs describe the full feature set within the tournament limits (documentation still five A4 pages, flyer one page, twelve slides), with test counts refreshed to 453 server / 65 core
 - needs the owner: names, school, supervisor, screenshots from the final build
 
 ### G. Things only the owner can do

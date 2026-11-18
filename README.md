@@ -89,8 +89,8 @@ docker compose up -d --build      # http://127.0.0.1:8171/
 ## Tests
 
 ```sh
-server/.venv/bin/python -m pytest server -q      # 318 server tests
-./gradlew --no-daemon :core:test                 # 55 core tests, JDK 17
+server/.venv/bin/python -m pytest server -q      # 453 server tests
+./gradlew --no-daemon :core:test                 # 65 core tests, JDK 17
 ```
 
 GitHub Actions runs three jobs on every push and pull request (`.github/workflows/ci.yml`): server
@@ -141,8 +141,8 @@ absolute angles; in side view one leg is measured and flight timing is only indi
 
 ## Platform
 
-Jump analysis is the core module of a club platform (specified in `SPEC.md` section 5). Around it, the
-same roles, consent rules, audit log and pagination carry the club's working day:
+Jump analysis is the core module of a club platform (specified in `SPEC.md` sections 5 and 6). Around
+it, the same roles, consent rules, audit log and pagination carry the club's working day:
 
 | Module | What it does for the club | Endpoints |
 |---|---|---|
@@ -153,11 +153,18 @@ same roles, consent rules, audit log and pagination carry the club's working day
 | Wellbeing check-in | Daily five-item 1–5 check-in plus optional training minutes and RPE; team table with a wellbeing sum (5–25), load and a neutral "below usual" mark | `PUT /api/me/checkins/{day}`, `GET /api/checkins`, `GET /api/checkins/team` |
 | Feedback | Coach comments per athlete, optionally about a jump or session; unread badge for athletes | `POST /api/comments`, `GET /api/comments`, `GET /api/me/unread`, `POST /api/me/read` |
 | Live events | Server-Sent Events of new jumps, check-ins, comments and sessions in scope, via `fetch` so the token never appears in a URL | `GET /api/events` |
+| Form check | On-device squat form analysis (depth, frontal-plane angle, per-rep asymmetry); server stores numbers only | `POST /api/form`, `GET /api/form`, `GET /api/athletes/{id}/form.csv` |
+| Training | Coach plans per group or athlete, set logs, weekly volume and a double-progression suggestion (shown, never auto-applied) | `GET/POST /api/exercises`, `GET/POST/PUT/DELETE /api/plans`, `POST/GET/DELETE /api/set-logs`, `GET /api/athletes/{id}/training[.csv]` |
+| Nutrition | Food and weight logs, own weight-trend model, adaptive expenditure estimate and a weekly target program; numbers for discussion, not prescriptions | `GET/POST/DELETE /api/foods`, `POST/GET/DELETE /api/food-logs`, `PUT/DELETE /api/me/weights/{day}`, `GET/PUT /api/athletes/{id}/nutrition/target`, `PUT /api/athletes/{id}/nutrition/program`, `GET /api/athletes/{id}/nutrition/{estimate,summary,expenditure,program}` |
+| Assistant | On-prem LLM helper that proposes actions as the logged-in user and runs on the club's own model; no write happens until an explicit confirm | `POST /api/assistant`, `POST /api/assistant/confirm`, `GET /api/assistant/conversations[/{id}]` |
 
 Jumps optionally attach to a session, and idempotent uploads use a client `client_id`. The Android app
 shows the next sessions, a daily check-in and the feedback thread; the coach dashboard (Bulgarian and
 English) adds Groups, Sessions with a report and calendar download, Wellbeing and Feedback, with a live
-indicator that refreshes the open view without a reload.
+indicator that refreshes the open view without a reload. Both the app and the dashboard also carry
+Training, Nutrition and Form tabs and an AI assistant panel; the assistant proposes actions as the
+logged-in user, runs on the club's own model and applies nothing until the user confirms. Nutrition and
+training numbers are for discussion with the coach, not prescriptions.
 
 ## Privacy
 
