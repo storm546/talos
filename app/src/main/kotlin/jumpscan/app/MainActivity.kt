@@ -296,7 +296,7 @@ class MainActivity : Activity() {
 
     private fun clubHome() {
         val host = page
-        val day = todayUtc()
+        val day = todayLocal()
         val checkin = button(getString(R.string.checkin_title)) { checkin() }
         val feedback = button(getString(R.string.feedback_title)) { feedback() }
         checkin.isEnabled = token().isNotEmpty()
@@ -351,7 +351,7 @@ class MainActivity : Activity() {
     }
 
     private fun checkin() {
-        val day = todayUtc()
+        val day = todayLocal()
         val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
         work(getString(R.string.checkin_title), {
             synchronized(uploadLock) { pending().checkin(day) } ?: try {
@@ -363,7 +363,7 @@ class MainActivity : Activity() {
 
     private fun checkinForm(day: String, saved: JSONObject?, message: String? = null) {
         layout(getString(R.string.checkin_title), "checkin")
-        text(getString(R.string.checkin_day, day), 14)
+        text(getString(R.string.checkin_day, localDate(day, resources.configuration.locales[0])), 14)
         text(getString(R.string.checkin_scale), 14)
         if (message != null) text(message, 15, getColor(R.color.error))
         val keys = listOf("sleep", "fatigue", "soreness", "stress", "mood")

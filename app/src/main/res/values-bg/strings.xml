@@ -161,7 +161,7 @@
     <string name="checkin_done">Самочувствие днес · попълнено</string>
     <string name="checkin_not_done">Самочувствие днес · непопълнено</string>
     <string name="checkin_unknown">Самочувствие днес · статусът е недостъпен</string>
-    <string name="checkin_day">Ден: %1$s (UTC)</string>
+    <string name="checkin_day">Ден: %1$s</string>
     <string name="checkin_scale">Изберете 1–5. 5 е най-добре.</string>
     <string name="checkin_sleep">Сън · 1 лош / 5 добър</string>
     <string name="checkin_fatigue">Свежест · 1 уморен / 5 свеж</string>

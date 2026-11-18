@@ -161,7 +161,7 @@
     <string name="checkin_done">Today’s check-in · done</string>
     <string name="checkin_not_done">Today’s check-in · not filled in</string>
     <string name="checkin_unknown">Today’s check-in · status unavailable</string>
-    <string name="checkin_day">Day: %1$s (UTC)</string>
+    <string name="checkin_day">Day: %1$s</string>
     <string name="checkin_scale">Choose 1–5. 5 is best.</string>
     <string name="checkin_sleep">Sleep · 1 poor / 5 good</string>
     <string name="checkin_fatigue">Freshness · 1 tired / 5 fresh</string>

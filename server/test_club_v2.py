@@ -246,14 +246,31 @@ def test_checkin_gate_day_window_and_replace(api, auth):
     body = {**CHECKIN, "training_minutes": 45, "rpe": 5}
     assert client.put(f"/api/me/checkins/{today_str}", json=body, headers=athlete1).status_code == 201
     assert client.put(f"/api/me/checkins/{today_str}", json=body, headers=athlete1).status_code == 200
-    future = (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d")
+    future = (datetime.now(timezone.utc) + timedelta(days=2)).strftime("%Y-%m-%d")
     assert client.put(f"/api/me/checkins/{future}", json=CHECKIN, headers=athlete1).status_code == 422
-    old = (datetime.now(timezone.utc) - timedelta(days=10)).strftime("%Y-%m-%d")
+    old = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
     assert client.put(f"/api/me/checkins/{old}", json=CHECKIN, headers=athlete1).status_code == 422
     assert client.put("/api/me/checkins/2026-13-40", json=CHECKIN, headers=athlete1).status_code == 422
     for bad in ({**CHECKIN, "sleep": 6}, {**CHECKIN, "mood": 0}, {**CHECKIN, "training_minutes": 45},
                 {**CHECKIN, "rpe": 5}, {**CHECKIN, "rpe": 11}, {**CHECKIN, "extra": 1}, {}):
         assert client.put(f"/api/me/checkins/{today_str}", json=bad, headers=athlete1).status_code == 422
+
+
+@pytest.mark.parametrize("offset,accepted", [(-7, False), (-6, True), (0, True), (1, True), (2, False)])
+def test_checkin_local_day_window(api, auth, monkeypatch, offset, accepted):
+    client, _ = api
+    athlete = auth("athlete1")
+    # 00:30 in Bulgaria is still the previous UTC day, in winter and summer.
+    for now in (datetime(2026, 11, 17, 22, 30, tzinfo=timezone.utc),
+                datetime(2026, 6, 17, 21, 30, tzinfo=timezone.utc)):
+        freeze_clock(monkeypatch, now)
+        day = (now.date() + timedelta(days=offset)).isoformat()
+        response = client.put(f"/api/me/checkins/{day}", json=CHECKIN, headers=athlete)
+        if accepted:
+            assert response.status_code in (200, 201)
+            assert response.json()["day"] == day
+        else:
+            assert response.status_code == 422
 
 
 def test_checkin_consent_gate(api, auth):

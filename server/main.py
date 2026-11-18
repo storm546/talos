@@ -1217,8 +1217,8 @@ def create_app(db_path=None):
         except ValueError:
             raise HTTPException(422, "day must be YYYY-MM-DD") from None
         today = datetime.now(timezone.utc).date()
-        if not (today - timedelta(days=6) <= day_date <= today):
-            raise HTTPException(422, "Check-in day must be within the last 7 days")
+        if not (today - timedelta(days=6) <= day_date <= today + timedelta(days=1)):
+            raise HTTPException(422, "Check-in day must be from 6 days before today through tomorrow (UTC)")
         day = day_date.isoformat()
         now = now_iso()
         db.execute("BEGIN IMMEDIATE")

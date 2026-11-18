@@ -39,6 +39,13 @@ class AppChecks : Instrumentation() {
         """)
         check(sessions.map { it.id } == listOf(1L, 2L) && sessions[1].cancelled && sessions[1].jumpCount == 1)
         check(localDateTime(sessions[0].startsAt, Locale.UK, java.time.ZoneId.of("Europe/Sofia")).contains("14:30"))
+        for (instant in listOf("2026-11-17T22:30:00Z", "2026-06-17T21:30:00Z")) {
+            val clock = java.time.Clock.fixed(java.time.Instant.parse(instant), java.time.ZoneId.of("Europe/Sofia"))
+            check(todayLocal(clock) == instant.substring(0, 8) + "18")
+        }
+        check(localDate("2026-11-18", Locale.UK) == "18 Nov 2026")
+        check(localDate("2026-11-18", Locale.US) == "Nov 18, 2026")
+        check(!targetContext.getString(R.string.checkin_day, localDate(todayLocal(), Locale.getDefault())).contains("UTC"))
         val comments = parseComments("""[
             {"id":1,"author_name":"Coach","author_role":"coach","body":"First","created_at":"2026-11-18T10:00:00Z","jump_id":3,"session_id":null},
             {"id":2,"author_name":"Athlete","author_role":"athlete","body":"Reply","created_at":"2026-11-18T11:00:00Z","jump_id":null,"session_id":4}]
@@ -109,7 +116,7 @@ class AppChecks : Instrumentation() {
             check(queue.count() == 0)
             val sessionName = queue.enqueue(metrics, sessionId = 12)
             queue.sendJump(sessionName) { check(it.getLong("session_id") == 12L); 8L }
-            val day = todayUtc()
+            val day = todayLocal()
             queue.enqueueCheckin(day, checkinBody(listOf(1, 2, 3, 4, 5), "", ""))
             queue.enqueueCheckin(day, checkinBody(listOf(5, 4, 3, 2, 1), "40", "6"))
             check(queue.count() == 1 && queue.checkin(day)!!.getInt("sleep") == 5)

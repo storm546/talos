@@ -4,13 +4,16 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
+import java.time.Clock
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
-internal fun todayUtc(): String = LocalDate.now(ZoneOffset.UTC).toString()
+internal fun todayLocal(clock: Clock = Clock.systemDefaultZone()): String = LocalDate.now(clock).toString()
+
+internal fun localDate(value: String, locale: Locale): String =
+    LocalDate.parse(value).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale))
 
 internal fun localDateTime(value: String, locale: Locale, zone: ZoneId = ZoneId.systemDefault()): String =
     DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
