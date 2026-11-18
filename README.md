@@ -89,7 +89,7 @@ docker compose up -d --build      # http://127.0.0.1:8171/
 ## Tests
 
 ```sh
-server/.venv/bin/python -m pytest server -q      # 313 server tests
+server/.venv/bin/python -m pytest server -q      # 318 server tests
 ./gradlew --no-daemon :core:test                 # 55 core tests, JDK 17
 ```
 
@@ -127,7 +127,7 @@ Accuracy is measured against laboratory reference data, not asserted. The full w
 
 | What | Reference | Result | Details |
 |---|---|---|---|
-| Detection | Force plate, Twente lab dataset (91 jumps, 9 subjects, filmed front and side), each subject scored by a model that never saw them | front: 64 numbers without a warning, none wrong; the 7 wrong ones carry `uncertain_timing`; 20 more get suggested frames. Side: 60 without a warning, 2 wrong (side rule chosen among four prespecified candidates on the same data) | `docs/validacia.md` 4.9, `logs/ml/REPORT3.md` |
+| Detection | Force plate, Twente lab dataset (91 jumps, 9 subjects, filmed front and side), each subject scored by a model that never saw them | front: 64 numbers without a warning, none wrong; the 7 wrong ones carry `uncertain_timing`; 20 more get suggested frames. Side: 58 correct and 2 wrong numbers without a warning (side rule chosen among four prespecified candidates on the same data) | `docs/validacia.md` 4.9, `logs/ml/REPORT3.md` |
 | Flight time, jump height | Same force plate | front: mean error 32 ms, about one frame at 33 fps (about 3 cm of height at a 15 cm jump); side: flight about 87 ms too long | `docs/validacia.md` 4.8 |
 | Knee flexion curve | Lab motion capture (OpenSim inverse kinematics), same dataset | RMSE front 17.3° (range compressed, slope 0.65), side in the image plane 10.0° | `docs/validacia.md` 3, 4.8 |
 | False alarms | 400 public webcam clips without a jump | 3–7 % | `docs/validacia.md` |
