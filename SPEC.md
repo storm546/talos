@@ -369,6 +369,19 @@ side, view, fps, per-repetition numbers and the summary (no video, no landmarks)
 jumps. Validation: synthetic geometry tests, repetition counting on real clips with hand counts, and the
 same honesty rules as `docs/validacia.md`.
 
+Form JSON (produced by `core`, stored by `server` at `POST /api/form`, charted by app and dashboard;
+field list from the core contract, `logs/form-fields.md`): top level `exercise` ("squat"|"single_leg_squat"),
+`side` ("L"|"R"|null), `view` ("front"|"side"), `fps`, `quality` (0-1), `repetitions[]`, `summary`, and
+`warnings[]` (any of `low_visibility`, `unclear_reps`, `single_leg_view`). Each `repetitions[]` entry:
+`index` (1-based), `status` ("complete"|"partial"|"unclear"), `reasons[]` (empty, `below_min_depth`, or the
+unclear reasons), `start_ms`, `bottom_ms` (int|null), `end_ms`, `depth` (deg|null), `knee_flexion_peak_l/_r`
+(deg|null), `fppa_l/_r` (-90..90|null, front only), `flexion_asymmetry_pct` (0-100|null, both legs only),
+`descent_time_ms`/`ascent_time_ms` (int|null), `hip_below_knee` (bool|null, side only). `summary` holds the
+counts (complete/partial/unclear), the medians of the per-rep numbers over complete reps, and
+`worst_repetition` (the `index` with the greatest FPPA or asymmetry). The server stores this athlete-scoped
+with consent, audit and idempotency like jumps; `GET /api/form` lists an athlete's form sets in the caller's
+scope; the assistant gets a `list_form_sets` read tool.
+
 ### 6.2 Training (server, dashboard, app)
 
 - `exercises(id, club_id, name, kind, lower_body)`: club exercise list (kind `strength`, `plyometric`, `mobility`,
