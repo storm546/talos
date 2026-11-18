@@ -90,6 +90,13 @@ unset JSPW
 The password is passed as an environment variable, not as an argument, so it does not land in your shell
 history. Then log in on the dashboard with that email and password.
 
+Login is limited both per email (5 failures per 15 minutes) and per client address (30 failures per
+15 minutes). Behind a reverse proxy the address is taken from the proxy's `X-Forwarded-For` header, so
+start the server with `--proxy-headers --forwarded-allow-ips <proxy address>` (see the systemd notes and
+the nginx example below); without these flags the header is ignored. All three flags must be set
+together: `--proxy-headers` alone trusts nobody, and `--forwarded-allow-ips` names the proxy that may
+supply the header.
+
 Role model for the rest: an admin creates coaches and athletes (`POST /api/users`), a coach creates
 athletes in their own club. An admin, or a coach for athletes of their own club, sets a new password with
 `POST /api/users/{id}/password` (also on the dashboard's Users page); this signs that user out everywhere.
@@ -205,5 +212,7 @@ directory finishes the job — nothing else on the host was touched.
 - Single uvicorn process, no workers: fine for a club, and it keeps SQLite writes simple.
 - The API is HTTP inside the host. Do not expose `8171` on a public interface; the compose file binds it
   to `127.0.0.1` on purpose.
-- Login is rate limited to 5 failures per email per 15 minutes; request bodies are capped at 16 KB.
+- Login is rate limited to 5 failures per email and 30 failures per client address per 15 minutes;
+  request bodies are capped at 16 KB. The address limit needs `--proxy-headers --forwarded-allow-ips`
+  (already set in the systemd unit) to see through the reverse proxy.
 - No video or image ever reaches the server, so there is nothing large to store and nothing to redact.
