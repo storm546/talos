@@ -12,7 +12,7 @@ from server.test_training_nutrition import series
 from server.weight_trend import weight_smoothing, weight_trend_pipeline
 
 
-@pytest.mark.parametrize("kind", ["jump", "checkin", "food", "weight", "set", "complete"])
+@pytest.mark.parametrize("kind", ["jump", "checkin", "food", "weight", "set", "complete", "custom food"])
 def test_writes_check_committed_consent(api, auth, kind):
     client, path = api
     athlete = user_id(path, "athlete1")
@@ -32,6 +32,8 @@ def test_writes_check_committed_consent(api, auth, kind):
         "weight": ("PUT", f"/api/me/weights/{today}", {"kg": 70}),
         "set": ("POST", "/api/set-logs", {"day": today, "exercise_id": exercise, "set_no": 1, "reps": 5}),
         "complete": ("PUT", f"/api/me/nutrition/days/{today}/complete", None),
+        "custom food": ("POST", "/api/foods", {"name_bg": "Овес", "kcal": 100, "protein_g": 10,
+                                               "carbs_g": 20, "fat_g": 5}),
     }[kind]
     response = client.request(method, endpoint, headers=headers, json=body)
     assert response.status_code == 403, response.text

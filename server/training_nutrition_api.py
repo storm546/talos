@@ -624,23 +624,23 @@ def install(app, h):
             "OR casefold(name_en) LIKE ? ESCAPE '\\') ORDER BY name_bg, id LIMIT ? OFFSET ?",
             (*params, like, like, like, limit, offset))]
 
-    @app.post("/api/foods", status_code=201)
-    def add_food(body: CustomFood, user=Depends(current_user), db=Depends(get_db)):
-        if user["role"] == "athlete":
-            need_consent(user, "foods")
-            club_id, owner_id = user["club_id"], user["id"]
-            if body.club_id is not None:
-                raise HTTPException(422, "club_id applies to staff only")
-        else:
-            club_id, owner_id = staff_club(db, user, body.club_id), None
-        cursor = db.execute(
-            "INSERT INTO foods(club_id, owner_id, name_bg, name_en, kcal, protein_g, carbs_g, fat_g, fibre_g) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (club_id, owner_id, body.name_bg, body.name_en, body.kcal, body.protein_g, body.carbs_g,
-             body.fat_g, body.fibre_g))
-        audit(db, user["id"], "food_created", cursor.lastrowid)
-        db.commit()
-        return food_row(db.execute("SELECT * FROM foods WHERE id = ?", (cursor.lastrowid,)).fetchone())
+    @app.post("/api/foods", status_code=201, dependencies=[Depends(current_user)])
+    def add_food(body: CustomFood, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, _):
+            if user["role"] == "athlete":
+                need_consent(user, "foods")
+                club_id, owner_id = user["club_id"], user["id"]
+                if body.club_id is not None:
+                    raise HTTPException(422, "club_id applies to staff only")
+            else:
+                club_id, owner_id = staff_club(db, user, body.club_id), None
+            cursor = db.execute(
+                "INSERT INTO foods(club_id, owner_id, name_bg, name_en, kcal, protein_g, carbs_g, fat_g, fibre_g) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (club_id, owner_id, body.name_bg, body.name_en, body.kcal, body.protein_g, body.carbs_g,
+                 body.fat_g, body.fibre_g))
+            audit(db, user["id"], "food_created", cursor.lastrowid)
+            return food_row(db.execute("SELECT * FROM foods WHERE id = ?", (cursor.lastrowid,)).fetchone())
 
     @app.delete("/api/foods/{food_id}", status_code=204)
     def delete_food(food_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
@@ -881,10 +881,6 @@ def install(app, h):
                     key: round(sum(w[key] for w in weekly.values()) / days, 1) if days else None for key in keys}}}
 
     # --- adaptive expenditure and the weekly coaching program (SPEC 6.3) ---
-
-    def publish_athlete(db, athlete, kind, row_id, at):
-        app.state.events.publish(h.athlete_viewers(db, athlete), {
-            "type": kind, "id": row_id, "athlete_id": athlete["id"], "club_id": athlete["club_id"], "at": at})
 
     def diary_fingerprint(db, athlete_id, day):
         """Stable hash of a day's diary, so a day confirmed complete is noticed when it is later edited."""
