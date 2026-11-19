@@ -29,10 +29,19 @@ internal fun MainActivity.assistantScreen(message: String? = null, draft: String
     val api = featureApi()
     chat.proposal?.let { proposal ->
         text(getString(R.string.assistant_proposal), 18, green)
-        val actions = proposal.getJSONArray("actions").objects()
-        val descriptions = actions.map { action -> runCatching { describeAction(action) }.getOrNull() }
-        for (description in descriptions) text(description ?: getString(R.string.assistant_unknown_action))
-        if (descriptions.isNotEmpty() && descriptions.all { it != null }) {
+        // The server summary carries consequential details (audience, cancellation, notes) the app cannot rebuild.
+        val reviewed = proposal.getJSONArray("actions").objects().map { action ->
+            val local = runCatching { describeAction(action) }.getOrNull()
+            val server = action.optString("human_summary").takeIf { it.isNotBlank() }
+            val panel = card()
+            text(local ?: server ?: getString(R.string.assistant_unknown_action), parent = panel)
+            if (local != null && server != null) {
+                text(getString(R.string.ui_server_summary), 13, parent = panel).setPadding(0, dp(10), 0, 0)
+                text(server, 14, parent = panel)
+            }
+            local != null || server != null
+        }
+        if (reviewed.isNotEmpty() && reviewed.all { it }) {
             button(getString(R.string.assistant_confirm), primary = true) {
                 val body = JSONObject().put("proposal_id", proposal.getString("proposal_id"))
                 work(getString(R.string.feature_saving), {
