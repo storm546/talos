@@ -36,7 +36,7 @@
     <string name="ui_server_summary">Точните подробности от сървъра</string>
     <string name="ui_form_hero">Тренирайте техниката</string>
     <string name="ui_form_eyebrow">%1$d УПРАЖНЕНИЯ · НА ЖИВО ИЛИ ОТ ЗАПИС</string>
-    <string name="ui_form_validated_note">Клекът и клекът на един крак са проверени срещу ръчно броене. Останалите упражнения са още експериментални.</string>
+    <string name="ui_form_validated_note">Само клекът е проверен срещу ръчно броене, на няколко клипа. Останалите упражнения са още експериментални.</string>
     <string name="ui_replay_hint">Тестова версия: задръжте „На живо“, за да пуснете тестовия запис.</string>
     <string name="ui_group_legs">Крака</string>
     <string name="ui_group_hinge">Таз и наклони</string>

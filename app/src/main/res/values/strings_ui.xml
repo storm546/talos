@@ -36,7 +36,7 @@
     <string name="ui_server_summary">Exact details from the server</string>
     <string name="ui_form_hero">Coach your technique</string>
     <string name="ui_form_eyebrow">%1$d EXERCISES · LIVE OR FROM VIDEO</string>
-    <string name="ui_form_validated_note">Squat and single-leg squat are checked against hand counts. The other exercises are still experimental.</string>
+    <string name="ui_form_validated_note">Only the squat has been checked against hand counts, on a few clips. The other exercises are still experimental.</string>
     <string name="ui_replay_hint">Debug build: press and hold Live to replay the test recording.</string>
     <string name="ui_group_legs">Legs</string>
     <string name="ui_group_hinge">Hinge and hips</string>
