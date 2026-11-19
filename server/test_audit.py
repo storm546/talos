@@ -1,6 +1,7 @@
 """Regression tests for server audit findings."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import json
 
 import pytest
 
@@ -57,5 +58,46 @@ def test_nutrition_summary_handles_earliest_calendar_day(api, auth):
                           headers=auth("athlete1"))
     assert response.status_code == 200, response.text
     assert response.json()["weekly_average"]["window"] == ["0001-01-01", "0001-01-01"]
+
+
+def test_team_checkin_excludes_incomplete_baseline_rows(api, auth):
+    client, path = api
+    athlete = user_id(path, "athlete1")
+    today = datetime.now(timezone.utc).date()
+    with main.database(path) as db:
+        db.execute("DELETE FROM checkins WHERE athlete_id = ?", (athlete,))
+        db.executemany("INSERT INTO checkins(athlete_id, day, sleep, fatigue, soreness, stress, mood, created_at, updated_at) "
+                       "VALUES (?, ?, ?, 4, 4, 4, 4, '', '')", [
+                           (athlete, (today - timedelta(days=delta)).isoformat(), None if delta == 5 else 4)
+                           for delta in range(6)])
+    response = client.get("/api/checkins/team", params={"day": today.isoformat()}, headers=auth("coach"))
+    assert response.status_code == 200, response.text
+    row = next(row for row in response.json() if row["athlete_id"] == athlete)
+    assert row["wellbeing"] == 20 and row["below_usual"] is None
+
+
+def test_summary_reads_only_the_first_and_last_three_jumps(api, auth, monkeypatch):
+    client, path = api
+    athlete = user_id(path, "athlete1")
+    with main.database(path) as db:
+        db.execute("DELETE FROM jumps WHERE athlete_id = ?", (athlete,))
+        db.executemany("INSERT INTO jumps(athlete_id, created_at, metrics) VALUES (?, ?, ?)", [
+            (athlete, "2026-02-01T10:00:00+00:00", json.dumps({**METRICS, "fps": value}))
+            for value in range(31, 42)])
+    decode = json.loads
+    fps_decoded = []
+
+    def track(payload, *args, **kwargs):
+        decoded = decode(payload, *args, **kwargs)
+        if isinstance(decoded, dict) and "flight_time_ms" in decoded:
+            fps_decoded.append(decoded["fps"])
+        return decoded
+
+    headers = auth("coach")
+    monkeypatch.setattr(main.json, "loads", track)
+    response = client.get(f"/api/athletes/{athlete}/summary", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["jump_count"] == 11
+    assert fps_decoded == [31, 32, 33, 39, 40, 41]
 
 

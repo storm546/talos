@@ -1,6 +1,6 @@
 """Run with uvicorn server.main:app."""
 
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 import asyncio
 import hashlib
@@ -8,6 +8,7 @@ import hmac
 import base64
 import csv
 import io
+from itertools import groupby
 import json
 import os
 from pathlib import Path
@@ -636,7 +637,19 @@ def athlete_form_sets(db, athlete_id):
         "SELECT * FROM form_sets WHERE athlete_id = ? ORDER BY created_at, id", (athlete_id,)))
 
 
-def summary(rows):
+def jump_edge_rows(db, athlete_ids):
+    marks = ",".join("?" * len(athlete_ids))
+    return db.execute(
+        "SELECT jumps.athlete_id, jumps.created_at, jumps.metrics FROM users "
+        "JOIN jumps ON jumps.id IN ("
+        "SELECT id FROM (SELECT id FROM jumps WHERE athlete_id = users.id ORDER BY created_at, id LIMIT 3) "
+        "UNION SELECT id FROM (SELECT id FROM jumps WHERE athlete_id = users.id "
+        "ORDER BY created_at DESC, id DESC LIMIT 3)) "
+        f"WHERE users.id IN ({marks}) ORDER BY jumps.athlete_id, jumps.created_at, jumps.id", athlete_ids)
+
+
+def summary(rows, jump_count=None):
+    jump_count = len(rows) if jump_count is None else jump_count
     numeric = [key for key in Jump.model_fields if key not in ("test", "warnings", "session_id", "client_id")]
     def peak_mean(row):  # side-view jumps measure one leg; the other is null
         peaks = [v for v in (row["knee_flexion_peak_l"], row["knee_flexion_peak_r"]) if v is not None]
@@ -652,9 +665,9 @@ def summary(rows):
                         "last_three_median": recent, "change_absolute": change,
                         "change_percent": change / baseline * 100 if change is not None and baseline else None,
                         "baseline_count": len(first), "recent_count": len(last)}
-    return {"jump_count": len(rows), "first_jump_at": rows[0]["created_at"] if rows else None,
+    return {"jump_count": jump_count, "first_jump_at": rows[0]["created_at"] if rows else None,
             "last_jump_at": rows[-1]["created_at"] if rows else None,
-            "baseline_complete": len(rows) >= 3, "metrics": metrics}
+            "baseline_complete": jump_count >= 3, "metrics": metrics}
 
 
 def consent_fields(user):
@@ -927,21 +940,12 @@ def create_app(db_path=None):
             (user["role"], user["club_id"], limit, offset),
         ).fetchall()
         result = []
-        ids = [row["id"] for row in rows]
-        histories = {}
-        if ids:
-            # One batched fetch of every listed athlete's jumps replaces the per-athlete reads.
-            marks = ",".join("?" * len(ids))
-            histories = {athlete_id: [] for athlete_id in ids}
-            for jump in db.execute(
-                    f"SELECT * FROM jumps WHERE athlete_id IN ({marks}) ORDER BY athlete_id, created_at, id",
-                    ids):
-                histories[jump["athlete_id"]].append(jump)
+        histories = {row["id"]: [] for row in rows}
+        if histories:
+            for jump in jump_edge_rows(db, list(histories)):
+                histories[jump["athlete_id"]].append({**json.loads(jump["metrics"]), "created_at": jump["created_at"]})
         for row in rows:
-            changes = summary([{**json.loads(jump["metrics"]), "id": jump["id"],
-                                "athlete_id": jump["athlete_id"], "created_at": jump["created_at"],
-                                "session_id": jump["session_id"], "client_id": jump["client_id"]}
-                               for jump in histories[row["id"]]])["metrics"]
+            changes = summary(histories[row["id"]])["metrics"]
             result.append({**dict(row), "active": bool(row["active"]), "under_18": bool(row["under_18"]),
                            **consent_fields(row),
                            "changes": {key: changes[key] for key in
@@ -994,11 +998,13 @@ def create_app(db_path=None):
             if (athlete is None or athlete["role"] != "athlete"
                     or (user["role"] == "coach" and athlete["club_id"] != user["club_id"])):
                 raise HTTPException(404, "Athlete not found")
+        athlete_clause = "" if athlete_id is None else "AND jumps.athlete_id = ? "
+        params = () if athlete_id is None else (athlete_id,)
         rows = db.execute(
             "SELECT jumps.* FROM jumps JOIN users ON users.id = jumps.athlete_id "
-            "WHERE (? IS NULL OR jumps.athlete_id = ?) AND (? != 'coach' OR users.club_id = ?) "
+            "WHERE (? != 'coach' OR users.club_id = ?) " + athlete_clause +
             "ORDER BY jumps.created_at DESC, jumps.id DESC LIMIT ? OFFSET ?",
-            (athlete_id, athlete_id, user["role"], user["club_id"], limit, offset),
+            (user["role"], user["club_id"], *params, limit, offset),
         ).fetchall()
         return [{**json.loads(row["metrics"]), "id": row["id"], "athlete_id": row["athlete_id"],
                  "created_at": row["created_at"], "session_id": row["session_id"],
@@ -1069,7 +1075,13 @@ def create_app(db_path=None):
     @app.get("/api/athletes/{athlete_id}/summary")
     def athlete_summary(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         athlete_access(db, user, athlete_id)
-        return {"athlete_id": athlete_id, **summary(jump_rows(db, athlete_id))}
+        with (nullcontext() if db.in_transaction else db):
+            if not db.in_transaction:
+                db.execute("BEGIN")
+            count = db.execute("SELECT COUNT(*) FROM jumps WHERE athlete_id = ?", (athlete_id,)).fetchone()[0]
+            edges = [{**json.loads(row["metrics"]), "created_at": row["created_at"]}
+                     for row in jump_edge_rows(db, [athlete_id])]
+        return {"athlete_id": athlete_id, **summary(edges, count)}
 
     @app.get("/api/me/export")
     def export_me(user=Depends(current_user), db=Depends(get_db)):
@@ -1501,38 +1513,34 @@ def create_app(db_path=None):
         if user["role"] == "admin":
             clause, params = "1", ()
             if club_id is not None:
-                clause, params = "club_id = ?", (club_id,)
+                clause, params = "users.club_id = ?", (club_id,)
         else:
-            clause, params = "club_id = ?", (user["club_id"],)
-        athletes = db.execute(
-            "SELECT id, name FROM users WHERE role = 'athlete' AND active = 1 AND "
-            + clause + " ORDER BY name, id", params).fetchall()
+            clause, params = "users.club_id = ?", (user["club_id"],)
+        rows = db.execute(
+            "SELECT users.id AS roster_id, users.name, checkins.* FROM users LEFT JOIN checkins "
+            "ON checkins.athlete_id = users.id AND checkins.day BETWEEN COALESCE(date(?, '-14 day'), ?) AND ? "
+            "WHERE users.role = 'athlete' AND users.active = 1 AND "
+            + clause + " ORDER BY users.name, users.id, checkins.day DESC", (day, day, day, *params))
         result = []
-        for athlete in athletes:
-            checkin = db.execute("SELECT * FROM checkins WHERE athlete_id = ? AND day = ?",
-                                 (athlete["id"], day)).fetchone()
-            if checkin is None:
-                result.append({"athlete_id": athlete["id"], "name": athlete["name"], "checkin": None,
+        for athlete_id, history in groupby(rows, key=lambda row: row["roster_id"]):
+            current = next(history)
+            if current["day"] != day:
+                result.append({"athlete_id": athlete_id, "name": current["name"], "checkin": None,
                                "wellbeing": None, "load": None, "below_usual": None})
                 continue
-            items = [checkin[key] for key in ("sleep", "fatigue", "soreness", "stress", "mood")]
-            wellbeing = sum(items) if all(v is not None for v in items) else sum(v for v in items if v is not None)
+            checkin = dict(current)
+            name = checkin.pop("name")
+            checkin.pop("roster_id")
+            items = ("sleep", "fatigue", "soreness", "stress", "mood")
+            values = [checkin[key] for key in items]
+            wellbeing = sum(values) if None not in values else None
             load = (checkin["rpe"] * checkin["training_minutes"]
                     if checkin["rpe"] is not None and checkin["training_minutes"] is not None else None)
-            previous = [row for row in db.execute(
-                "SELECT sleep, fatigue, soreness, stress, mood FROM checkins "
-                "WHERE athlete_id = ? AND day < ? AND day >= date(?, '-14 day') ORDER BY day DESC",
-                (athlete["id"], day, day))]
-            below = None
-            if wellbeing is not None and len(previous) >= 5:
-                previous_sums = []
-                for row in previous:
-                    values = [row[key] for key in ("sleep", "fatigue", "soreness", "stress", "mood")]
-                    previous_sums.append(sum(values))
-                baseline = median(previous_sums)
-                below = wellbeing <= baseline - 3
-            result.append({"athlete_id": athlete["id"], "name": athlete["name"],
-                           "checkin": dict(checkin), "wellbeing": wellbeing, "load": load,
+            previous = [[row[key] for key in items] for row in history]
+            sums = [sum(values) for values in previous if None not in values]
+            below = wellbeing <= median(sums) - 3 if wellbeing is not None and len(sums) >= 5 else None
+            result.append({"athlete_id": athlete_id, "name": name,
+                           "checkin": checkin, "wellbeing": wellbeing, "load": load,
                            "below_usual": below})
         return result
 
