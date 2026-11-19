@@ -3,15 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="light dark">
 <title>JumpScan</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23176148'/%3E%3Cpath d='M7 23 L16 10 L25 23' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/dashboard.css">
 <script src="/static/dashboard.js" defer></script>
 </head>
 <body>
-<header class="masthead"><a class="brand" href="/">JumpScan<span class="brand-mark" aria-hidden="true"></span></a><label id="language-label" for="language">Език</label><select id="language"><option value="bg">Български</option><option value="en">English</option></select><span id="live" class="live" role="status" hidden></span></header>
+<header class="masthead"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">↗</span>JumpScan</a><label id="language-label" for="language">Език</label><select id="language"><option value="bg">Български</option><option value="en">English</option></select><button id="theme" class="secondary" type="button">◐</button></header>
 <main>
+<div id="workspace" hidden><span id="identity"></span><span id="live" class="live" role="status" hidden></span></div>
 <div id="session"></div>
 <p id="message" role="status" aria-live="polite"></p>
 <div id="content"></div>

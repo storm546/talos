@@ -182,6 +182,34 @@ const dictionary = {
   }
 };
 const $ = id => document.getElementById(id);
+Object.assign(dictionary.bg, {
+  today:'Днес', overview:'Преглед', coachDesk:'Пулт на треньора', athleteDesk:'Денят на спортиста', adminDesk:'Преглед на клубовете',
+  roster:'Списък на спортистите', checkedToday:'Отбелязали се днес', uncheckedToday:'Без отбелязване днес', todayDone:'Отбелязването е записано',
+  testingDue:'За довършване', sessionRemaining:'Не са изпълнили всички опити в последната сесия.', noneDue:'Всички опити са изпълнени.',
+  lastSession:'Последна сесия', noCompletedSession:'Още няма проведена сесия.', compare:'Спрямо базовата стойност',
+  increasedAsymmetry:'С по-висока асиметрия спрямо базовата стойност', noIncrease:'Няма отчетено увеличение на асиметрията.',
+  todayPlan:'Днешен план', todayRest:'Няма планирани упражнения за днес.', latestJump:'Последен скок',
+  dashboardIntro:'Проследявай скоковете, техниката и тренировките на едно място.', theme:'Смени темата',
+  themeDark:'Тъмна тема', themeLight:'Светла тема', holdTime:'Време на задържане (сек)', inBand:'Време в диапазона (сек)',
+  sourceLive:'На живо', sourceVideo:'Запис', sideLeft:'Ляво', sideRight:'Дясно',
+  noTargetShort:'Няма зададена цел', openAppCheckin:'Можеш да се отбележиш в приложението JumpScan.',
+  mealBreakdown:'Подробности за храненията', kcalUnit:'ккал', gramUnit:'г', descentMs:'Спускане (мс)', ascentMs:'Изправяне (мс)',
+  checkinToday:'Дневна оценка'
+});
+Object.assign(dictionary.en, {
+  today:'Today', overview:'Overview', coachDesk:'Coach workspace', athleteDesk:'Athlete workspace', adminDesk:'Club overview',
+  roster:'Athlete roster', checkedToday:'Checked in today', uncheckedToday:'Not checked in today', todayDone:'Check-in saved',
+  testingDue:'Testing to finish', sessionRemaining:'Still have attempts left from the last session.', noneDue:'All attempts are complete.',
+  lastSession:'Last session', noCompletedSession:'No past sessions yet.', compare:'Against baseline',
+  increasedAsymmetry:'Higher asymmetry against baseline', noIncrease:'No increase in asymmetry recorded.',
+  todayPlan:'Today’s plan', todayRest:'Nothing scheduled for today.', latestJump:'Latest jump',
+  dashboardIntro:'Track jumps, technique and training in one place.', theme:'Switch theme',
+  themeDark:'Dark theme', themeLight:'Light theme', holdTime:'Hold time (s)', inBand:'Time in range (s)',
+  sourceLive:'Live', sourceVideo:'Video', sideLeft:'Left', sideRight:'Right',
+  noTargetShort:'No target set', openAppCheckin:'Use the JumpScan app to check in.',
+  mealBreakdown:'Meal breakdown', kcalUnit:'kcal', gramUnit:'g', descentMs:'Descent (ms)', ascentMs:'Ascent (ms)',
+  checkinToday:'Check-in'
+});
 const state = {language:'bg', token:null, user:null, view:'team', athletes:[], users:[], clubs:[], audit:[], offset:0, selected:null, jumps:[], summary:null, sort:'name', ascending:true, consent:null, reset:null, deleting:false, groups:[], groupEdit:null, membersEdit:null, sessions:[], sessionEdit:null, sessionReport:null, wellbeing:[], wellbeingDay:null, checkins:[], sessionsMine:[], comments:[], live:'idle', liveGeneration:0,
   training:null, setLogs:[], exercises:[], plansData:[], nutritionDay:null, nutSummary:null, weightsData:null,
   expenditure:null, program:null, nutTarget:null, foodLogs:[], foods:[], formSets:[], planEdit:null,
@@ -191,7 +219,7 @@ const locale = () => state.language === 'bg' ? 'bg-BG' : 'en-GB';
 // Shown precision follows what a 30-60 fps phone clip can resolve: whole ms, tenths of a degree or cm.
 const DIGITS = {flight_time_ms:0, fps:0, knee_ankle_ratio:2, quality:2};
 const format = (value, key) => value == null ? '—' : new Intl.NumberFormat(locale(), {maximumFractionDigits:DIGITS[key] ?? 1}).format(value);
-const date = value => value ? new Date(value).toLocaleDateString(locale()) : '—';
+const date = value => value ? new Date(value.length === 10 ? value + 'T12:00:00' : value).toLocaleDateString(locale()) : '—';
 // No seconds: dashboards show date + hour:minute in the viewer's own time zone.
 const dateTime = value => value ? new Date(value).toLocaleString(locale(), {year:'numeric', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
 // Two-line date for session tables: date above a small time, so the column stays narrow.
@@ -305,7 +333,9 @@ function relevant(event, view) {
     if (event.type === 'jump' || event.type === 'checkin' || event.type === 'comment') return String(event.athlete_id) === String(id);
     return false;
   }
-  if (view === 'team') return event.type === 'checkin' || event.type === 'jump' || event.type === 'comment';
+  if (view === 'team') return ['checkin','jump','session'].includes(event.type);
+  if (view === 'today') return ['checkin','jump','food','coaching','nutrition_day','set'].includes(event.type) &&
+    String(event.athlete_id) === String(state.user.id);
   if (view === 'wellbeing') return event.type === 'checkin';
   if (view === 'sessions' || view === 'sessionsMine') return event.type === 'session' || event.type === 'jump';
   if (view === 'training' || view === 'nutrition' || view === 'form') {
@@ -317,6 +347,8 @@ function relevant(event, view) {
 }
 function signedOut() {
   state.liveGeneration++;
+  liveController?.abort();
+  Object.assign(state, {todayCheckins:[], lastSession:null, lastReport:null, formCatalogue:[]});
   Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],live:'idle',training:null,setLogs:[],exercises:[],plansData:[],nutritionDay:null,nutSummary:null,weightsData:null,expenditure:null,program:null,nutTarget:null,foodLogs:[],foods:[],formSets:[],planEdit:null,assistant:{open:false,conversationId:null,reply:null,proposal:null,note:null,error:null}});
   setLive('idle');
   render();
@@ -330,7 +362,23 @@ async function load(view=state.view) {
   message('loading'); state.consent=null; state.reset=null; state.deleting=false;
   let data;
   const staff = state.user.role !== 'athlete';
-  if (view === 'team') data = {athletes:await allPages('/api/athletes')};
+  if (view === 'team') {
+    const [athletes, todayCheckins, sessions] = await Promise.all([
+      allPages('/api/athletes'), api('/api/checkins/team?day=' + apiDay()), allPages('/api/sessions')]);
+    const lastSession = sessions.filter(session => !session.cancelled && Date.parse(session.starts_at) <= Date.now())
+      .sort((first, second) => Date.parse(second.starts_at) - Date.parse(first.starts_at))[0];
+    const lastReport = lastSession ? await api('/api/sessions/' + lastSession.id + '/report') : null;
+    data = {athletes, todayCheckins, lastSession, lastReport};
+  }
+  if (view === 'today') {
+    const id = state.user.id;
+    const day = apiDay();
+    const [summary, jumps, checkins, nutSummary, plansData] = await Promise.all([
+      api('/api/athletes/' + id + '/summary'), api('/api/jumps?athlete_id=' + id + '&limit=1'),
+      api('/api/checkins?athlete_id=' + id + '&from=' + day + '&to=' + day),
+      api('/api/athletes/' + id + '/nutrition/summary?day=' + day), api('/api/plans')]);
+    data = {summary, jumps, checkins, nutSummary, plansData};
+  }
   if (view === 'history') {
     const id = state.user.role === 'athlete' ? state.user.id : state.selected.id;
     const [jumps, summary, checkinsList, commentsList, sessionList] = await Promise.all([
@@ -389,7 +437,10 @@ async function load(view=state.view) {
   }
   if (view === 'form') {
     const target = athleteTarget();
-    data = target ? {formSets:await api('/api/form?athlete_id=' + target.id + '&limit=100')} : {formSets:[]};
+    const [formSets, formCatalogue] = target ? await Promise.all([
+      api('/api/form?athlete_id=' + target.id + '&limit=100'),
+      api('/api/form/exercises').catch(error => { if (error.message === 'notFound') return []; throw error; })]) : [[], []];
+    data = {formSets, formCatalogue};
   }
   if (version !== loadVersion || !state.user) return;
   Object.assign(state, data, {view}); message(''); render('h1');
@@ -397,6 +448,89 @@ async function load(view=state.view) {
 function heading(title, subtitle) {
   const wrap = node('div',null,'section-head'); const text = node('div');
   const heading=node('h1',title); heading.tabIndex=-1; text.append(heading); if (subtitle) text.append(node('p',subtitle,'muted')); wrap.append(text); return wrap;
+}
+function overviewHero(label, title, description) {
+  const hero = node('section', null, 'overview-hero');
+  hero.append(node('p', label, 'eyebrow'), heading(title, description));
+  return hero;
+}
+function overviewCard(label, value, detail, icon) {
+  const card = node('section', null, 'overview-card');
+  const glyph = node('span', icon, 'card-glyph'); glyph.setAttribute('aria-hidden', 'true');
+  card.append(glyph, node('h2', label), node('p', value, 'big-value'));
+  if (detail) card.append(node('p', detail, 'muted'));
+  return card;
+}
+function athleteLink(athlete, name) {
+  const link = button('athlete', async () => {
+    Object.assign(state, {selected:athlete, nutritionDay:null});
+    await load('history');
+  }, name ? 'name-button overview-link' : 'name-button roster-link');
+  link.textContent = name || athlete.name;
+  return link;
+}
+function teamOverview(content) {
+  const records = state.todayCheckins;
+  const checked = records.filter(record => record.checkin);
+  const due = (state.lastReport?.athletes || []).filter(row => row.trials_done < row.trials);
+  const increased = state.athletes.filter(athlete => athlete.active && athlete.changes.flexion_asymmetry_pct.change_absolute > 0);
+  const cards = node('div', null, 'overview-grid team-overview');
+  const checkin = overviewCard(t('checkedToday'), format(checked.length) + ' / ' + format(records.length), '', '✓');
+  if (records.length) {
+    const list = document.createElement('ul'); list.className = 'status-list';
+    for (const row of records) {
+      const item = node('li');
+      item.append(node('span', row.name), node('span', t(row.checkin ? 'recorded' : 'missing'), 'badge' + (row.checkin ? '' : ' pending')));
+      list.append(item);
+    }
+    checkin.append(details('checkins', list));
+  }
+  const session = overviewCard(t('lastSession'), state.lastSession?.title || '—',
+    state.lastSession ? dateTime(state.lastSession.starts_at) : t('noCompletedSession'), '◷');
+  const testing = overviewCard(t('testingDue'), state.lastReport ? format(due.length) : '—',
+    state.lastReport ? t(due.length ? 'sessionRemaining' : 'noneDue') : t('noCompletedSession'), '↗');
+  for (const row of due) {
+    const athlete = state.athletes.find(item => item.id === row.athlete_id);
+    if (athlete) testing.append(athleteLink(athlete, athlete.name + ' · ' + row.trials_done + '/' + row.trials));
+  }
+  const flags = overviewCard(t('compare'), format(increased.length), t(increased.length ? 'increasedAsymmetry' : 'noIncrease'), '≋');
+  for (const athlete of increased) flags.append(athleteLink(athlete, athlete.name + ' · +' +
+    format(athlete.changes.flexion_asymmetry_pct.change_absolute) + ' ' + (state.language === 'bg' ? 'пр. п.' : 'pp')));
+  cards.append(checkin, session, testing, flags);
+  content.append(cards);
+}
+function today(content) {
+  content.append(overviewHero(t('athleteDesk'), t('today'), state.user.name + '  ·  ' + date(apiDay())));
+  athleteSubnav(content, 'today');
+  const grid = node('div', null, 'overview-grid today-grid');
+  const saved = state.checkins[0];
+  const checkin = overviewCard(t('checkinToday'), saved ? wellbeingSum(saved) + ' / 25' : '—',
+    t(saved ? 'todayDone' : 'openAppCheckin'), '✓');
+  const day = apiDay();
+  const weekday = (new Date(day + 'T00:00:00Z').getUTCDay() + 6) % 7;
+  const scheduled = state.plansData.filter(plan => {
+    const distance = (Date.parse(day) - Date.parse(plan.starts_on)) / 86400000;
+    return distance >= 0 && distance < plan.weeks * 7 && plan.items.some(item => item.weekday === weekday);
+  });
+  const training = overviewCard(t('todayPlan'), scheduled[0]?.title || '—', scheduled.length ? '' : t('todayRest'), '≋');
+  for (const plan of scheduled) for (const item of plan.items.filter(item => item.weekday === weekday)) {
+    training.append(node('p', item.exercise + ' · ' + item.sets + ' × ' + item.reps +
+      (item.reps_max > item.reps ? '–' + item.reps_max : ''), 'muted'));
+  }
+  const jump = state.jumps[0];
+  const jumpCard = overviewCard(t('latestJump'), jump ? t(jump.test) : '—', jump ? dateTime(jump.created_at) : t('noData'), '↗');
+  if (jump) for (const [field, label] of [['jump_height_cm','height'], ['flight_time_ms','flight'],
+    ['flexion_asymmetry_pct','asymmetry']]) {
+    const metric = state.summary.metrics[field];
+    const row = node('div', null, 'stat-line');
+    row.append(node('span', t(label)), node('strong', format(jump[field], field)));
+    if (metric?.baseline != null) row.append(node('small', t('baselineValue') + ': ' + format(metric.baseline, field) +
+      (jump[field] == null ? '' : ' · ' + change(jump[field] - metric.baseline, field))));
+    jumpCard.append(row);
+  }
+  const food = nutritionSummaryView(state.nutSummary);
+  grid.append(checkin, training, food, jumpCard);
+  content.append(grid);
 }
 function field(form, key, name, type='text', value='') {
   const label = node('label',t(key)); const input = node('input'); input.name=name; input.type=type; input.required=true; input.value=value;
@@ -443,7 +577,9 @@ function consentEditor(athlete) {
   form.append(button('cancel',()=>{state.consent=null;render('#consent-'+athlete.id);}));wrap.append(form);return wrap;
 }
 function team(content) {
-  content.append(heading(t('team'),t('changeNote')));
+  content.append(overviewHero(t(state.user.role === 'admin' ? 'adminDesk' : 'coachDesk'), t('team'), date(apiDay())));
+  teamOverview(content);
+  content.append(node('h2', t('roster')), node('p', t('changeNote'), 'muted'));
   if(state.consent)content.append(consentEditor(state.consent));
   const columns=['name','jumps','lastJump','ratio','peakMean','asymmetry','consent'];
   const keys=['name','jump_count','last_jump_at','knee_ankle_ratio','knee_flexion_peak_mean','flexion_asymmetry_pct','consent_recorded'];
@@ -454,15 +590,17 @@ function team(content) {
     return state.ascending?order:-order;
   });
   const grid=table(columns,t('team'));
+  grid.wrap.classList.add('club-table', 'roster-table');
   [...grid.head.children].forEach((cell,index)=>{
     const key=keys[index];const control=button(columns[index],()=>{state.ascending=state.sort===key?!state.ascending:true;state.sort=key;render('#sort-'+key);});
     control.id='sort-'+key;
     if(state.sort===key)control.append(document.createTextNode(state.ascending?' ↑':' ↓'));
+    if (index === 1 || index >= 3 && index <= 5) cell.className = 'num';
     cell.replaceChildren(control);cell.setAttribute('aria-sort',state.sort===key?(state.ascending?'ascending':'descending'):'none');
   });
   for(const athlete of rows){
-    const row=node('tr');const name=node('td');const link=button('athlete',async()=>{state.selected=athlete;await load('history');},'name-button');link.textContent=athlete.name;name.append(link);
-    if(!athlete.active)name.append(node('small',t('inactive')));row.append(name,node('td',format(athlete.jump_count)),node('td',date(athlete.last_jump_at)));
+    const row=node('tr');const name=node('td');name.append(athleteLink(athlete));
+    if(!athlete.active)name.append(node('small',t('inactive')));row.append(name,node('td',format(athlete.jump_count),'num'),node('td',date(athlete.last_jump_at)));
     for(const key of metricKeys)row.append(node('td',change(athlete.changes[key].change_absolute,key),'num'));
     const consent=node('td');const actions=node('div',null,'cell-actions');actions.append(node('span',t(athlete.consent_recorded?'recorded':'missing'),'badge'+(athlete.consent_recorded?'':' pending')),
       button(athlete.consent_recorded?'consent':'record',()=>{state.consent=athlete;render('#consent-by');}));actions.lastElementChild.id='consent-'+athlete.id;consent.append(actions);row.append(consent);grid.body.append(row);
@@ -475,18 +613,36 @@ function svgNode(tag,attributes,text) {
   for(const [key,value]of Object.entries(attributes))element.setAttribute(key,String(value));
   if(text!=null)element.textContent=text;return element;
 }
+function chartScale(values, padding, bottom, height) {
+  const min = Math.min(...values), max = Math.max(...values);
+  const spread = (max - min) || Math.max(1, Math.abs(max) * .02);
+  const low = min - spread * padding, high = max + spread * padding;
+  const rawStep = (high - low) / 3;
+  const power = 10 ** Math.floor(Math.log10(rawStep));
+  const step = power * [1, 2, 2.5, 5, 10].find(size => size * power >= rawStep);
+  const first = Math.floor(low / step), last = Math.ceil(high / step);
+  const ticks = Array.from({length:last - first + 1}, (_, index) => (first + index) * step);
+  const decimal = Math.max(0, -Math.floor(Math.log10(step)) + 1);
+  const numberFormat = new Intl.NumberFormat(locale(), {maximumFractionDigits:Math.min(decimal, 12)});
+  const y = value => bottom - (value / step - first) / (last - first) * height;
+  return {ticks, y, label:value => numberFormat.format(value)};
+}
+function chartAxis(svg, scale) {
+  for (const value of scale.ticks) svg.append(
+    svgNode('line', {x1:54, x2:458, y1:scale.y(value), y2:scale.y(value), class:'chart-grid'}),
+    svgNode('text', {x:46, y:scale.y(value)+4, 'text-anchor':'end', 'font-size':12, fill:'currentColor', class:'axis-tick'}, scale.label(value)));
+}
 function chart(title,fields) {
   const figure=node('figure');figure.append(node('figcaption',t(title)));
   const svg=svgNode('svg',{viewBox:'0 0 480 210',role:'img','aria-label':t(title)});const rows=[...state.jumps].reverse();
   const values=rows.flatMap(row=>fields.map(field=>row[field])).filter(value=>value!=null);
   for(const field of fields){const base=state.summary.metrics[field].baseline;if(base!=null)values.push(base);}
   if(!values.length){figure.append(node('p',t('noData')));return figure;}
-  const min=Math.max(0,Math.min(...values)-(Math.max(...values)-Math.min(...values)||1)*.2);
-  const max=Math.max(...values)+(Math.max(...values)-Math.min(...values)||1)*.2;
-  const y=value=>166-(value-min)/(max-min)*140;
+  const scale = chartScale(values, .15, 166, 140);
+  const y = scale.y;
   const first=Date.parse(rows[0].created_at),last=Date.parse(rows[rows.length-1].created_at);
   const x=row=>54+(last>first?(Date.parse(row.created_at)-first)/(last-first):.5)*404;
-  for(const value of [min,(min+max)/2,max])svg.append(svgNode('line',{x1:54,x2:458,y1:y(value),y2:y(value),class:'chart-grid'}),svgNode('text',{x:46,y:y(value)+4,'text-anchor':'end','font-size':12,fill:'currentColor'},format(value,fields[0])));
+  chartAxis(svg, scale);
   fields.forEach((field,index)=>{
     const base=state.summary.metrics[field].baseline;
     if(base!=null)svg.append(svgNode('line',{x1:54,x2:458,y1:y(base),y2:y(base),class:'baseline-line'+(index?' series-right':'')}));
@@ -495,7 +651,8 @@ function chart(title,fields) {
     const draw=()=>{if(points.length)svg.append(svgNode('polyline',{points:points.join(' '),class:'series-line '+(index?'series-right':'series-left')}));points=[];};
     for(const row of rows){if(row[field]==null){draw();continue;}points.push(x(row)+','+y(row[field]));svg.append(index?svgNode('rect',{x:x(row)-3,y:y(row[field])-3,width:6,height:6,class:'right-dot'}):svgNode('circle',{cx:x(row),cy:y(row[field]),r:3,class:'chart-dot'}));}draw();
   });
-  svg.append(svgNode('text',{x:54,y:198,'font-size':12,fill:'currentColor'},date(rows[0].created_at)),svgNode('text',{x:458,y:198,'font-size':12,'text-anchor':'end',fill:'currentColor'},date(rows[rows.length-1].created_at)));
+  svg.append(svgNode('text',{x:first===last?256:54,y:198,'font-size':12,'text-anchor':first===last?'middle':'start',fill:'currentColor'},date(rows[0].created_at)));
+  if (date(rows[0].created_at) !== date(rows[rows.length-1].created_at)) svg.append(svgNode('text',{x:458,y:198,'font-size':12,'text-anchor':'end',fill:'currentColor'},date(rows[rows.length-1].created_at)));
   figure.append(svg);if(fields.length>1)figure.append(node('p',t('legs'),'legend'));return figure;
 }
 async function download(path,filename) {
@@ -516,7 +673,8 @@ function history(content) {
       for(const field of ['baseline','latest','last_three_median','change_absolute','change_percent'])row.append(node('td',format(metric[field],field==='change_percent'?null:key),'num'));baselines.body.append(row);
     }content.append(details('baseline',baselines.wrap));
     const grid=table(historyColumns.map(([,label])=>label),t('history'));
-    for(const jump of state.jumps){const row=node('tr');for(const [key]of historyColumns){const value=jump[key];const cell=node('td',key==='created_at'?date(value):key==='test'?t(value):key==='warnings'?(value.map(t).join(', ')||t('none')):format(value,key));if(key==='warnings'&&value.length)cell.className='warning';row.append(cell);}grid.body.append(row);}content.append(grid.wrap);
+    [...grid.head.children].slice(2, -1).forEach(cell => { cell.className = 'num'; });
+    for(const jump of state.jumps){const row=node('tr');for(const [key]of historyColumns){const value=jump[key];const cell=node('td',key==='created_at'?date(value):key==='test'?t(value):key==='warnings'?(value.map(t).join(', ')||t('none')):format(value,key));if(key==='warnings'&&value.length)cell.className='warning';else if(!['created_at','test','warnings'].includes(key))cell.className='num';row.append(cell);}grid.body.append(row);}content.append(grid.wrap);
   }else content.append(node('p',t('noData'),'empty'));
   if(state.checkins && state.checkins.length)content.append(wellbeingChart());
   // Feedback thread: athlete sees their own replyable thread; staff see the athlete's thread.
@@ -807,12 +965,10 @@ function seriesChart(title, points, field, {dots}) {
   const values = points.map(p => p[field]).filter(v => v != null);
   if (!values.length) { figure.append(node('p', t('noCheckins'))); return figure; }
   const svg = svgNode('svg', {viewBox:'0 0 480 180', role:'img', 'aria-label':title});
-  const min = Math.min(...values), max = Math.max(...values);
-  const span = (max - min) || 1;
-  const lo = min - span * 0.15, hi = max + span * 0.15;
-  const y = v => 138 - (v - lo) / (hi - lo) * 116;
+  const scale = chartScale(values, .15, 138, 116);
+  const y = scale.y;
   const x = i => points.length === 1 ? 54 + 202 : 54 + i / (points.length - 1) * 404;
-  for (const v of [lo, (lo + hi) / 2, hi]) svg.append(svgNode('line', {x1:54, x2:458, y1:y(v), y2:y(v), class:'chart-grid'}), svgNode('text', {x:46, y:y(v)+4, 'text-anchor':'end', 'font-size':12, fill:'currentColor'}, formatNumber(v)));
+  chartAxis(svg, scale);
   let path = [];
   points.forEach((p, i) => {
     if (p[field] == null) { if (path.length) { svg.append(svgNode('polyline', {points:path.join(' '), class:'series-line ' + (dots ? 'series-left' : 'series-right')})); path = []; } return; }
@@ -930,14 +1086,11 @@ function svgChart(title, labels, series) {
   const values = series.flatMap(s => s.data.map(d => d.v)).filter(v => v != null);
   if (!values.length) { figure.append(node('p', t('noData'))); return figure; }
   const svg = svgNode('svg', {viewBox:'0 0 480 180', role:'img', 'aria-label':title});
-  const min = Math.min(...values), max = Math.max(...values), span = (max - min) || 1;
-  const lo = min - span * 0.15, hi = max + span * 0.15;
+  const scale = chartScale(values, .15, 138, 116);
   const n = labels.length;
-  const y = v => 138 - (v - lo) / (hi - lo) * 116;
+  const y = scale.y;
   const x = i => n <= 1 ? 256 : 54 + i / (n - 1) * 404;
-  for (const g of [lo, (lo + hi) / 2, hi]) svg.append(
-    svgNode('line', {x1:54, x2:458, y1:y(g), y2:y(g), class:'chart-grid'}),
-    svgNode('text', {x:46, y:y(g)+4, 'text-anchor':'end', 'font-size':12, fill:'currentColor'}, formatNumber(g)));
+  chartAxis(svg, scale);
   for (const s of series) {
     if (s.type === 'line') {
       let path = [];
@@ -961,7 +1114,7 @@ function svgChart(title, labels, series) {
 function athleteSubnav(content, current) {
   const own = state.user.role === 'athlete';
   const nav = node('nav', null, 'subnav'); nav.setAttribute('aria-label', t('sectionLinks'));
-  for (const [v, key] of [['history', own ? 'ownHistory' : 'history'], ['training', 'training'],
+  for (const [v, key] of [...(own ? [['today','today']] : []), ['history', own ? 'ownHistory' : 'history'], ['training', 'training'],
                           ['nutrition', 'nutrition'], ['form', 'formView']]) {
     const b = button(key, () => load(v)); if (current === v) b.setAttribute('aria-current', 'page'); nav.append(b);
   }
@@ -1186,7 +1339,8 @@ function plans(content) {
 function dayPickerInto(content, day, onPick, id) {
   const picker = node('div', null, 'daypicker');
   const input = node('input'); input.type = 'date'; input.value = day; input.id = id;
-  picker.append(node('label', t('day')), input); content.append(picker);
+  const label = node('label', t('day')); label.htmlFor = id;
+  picker.append(label, input); content.append(picker);
   const week = node('div', null, 'week');
   for (let i = 0; i < 7; i++) {
     const d = new Date(); d.setUTCDate(d.getUTCDate() - i); const ds = apiDayOf(d);
@@ -1195,7 +1349,7 @@ function dayPickerInto(content, day, onPick, id) {
     b.setAttribute('aria-pressed', String(ds === day)); b.classList.add('secondary'); week.append(b);
   }
   content.append(week);
-  input.addEventListener('change', () => onPick(input.value));
+  input.addEventListener('change', () => { if (input.value) run(() => onPick(input.value)); });
 }
 function weightChart(data) {
   const base = (data.trend.length ? data.trend.map(x => x.day) : data.weights.map(x => x.day));
@@ -1218,21 +1372,23 @@ function expenditureChart(exp) {
   return fig;
 }
 function nutritionSummaryView(s) {
-  const section = node('section'); section.append(node('h2', t('dailyTotals') + ' · ' + date(s.day)));
+  const section = node('section', null, 'overview-card nutrition-totals');
+  section.append(node('h2', t('dailyTotals') + ' · ' + date(s.day)));
   const keys = [['kcal', 'kcal'], ['protein_g', 'protein'], ['carbs_g', 'carbs'], ['fat_g', 'fat'], ['fibre_g', 'fibre']];
-  const grid = table(['metric', 'dailyTotals', 'nutritionTarget', 'remaining'], t('dailyTotals'));
-  grid.wrap.classList.add('club-table');
   for (const [k, label] of keys) {
-    const tr = node('tr');
-    tr.append(node('td', t(label)), node('td', formatNumber(s.totals[k]), 'num'));
-    const tv = s.target && s.target[k] != null ? s.target[k] : null;
-    tr.append(node('td', tv == null ? '—' : formatNumber(tv), 'num'));
-    const rem = s.remaining && s.remaining[k] != null ? s.remaining[k] : null;
-    const rc = node('td', rem == null ? '—' : formatNumber(rem), 'num'); if (rem != null && rem < 0) rc.classList.add('warning');
-    tr.append(rc); grid.body.append(tr);
+    const row = node('div', null, 'target-row');
+    const target = s.target?.[k];
+    const unit = t(k === 'kcal' ? 'kcalUnit' : 'gramUnit');
+    row.append(node('span', t(label).replace(/ \([^)]+\)$/, '')), node('strong', formatNumber(s.totals[k]) +
+      (target == null ? '' : ' / ' + formatNumber(target)) + ' ' + unit));
+    if (target > 0) {
+      const progress = node('progress'); progress.max = target; progress.value = Math.min(target, s.totals[k]);
+      progress.setAttribute('aria-label', t(label) + ' · ' + t('nutritionTarget'));
+      progress.setAttribute('aria-valuetext', formatNumber(s.totals[k]) + ' / ' + formatNumber(target) + ' ' + unit);
+      row.append(progress);
+    } else if (k === 'kcal') row.append(node('small', t('noTargetShort')));
+    section.append(row);
   }
-  section.append(grid.wrap);
-  section.append(node('p', MEAL_ORDER.map(m => t(m) + ': ' + formatNumber(s.by_meal_kcal[m])).join(' · ') + ' ' + t('kcal'), 'muted'));
   if (s.weekly_average && s.weekly_average.days_logged) section.append(node('p',
     t('weeklyAverage') + ' (' + s.weekly_average.days_logged + '): ' +
     keys.map(([k, label]) => t(label) + ' ' + (s.weekly_average[k] == null ? '—' : formatNumber(s.weekly_average[k]))).join(' · '), 'muted'));
@@ -1322,47 +1478,67 @@ function nutrition(content) {
   content.append(node('p', t('nutritionNote'), 'muted'));
   const own = state.user.role === 'athlete';
   const day = state.nutritionDay || apiDay();
-  dayPickerInto(content, day, d => { state.nutritionDay = d; load('nutrition'); }, 'nutrition-day');
+  dayPickerInto(content, day, d => { state.nutritionDay = d; return load('nutrition'); }, 'nutrition-day');
+  const dayGrid = node('div', null, 'nutrition-grid');
+  if (state.nutSummary) dayGrid.append(nutritionSummaryView(state.nutSummary));
+  const daily = node('section', null, 'overview-card daily-food');
+  daily.append(node('h2', t('foodLog')));
+  if (state.nutSummary) for (const meal of MEAL_ORDER) {
+    const row = node('div', null, 'stat-line');
+    row.append(node('span', t(meal)), node('strong', formatNumber(state.nutSummary.by_meal_kcal[meal]) + ' ' + t('kcalUnit')));
+    daily.append(row);
+  }
+  daily.append(details('mealBreakdown', foodLogView(state.foodLogs, day)));
+  if (own) daily.append(button('dayComplete', async () => { await api('/api/me/nutrition/days/' + day + '/complete', {method:'PUT'}); await load(); message('saved'); }, 'primary'));
+  dayGrid.append(daily); content.append(dayGrid);
   const charts = node('div', null, 'charts');
   if (state.weightsData && state.weightsData.weights.length) charts.append(weightChart(state.weightsData));
   if (state.expenditure && state.expenditure.history && state.expenditure.history.length) charts.append(expenditureChart(state.expenditure));
   if (charts.children.length) content.append(charts);
-  if (state.nutSummary) content.append(nutritionSummaryView(state.nutSummary));
-  content.append(foodLogView(state.foodLogs, day));
-  content.append(programView(state.program, athlete));
-  content.append(targetView(state.nutTarget, athlete));
-  if (own) { const panel = node('section', null, 'inline-panel');
-    panel.append(button('dayComplete', async () => { await api('/api/me/nutrition/days/' + day + '/complete', {method:'PUT'}); await load(); message('saved'); }));
-    content.append(panel); }
+  const settings = node('div', null, 'overview-grid');
+  settings.append(programView(state.program, athlete), targetView(state.nutTarget, athlete));
+  content.append(settings);
 }
 function formSetCard(set) {
   const wrap = node('section', null, 'inline-panel');
-  wrap.append(node('h2', t(set.exercise) + (set.side ? ' · ' + set.side : '') + ' · ' +
-    t(set.view === 'front' ? 'front' : 'sideView') + ' · ' + dateTime(set.created_at)));
-  const s = set.summary;
-  wrap.append(node('p', t('repsCount') + ': ' + s.repetition_count + ' · ' + t('partialCount') + ': ' +
-    s.partial_count + ' · ' + t('unclearCount') + ': ' + s.unclear_count, 'muted'));
+  const exercise = state.formCatalogue.find(entry => entry.id === set.exercise);
+  const mode = set.mode || exercise?.mode || 'reps';
+  const side = ['L','left'].includes(set.side) ? 'sideLeft' : ['R','right'].includes(set.side) ? 'sideRight' : null;
+  wrap.append(node('h2', exercise?.['name_' + state.language] || t(set.exercise)),
+    node('p', [side && t(side), t((set.view || exercise?.view) === 'front' ? 'front' : 'sideView'),
+      t(set.source === 'live' ? 'sourceLive' : 'sourceVideo'), dateTime(set.created_at)].filter(Boolean).join(' · '), 'muted'));
+  const s = set.summary || {};
+  if (mode === 'hold') {
+    const metrics = node('div', null, 'overview-grid');
+    for (const [label, value] of [['holdTime', set.hold_ms ?? s.hold_ms], ['inBand', set.in_band_ms ?? s.in_band_ms]]) {
+      metrics.append(overviewCard(t(label), value == null ? '—' : format(value / 1000), '', '◷'));
+    }
+    wrap.append(metrics);
+  } else wrap.append(node('p', t('repsCount') + ': ' + (s.repetition_count ?? '—') + ' · ' + t('partialCount') + ': ' +
+    (s.partial_count ?? '—') + ' · ' + t('unclearCount') + ': ' + (s.unclear_count ?? '—'), 'muted'));
   const reps = set.repetitions || [];
+  const columns = exercise?.checks?.map(check => [check.key,
+    check['label_' + state.language] + (check.unit ? ' (' + check.unit + ')' : '')]) || [
+    ['depth',t('depth')], ['fppa_l',t('fppaL')], ['fppa_r',t('fppaR')], ['descent_time_ms',t('descentMs')], ['ascent_time_ms',t('ascentMs')]];
+  const measurement = (rep, key) => rep.checks ? rep.checks[key] : rep[key];
   const labels = reps.map(r => '#' + r.index);
-  const depth = reps.map((r, i) => ({i, v: r.depth}));
   const charts = node('div', null, 'charts');
-  charts.append(svgChart(t('depth'), labels, [{type:'line', cls:'series-left', data:depth}, {type:'dots', cls:'chart-dot', data:depth}]));
-  if (set.view === 'front') {
-    const fl = reps.map((r, i) => ({i, v: r.fppa_l})), fr = reps.map((r, i) => ({i, v: r.fppa_r}));
-    charts.append(svgChart(t('fppa'), labels, [{type:'line', cls:'series-left', data:fl},
-      {type:'line', cls:'series-right', data:fr}, {type:'dots', cls:'chart-dot', data:fl}, {type:'dots', cls:'right-dot', data:fr}]));
+  for (const [key, label] of columns) {
+    const values = reps.map((rep, i) => ({i, v:measurement(rep, key)}));
+    if (values.some(entry => entry.v != null)) charts.append(svgChart(label, labels,
+      [{type:'line', cls:'series-left', data:values}, {type:'dots', cls:'chart-dot', data:values}]));
   }
-  wrap.append(charts);
-  const grid = table(['repetition', 'repStatus', 'depth', 'fppa'], t('formHistoryTitle'));
+  if (charts.children.length) wrap.append(charts);
+  const grid = table(['repetition', 'repStatus', ...columns.map(([, label]) => label)], t('formHistoryTitle'));
   grid.wrap.classList.add('club-table');
+  [...grid.head.children].slice(2).forEach(cell => { cell.className = 'num'; });
   for (const r of reps) {
     const tr = node('tr'); tr.append(node('td', '#' + r.index));
     const st = node('td'); st.append(node('span', t(r.status), 'badge' + (r.status === 'complete' ? '' : ' pending'))); tr.append(st);
-    tr.append(node('td', r.depth == null ? '—' : format(r.depth, 'depth'), 'num'));
-    const fppa = r.fppa_l == null && r.fppa_r == null ? '—' : [r.fppa_l, r.fppa_r].map(v => v == null ? '—' : format(v, 'fppa')).join(' / ');
-    tr.append(node('td', fppa, 'num')); grid.body.append(tr);
+    for (const [key] of columns) tr.append(node('td', format(measurement(r, key), key), 'num'));
+    grid.body.append(tr);
   }
-  wrap.append(grid.wrap);
+  if (reps.length) wrap.append(grid.wrap);
   if (set.warnings && set.warnings.length) wrap.append(node('p', t('warnings') + ': ' + set.warnings.map(w => t(w)).join(', '), 'warning'));
   return wrap;
 }
@@ -1431,21 +1607,50 @@ function renderAssistant() {
 }
 function render(focusSelector=null) {
   document.documentElement.lang=state.language;document.title='JumpScan · '+t('title');$('language-label').textContent=t('language');$('language').value=state.language;
+  updateThemeLabel();
   const content=$('content');content.replaceChildren();$('session').replaceChildren();$('guide').replaceChildren(node('h2',t('guideTitle')),node('p',t('guide')));
+  $('workspace').hidden = !state.user;
+  document.body.classList.toggle('authenticated', Boolean(state.user));
   $('assistant')?.replaceChildren();
   if(!state.user){
-    content.append(heading(t('title'),t('intro')));const panel=node('section',null,'login');panel.append(node('h2',t('signIn')));
+    content.append(overviewHero('JUMPSCAN / PERFORMANCE',t('title'),t('dashboardIntro')));const panel=node('section',null,'login');panel.append(node('h2',t('signIn')));
     const form=node('form');form.id='login-form';const email=field(form,'email','email','email');email.id='email';email.autocomplete='username';const password=field(form,'password','password','password');password.id='password';password.minLength=1;password.autocomplete='current-password';
-    submit(form,'signIn',async data=>{message('loading');const result=await api('/api/auth/login',{method:'POST',body:JSON.stringify(Object.fromEntries(data))});password.value='';state.token=result.token;state.user=result.user;state.offset=0;streamLive();try{await load(state.user.role==='athlete'?'history':'team');}catch(error){signedOut();throw error;}});panel.append(form);content.append(panel);return;
+    submit(form,'signIn',async data=>{message('loading');const result=await api('/api/auth/login',{method:'POST',body:JSON.stringify(Object.fromEntries(data))});password.value='';state.token=result.token;state.user=result.user;state.offset=0;streamLive();try{await load(state.user.role==='athlete'?'today':'team');}catch(error){signedOut();throw error;}});panel.append(form);content.append(panel);return;
   }
-  $('session').append(node('span',state.user.name+' · '+t(state.user.role)),button('signOut',async()=>{await api('/api/auth/logout',{method:'POST'});loadVersion++;signedOut();message('');}));
-  const nav=node('nav');nav.setAttribute('aria-label',t('title'));
-  const views=state.user.role==='athlete'?[['history','ownHistory'],['sessionsMine','mySessions'],['checkins','myCheckins']]:[['team','team'],['plans','plans'],['groups','groups'],['sessions','sessions'],['wellbeing','wellbeingView'],['users','users'],...(state.user.role==='admin'?[['clubs','clubs'],['audit','audit']]:[])];
-  for(const [view,key]of views){const control=button(key,()=>load(view));if(state.view===view||(state.view==='history'&&view==='team')||(['training','nutrition','form'].includes(state.view)&&view==='team'))control.setAttribute('aria-current','page');nav.append(control);}content.append(nav);
-  ({team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans})[state.view](content);
+  $('identity').textContent = state.user.name + ' · ' + t(state.user.role);
+  $('session').append(button('signOut',async()=>{await api('/api/auth/logout',{method:'POST'});loadVersion++;signedOut();message('');}));
+  const nav=node('nav', null, 'main-nav');nav.setAttribute('aria-label',t('overview'));
+  const own = state.user.role === 'athlete';
+  const views=own?[['today','overview','↗'],['sessionsMine','mySessions','◷'],['checkins','myCheckins','✓']]:[
+    ['team','team','↗'],['plans','plans','≋'],['groups','groups','◉'],['sessions','sessions','◷'],['wellbeing','wellbeingView','✓'],
+    ['users','users','◎'],...(state.user.role==='admin'?[['clubs','clubs','◇'],['audit','audit','≡']]:[])];
+  const athleteTab = ['history','training','nutrition','form'].includes(state.view);
+  for (const [view,key,icon] of views) {
+    const control = button(key, () => load(view));
+    const glyph = node('span', icon, 'nav-glyph'); glyph.setAttribute('aria-hidden', 'true'); control.prepend(glyph);
+    if (state.view === view) control.setAttribute('aria-current', 'page');
+    else if (athleteTab && view === (own ? 'today' : 'team')) control.setAttribute('aria-current', 'true');
+    nav.append(control);
+  }
+  content.append(nav);
+  const view = node('div', null, 'view');
+  content.append(view);
+  ({today,team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans})[state.view](view);
   setLive(state.live);
   renderAssistant();
   if(focusSelector)content.querySelector(focusSelector)?.focus();
 }
+const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
+function updateThemeLabel() {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : systemTheme.matches;
+  $('theme').setAttribute('aria-label', t(dark ? 'themeLight' : 'themeDark'));
+  $('theme').title = t(dark ? 'themeLight' : 'themeDark');
+}
+$('theme').addEventListener('click', () => {
+  const root = document.documentElement;
+  root.dataset.theme = (root.dataset.theme || (systemTheme.matches ? 'dark' : 'light')) === 'dark' ? 'light' : 'dark';
+  updateThemeLabel();
+});
+systemTheme.addEventListener('change', updateThemeLabel);
 $('language').addEventListener('change',event=>{state.language=event.target.value;message('');render();});
 render();

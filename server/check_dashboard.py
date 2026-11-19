@@ -8,10 +8,10 @@ from playwright.sync_api import sync_playwright
 
 def check():
     url = os.environ['JUMPSCAN_DASH_URL']
-    output = Path('/root/jumpscan/logs/dash')
+    output = Path(os.getenv('JUMPSCAN_DASH_SCREENSHOTS', 'logs/uiv2/dashboard'))
     output.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(executable_path='/opt/google/chrome/chrome', headless=True,
+        browser = playwright.chromium.launch(executable_path='/usr/bin/google-chrome', headless=True,
                                              args=['--no-sandbox', '--disable-dev-shm-usage'])
         page = browser.new_page(viewport={'width': 1440, 'height': 1000}, device_scale_factor=1)
         page.set_default_timeout(60000)
@@ -32,15 +32,48 @@ def check():
                 raise
             page.locator('main nav').first.wait_for()
 
+        def screenshot(name, full_page=False):
+            page.screenshot(path=str(output / f'{name}.png'), full_page=full_page)
+            assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), name
+
+        def unique_axes():
+            for chart in page.locator('figure svg').all():
+                labels = chart.locator('.axis-tick').all_text_contents()
+                assert len(labels) == len(set(labels)), labels
+
+        for role, account in [('coach', 'coach'), ('athlete', 'athlete1'), ('admin', 'admin')]:
+            login(account)
+            assert page.locator('.overview-card').count() == 4
+            if role == 'athlete':
+                assert page.locator('progress').count() == 4
+            for theme in ['light', 'dark']:
+                page.evaluate('delete document.documentElement.dataset.theme')
+                page.emulate_media(color_scheme=theme, reduced_motion='reduce')
+                for language in ['bg', 'en']:
+                    page.locator('#language').select_option(language)
+                    for width in [1280, 390]:
+                        page.set_viewport_size({'width': width, 'height': 844 if width == 390 else 960})
+                        page.evaluate('window.scrollTo(0, 0)')
+                        screenshot(f'{role}-{language}-{width}-{theme}')
+            page.locator('#language').select_option('bg')
+            page.emulate_media(color_scheme='light')
+            page.get_by_role('button', name='Тъмна тема', exact=True).click()
+            assert page.locator('html').get_attribute('data-theme') == 'dark'
+            page.get_by_role('button', name='Светла тема', exact=True).click()
+            page.get_by_role('button', name='Изход', exact=True).click()
+            page.locator('#login-form').wait_for()
+
+        page.set_viewport_size({'width': 1280, 'height': 960})
+
         login('coach')
         assert page.locator('table tbody tr').count() == 6
         page.screenshot(path=str(output / 'team-desktop.png'), full_page=True)
-        first_name = page.locator('.name-button').first.inner_text()
+        first_name = page.locator('.roster-link').first.inner_text()
         page.locator('thead button').first.click()
         assert page.evaluate('document.activeElement.id') == 'sort-name'
-        assert page.locator('.name-button').first.inner_text() != first_name
+        assert page.locator('.roster-link').first.inner_text() != first_name
         page.locator('thead button').first.click()
-        page.locator('.name-button').first.click()
+        page.locator('.roster-link').first.click()
         page.locator('svg').nth(3).wait_for()
         assert page.evaluate('document.activeElement.tagName') == 'H1'
         assert page.locator('svg').count() == 6
@@ -100,7 +133,7 @@ def check():
         assert page.get_by_text('под обичайното', exact=True).count() <= 1  # at most one; depends on the day's window
         # athlete page: feedback thread visible for staff
         page.get_by_role('button', name='Отбор', exact=True).click()
-        page.locator('.name-button').first.click()
+        page.locator('.roster-link').first.click()
         page.locator('.comment-box').wait_for()
         # Training, nutrition and form sections for the selected athlete (SPEC section 6).
         page.locator('.subnav').get_by_role('button', name='Тренировки', exact=True).click()
@@ -109,6 +142,7 @@ def check():
         page.locator('.subnav').get_by_role('button', name='Хранене', exact=True).click()
         page.locator('.daypicker').wait_for()
         page.locator('figure svg').first.wait_for()
+        unique_axes()
         page.screenshot(path=str(output / 'coach-nutrition.png'), full_page=True)
         page.locator('.subnav').get_by_role('button', name='Техника', exact=True).click()
         page.get_by_role('button', name='Към отбора', exact=True).wait_for()
@@ -131,7 +165,8 @@ def check():
         page.get_by_role('button', name='Моите отбелязвания', exact=True).click()
         page.get_by_role('heading', name='Моите отбелязвания', exact=True).wait_for()
         page.locator('table').first.wait_for()
-        page.get_by_role('button', name='Моите скокове', exact=True).click()
+        page.locator('.main-nav').get_by_role('button', name='Преглед', exact=True).click()
+        page.locator('.subnav').get_by_role('button', name='Моите скокове', exact=True).click()
         page.locator('.comment-box').wait_for()
         assert page.get_by_role('textbox', name='Коментар').count() == 1
         page.get_by_role('button', name='Изход', exact=True).click()
@@ -155,7 +190,7 @@ def check():
         page.locator('#login-form').wait_for()
 
         login('athlete1')
-        page.locator('svg').nth(3).wait_for()
+        page.locator('.overview-hero').wait_for()
         assert page.get_by_role('button', name='Отбор', exact=True).count() == 0
         # Athlete training, nutrition and form sections plus the assistant panel (SPEC section 6).
         page.locator('.subnav').get_by_role('button', name='Тренировки', exact=True).click()
@@ -163,9 +198,25 @@ def check():
         page.locator('.subnav').get_by_role('button', name='Хранене', exact=True).click()
         page.locator('.daypicker').wait_for()
         page.locator('figure svg').first.wait_for()
+        unique_axes()
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
         page.locator('.subnav').get_by_role('button', name='Техника', exact=True).click()
         page.get_by_text('Още няма записи на техника.', exact=True).wait_for()
+        page.route('**/api/form/exercises', lambda route: route.fulfill(json=[{
+            'id': 'demo_hold', 'name_bg': 'Тестово задържане', 'name_en': 'Demo hold', 'mode': 'hold',
+            'sided': True, 'view': 'side', 'checks': [{'key': 'angle', 'label_bg': 'Ъгъл', 'label_en': 'Angle', 'unit': '°'}]}]))
+        page.route('**/api/form?*', lambda route: route.fulfill(json=[{
+            'exercise': 'demo_hold', 'mode': 'hold', 'source': 'live', 'side': 'L', 'view': 'side',
+            'created_at': '2026-11-19T10:00:00Z', 'hold_ms': 8400, 'in_band_ms': 6200, 'warnings': [],
+            'repetitions': [{'index': 1, 'status': 'complete', 'checks': {'angle': 64.0}}]}]))
+        page.locator('.subnav').get_by_role('button', name='Техника', exact=True).click()
+        page.get_by_role('heading', name='Тестово задържане').wait_for()
+        assert page.get_by_text('6,2', exact=True).is_visible()
+        assert page.get_by_role('columnheader', name='Ъгъл (°)').is_visible()
+        unique_axes()
+        screenshot('athlete-form-catalogue-bg', full_page=True)
+        page.unroute('**/api/form/exercises')
+        page.unroute('**/api/form?*')
         assert page.locator('.assistant-panel').count() == 1
         page.locator('.assistant-panel > summary').click()
         page.locator('#assistant-input').wait_for()
