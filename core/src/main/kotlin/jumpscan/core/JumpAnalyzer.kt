@@ -59,7 +59,7 @@ object JumpAnalyzer {
     private fun analyzeFrames(frames: List<Frame>, test: String, aspect: Float, view: View,
         takeoffMs: Long?, landingMs: Long?, useLearned: Boolean): Analysis {
         require(test == "drop_jump" || test == "cmj") { "test must be drop_jump or cmj" }
-        require(aspect > 0f) { "aspect must be positive" }
+        require(aspect.isFinite() && aspect > 0f) { "aspect must be positive and finite" }
         require(frames.all { it.landmarks.size == LANDMARKS && it.worldLandmarks.size == LANDMARKS }) {
             "each frame needs $LANDMARKS image and $LANDMARKS world landmarks"
         }

@@ -90,6 +90,14 @@ private fun parabola(t0: Double, flight: Double, metresPerImageHeight: Double = 
 
 /** Rule-detector invariants remain independent of the learned proposal used by the public entry point. */
 class JumpAnalyzerTest {
+    @Test
+    fun nonfiniteAspectIsRejectedBeforeGeometry() {
+        val error = assertThrows<IllegalArgumentException> {
+            JumpAnalyzer.analyze(clip(30, 1.0, { 0.0 }), "cmj", Float.POSITIVE_INFINITY)
+        }
+        assertEquals("aspect must be positive and finite", error.message)
+    }
+
     private fun analyzeWithLanding(frames: List<Frame>, test: String, aspect: Float = 9f / 16f,
         view: JumpAnalyzer.View = JumpAnalyzer.View.AUTO) =
         JumpAnalyzer.analyzeRulesWithLanding(frames, test, aspect, view)
