@@ -1045,3 +1045,84 @@ coach, athlete and administrator accounts at 1280 and 390 pixels, in both langua
 themes. It also checked axis labels and rendered a catalogue-backed hold fixture. See
 `/root/jumpscan/logs/uiv2/app/` and `/root/jumpscan/logs/uiv2/dashboard/` for the captures
 and logs. No production service, account, database or deployment was used.
+
+## 2026-11-19: Live form coaching
+
+### Build and tests
+
+On `android-build-kit`, after the repository sync and with the kit's private fixtures copied into
+`core/src/test/resources/private/`, `flock /work/jumpscan-gradle.lock ./gradlew --no-daemon :core:test
+:app:assembleDebug` succeeded: 68 core tests ran with no failures or errors, and the debug APK built.
+No private data is in the APK. On the host, `systemd-run --scope -q -p MemoryMax=800M nice
+server/.venv/bin/python -m pytest server -q` reported 471 passed and one skipped. No production endpoint was used.
+
+### Live pose model choice
+
+Live mode bundles Google's float16 Pose Landmarker lite model, revision 1, and runs it on the CPU in
+`LIVE_STREAM` mode. SHA-256: `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`
+(5.8 MB). Recorded video keeps the heavy model. An earlier jump measurement found that lite loses the
+legs during jumps; slow form exercises were therefore re-checked with all three models.
+
+All three models processed the same clips on the kit (AMD 4700S desktop CPU, MediaPipe Python 1.2.3,
+`VIDEO` mode, longest side 720 px, one frame in flight). Every frame produced a pose with every model.
+Counts are complete / partial / unclear from `:core:formBatch`.
+
+| Clip | Hand count | Lite | Full | Heavy |
+|---|---:|---:|---:|---:|
+| Pexels 5034571 woman, squat, 483 frames | 9 | 8 / 0 / 2 | 8 / 0 / 2 | 8 / 0 / 2 |
+| Stock man, squat, first 10 s (the replay clip), 300 frames | 4 | 5 / 0 / 1 | not run | 5 / 0 / 1 |
+| Interval Push-ups (Wikimedia Commons), 3–49 s, every second frame, 691 frames | 6 | 6 / 0 / 0 | 6 / 0 / 0 | 5 / 0 / 3 |
+
+| Model | Size | Mean ms per frame | p95 ms |
+|---|---:|---:|---:|
+| Lite | 5.8 MB | 31.8–35.9 | 51–56 |
+| Full | 9.4 MB | 46.2–47.5 | 65–66 |
+| Heavy | 30.7 MB | 113–117 | 135–136 |
+
+For these slow movements, lite counted as well as full and heavy and did better than heavy on the
+push-up clip, at about a third of heavy's cost and two thirds of full's. Full adds 3.6 MB without a
+measured gain. Lite therefore stays live; it leaves the most headroom on a mid-range phone. The GPU
+delegate was not added because it could not be measured on any device available here. Jumping jacks
+remain the one live entry where the earlier leg-loss finding may matter; they are unvalidated.
+
+These are desktop CPU figures. They are not Galaxy A54 performance evidence.
+
+### Emulator check of the live streaming path
+
+On the AVD `jumpscan-worker-a` (API 34, x86_64, SwiftShader, emulated back camera), held under
+`flock /work/jumpscan-emu.lock`, the debug build was installed and run in English and Bulgarian.
+The debug-only "Live replay" button feeds `/work/jumpscan-data/form/replay.mp4` (the stock squat clip
+above, 360x648, 10 s) through `CameraFormFeed.submit`, the same `LIVE_STREAM` landmarker, the framing
+check and `FormStream` used for the camera, at wall-clock pace with timestamps from
+`SystemClock.elapsedRealtime()`. Frames that arrive while the landmarker is busy are dropped, as with
+the camera.
+
+The first run failed with "Camera or pose tracking unavailable": `MediaMetadataRetriever` returned
+RGB_565 frames, which MediaPipe rejects. Replay frames are now converted to ARGB_8888, and replay and
+landmarker errors are logged under the `JumpScanForm` tag.
+
+| Run | Callbacks in 10 s | Callbacks/s | Mean / p95 submit-to-result ms | Complete / partial / unclear |
+|---|---:|---:|---:|---:|
+| English | 137 | 13.7 | 18.4 / 30 | 4 / 0 / 3 |
+| Bulgarian | 138 | 13.7 | 18.6 / 30 | 4 / 0 / 3 |
+
+The emulator pace is limited by seeking and decoding each video frame, not by inference (about 18 ms).
+At about 14 tracked frames per second the live count matched the hand count of 4. The recorded 30 fps
+analysis of the same clip gave 5 / 0 / 1. The difference comes from the lower live frame rate, which
+leaves more boundary and gap repetitions unclear. It is not a difference between engines; identical
+frames give identical results (core tests).
+
+Screenshots in `logs/formv2/` (outside git): the exercise picker over the whole catalogue, the live screen
+with the virtual camera (no person, so the framing prompt asks the user to step back and Start stays
+disabled), the replay with the skeleton overlay, rep counter and cue banner, and the set summary, in both
+languages. The emulator has an English offline voice and no Bulgarian voice. The English screen reports
+spoken counts and cues; the Bulgarian screen says that only counts are spoken and cues stay on screen.
+Audio was not captured. Upload was not exercised in this run.
+
+### Still needs a physical Galaxy A54
+
+Real-camera tracking for each exercise and recommended view; the front camera's orientation and
+mirroring; daylight and low-light tracking; skeleton alignment over the image; frame rate, end-to-end
+latency, frame drops and heat across repeated sets; Bulgarian speech with and without an installed
+offline Bulgarian voice; and the live upload against a real account. Count differences between live
+and recorded input must be reported separately from the engine's identical-frame parity.

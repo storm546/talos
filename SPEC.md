@@ -358,34 +358,54 @@ published, general ones named below, apart from the owner's own weight-trend mod
 
 ### 6.1 Form tracker (on-device analysis; server stores numbers only)
 
-Exercises: `squat` (bodyweight or loaded, two legs) and `single_leg_squat` (left or right). The athlete
-films a set; the phone runs the same pose model as for jumps and the core computes, per repetition: depth
-(peak knee flexion, side view in the image plane, front view from world landmarks as in section 2),
-frontal-plane knee angle (FPPA) at the deepest point in front view, left/right asymmetry of peak flexion
-(two-leg squat), descent and ascent time, and whether the hips went below the knees (side view). A
-repetition is one down-and-up cycle of the hip height with a minimum depth; partial and unclear repetitions
-are counted separately and never silently. Set summary: repetition count, medians, worst repetition, and
-warnings (`low_visibility`, `unclear_reps`, `single_leg_view`). Upload: `POST /api/form` with exercise,
-side, view, fps, per-repetition numbers and the summary (no video, no landmarks); history and charts like
-jumps. Validation: synthetic geometry tests, repetition counting on real clips with hand counts, and the
-same honesty rules as `docs/validacia.md`.
+The form tracker offers live coaching and recorded-video analysis for all 20 entries in
+`core/src/main/resources/form_exercises.json`. The catalogue defines the English/Bulgarian names, mode,
+anatomical side selection, recommended view, joint or position signal, thresholds, checks, and bilingual
+cues. Live mode uses the MediaPipe lite model in `LIVE_STREAM` on the CPU; recorded video continues to use
+the heavy model in `VIDEO`. Both use `FormStream`. Given identical timestamped landmarks, aspect ratio,
+and view policy, final metrics agree; different models or frame cadences can produce different inputs and
+results. The live screen overlays a skeleton, checks framing and view before starting, displays a rep or
+hold counter and technique cues, and speaks with an offline Android voice when available. If the app
+language has no offline voice, an installed fallback speaks counts only; with no offline voice, feedback
+is visual. Live sets end at 60 seconds of tracked input or when stopped. No video, audio or landmarks are
+uploaded. Recorded results retain the existing pending-upload queue; live results use the same authenticated,
+idempotent endpoint and can be retried from the result screen, but are not queued offline.
+
+The stream tracks rest-to-extremum-to-rest cycles with a minimum excursion and separate start/finish bands.
+It reports complete, partial, and unclear candidates separately. Repetition timing fields retain their
+legacy names; for movements that start low, descent/ascent fields refer to the first/second phase rather
+than physical vertical direction. Available checks are sampled at the signal extremum. Holds count observed
+time in the exercise posture and separately time inside the technique band; missing observations add no
+time. The two squat entries use the original whole-set calibration and measurement rules: live counts are
+provisional until `finish`. Depth is peak knee flexion (side: image plane; front: world), FPPA is measured
+at deepest flexion (front only), asymmetry uses both legs, and hips below knees is available from the side.
+
+All new exercises are experimental and unvalidated for real-world accuracy; see `core/VALIDATION.md` for
+synthetic coverage and real-clip comparisons. The two squat entries retain prior evidence and limitations.
+Burpees are not included: the fast transition between upright and floor phases often hides joints, and
+push-up/jump variants cannot reliably be distinguished by the single cycle signal. No check measures load,
+contact with equipment, or medical outcomes. The checks are technique feedback only.
 
 Form JSON (produced by `core`, stored by `server` at `POST /api/form`, charted by app and dashboard;
-field list from the core contract, `logs/form-fields.md`): top level `exercise` ("squat"|"single_leg_squat"),
-`side` ("L"|"R" required for single-leg squat, null for squat), `view` ("front"|"side"), `fps` (>0 and ≤480),
+field list from the core contract): top level `exercise` (any catalogue ID), `side` ("L"|"R" for a sided
+exercise, null otherwise), `view` ("front"|"side"), `fps` (>0 and ≤480),
 `quality` (0–1), `repetitions[]` (up to 100 candidate cycles), `summary`, and
-`warnings[]` (any of `low_visibility`, `unclear_reps`, `single_leg_view`). Each `repetitions[]` entry:
+`warnings[]` (any of `low_visibility`, `unclear_reps`, `single_leg_view`). Optional `mode` ("reps"|"hold")
+must match the catalogue; optional `source` is "live" or "video". Older payloads may omit both. Each entry:
 `index` (1-based), `status` ("complete"|"partial"|"unclear"), `reasons[]` (empty for complete, only
 `below_min_depth` for partial, up to five of `incomplete_start`, `incomplete_end`, `tracking_gap`, `too_fast`,
 `degenerate_geometry` for unclear), `start_ms`, `bottom_ms` (int|null), `end_ms`, `depth` (0–180°|null),
 `knee_flexion_peak_l/_r` (0–180°|null), `fppa_l/_r` (−90–90°|null, front only),
 `flexion_asymmetry_pct` (0–100|null, both legs only), `descent_time_ms`/`ascent_time_ms` (int|null),
-`hip_below_knee` (bool|null, side only). Unclear candidates have null measurements and `bottom_ms`.
+`hip_below_knee` (bool|null, side only). Optional `checks` maps catalogue check keys to finite numbers or
+null. Unclear candidates have null measurements and `bottom_ms`; they do not report checks.
 `summary` holds `repetition_count`, `partial_count`, `unclear_count`, and `median_` fields for `depth`,
 `knee_flexion_peak_l`/`knee_flexion_peak_r`, `fppa_l`/`fppa_r`, `flexion_asymmetry_pct`,
 `descent_time_ms` and `ascent_time_ms`, calculated on complete repetitions only (null if unavailable).
 It also has `hip_below_knee_count` (side view only) and `worst_repetition` (index of the shallowest
-complete repetition; earliest on ties; null without complete repetitions). This is not a composite score.
+complete repetition; earliest on ties; null without complete repetitions). The legacy squat-specific
+measurements remain null for other exercises. Holds have empty `repetitions`, zero rep counts, and summary
+`hold_ms` and `in_band_ms` integers with `0 ≤ in_band_ms ≤ hold_ms`. This is not a composite score.
 
 - `POST /api/form` is for athletes with recorded consent. It accepts optional `client_id` as in 5.6 and
   returns `{id, created_at}` with 201 on insert or 200 on retry. It audits `form_logged` and publishes a
@@ -394,9 +414,14 @@ complete repetition; earliest on ties; null without complete repetitions). This 
   and `client_id`, newest first (ID descending on ties). Athletes see only their own data; coaches see
   their club's athletes (cross-club targets return 404); admins see all. Staff can omit `athlete_id` to
   list all sets in scope. The assistant's `list_form_sets` tool uses the same scope.
+- `GET /api/form/exercises` is read-only for signed-in users. It returns the catalogue entries' `id`,
+  `name_bg`, `name_en`, `mode`, `sided`, `view`, and `checks` (`key`, `label_bg`, `label_en`, `unit`). Server
+  uploads and discovery use `core/src/main/resources/form_exercises.json` relative to the application root.
+  Containers must package that file or mount it and set `JUMPSCAN_FORM_CATALOGUE` to its path. Without it,
+  the server keeps legacy squat uploads working but returns 503 for discovery and extended uploads.
 - Athlete JSON export includes `form_sets`; `DELETE /api/me/data` removes them. Scoped staff export
   `GET /api/athletes/{id}/form.csv` lists all sets oldest first, with summary columns and warnings and
-  repetitions as JSON cells.
+  repetitions (including checks) as JSON cells, followed by `mode`, `source`, `hold_ms`, and `in_band_ms`.
 
 ### 6.2 Training (server, dashboard, app)
 

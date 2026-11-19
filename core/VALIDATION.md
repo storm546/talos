@@ -519,3 +519,39 @@ The batch accepts plain/gzipped app-format landmark CSVs and optional `-Pexercis
 `-Pside=L` or `R`, and `-Pview=FRONT` or `SIDE`. It writes one JSON record per clip with full metrics
 or an explicit refusal. Test XML, build logs, both final JSON outputs, initial failed outputs,
 inventory and visual count notes are retained under `/root/jumpscan/logs/form/`.
+
+## 2026-11-19: Catalogue and live form stream
+
+The catalogue contains 20 exercises. Synthetic tracks exercise every new cycle with one complete,
+one partial and one visibility-interrupted candidate, and every hold with 2,450 ms in position,
+including 1,000 ms in band. The tests check cue and cycle events, per-repetition keys, gap handling,
+batch/stream equality, and exact final JSON parity for both squat modes. The legacy squat calculation
+still uses whole-set smoothing, visibility, frame cadence, and leg selection. Live previews re-evaluate
+the prefix at 400 ms intervals and may revise their counts; the final summary is authoritative.
+
+On `android-build-kit`, `cmp` found byte-identical JSON before and after for the three archived
+public squat tracks and for all three private landmark tracks scored as squat, left single-leg squat,
+and right single-leg squat. The private clips are jump fixtures, not single-leg squat accuracy references.
+The stock and public squat hand-versus-engine complete counts remain 4/5, 9/8, and 3/3, as documented
+above. The optional private jump tests also retain the reviewed 280/360/360 ms results. No private
+landmarks are committed.
+
+The following independent clips were hand-counted from ordered contact sheets before scoring.
+MediaPipe heavy produced the landmark tracks on the kit; the numbers are counts of fully bounded
+cycles, not a validation of the check angles or an accuracy estimate across athletes.
+
+| Exercise | Public source and segment | Hand | Complete | Partial | Unclear | Limitation |
+|---|---|---:|---:|---:|---:|---|
+| `push_up` | Taco Fleur, Wikimedia Commons, [Interval Push-ups](https://commons.wikimedia.org/wiki/File:Interval_Push-ups.webm), CC BY-SA 4.0, 3–49 s | 6 | 5 | 0 | 3 | Profile; one cycle lost during intermittent tracking. |
+| `overhead_press` | FitnessScape, Wikimedia Commons, [Shoulder press](https://commons.wikimedia.org/wiki/File:Shoulder_press_-_exercise_demonstration_video.webm), CC BY 3.0, full 6.9 s | 1 | 0 | 0 | 5 | Rear three-quarter view and legs cropped; starts and ends mid-cycle. |
+| `pull_up` | FitnessScape, Wikimedia Commons, [Pull-ups](https://commons.wikimedia.org/wiki/File:Pull-ups_-_exercise_demonstration_video.webm), CC BY 3.0, full 6 s | 1 | 0 | 0 | 6 | Rear three-quarter view and feet cropped; another cycle ends at the cut. |
+| `biceps_curl` | CDC, Wikimedia Commons, [Bicep Curls](https://commons.wikimedia.org/wiki/File:Muscle_Strengthening_at_Home_-_Bicep_Curls.webm), US public domain, 46.5–61 s | 2 | 0 | 0 | 5 | Frontal, cropped at the legs, with a third curl cut off. |
+
+All 18 new exercises remain unvalidated for general real-world accuracy. The four results above do
+not justify tightening thresholds to fit individual clips. Burpees are omitted because floor and upright
+phases need separate tracking and occlusion remains unresolved. The kit directory
+`/work/jumpscan-data/form/` contains the clips, tracks, annotations and JSON outputs. REHAB24-6
+(Zenodo 13305826) has labelled repetitions, but the data is CC BY-NC 4.0 and several movements use
+distinct protocols; it was not used to validate this product. Countix/RepCount include YouTube-sourced
+clips without a verified reusable licence per clip. No usable Kaggle credentials were found in the
+kit builder environment, and no token was printed or copied.

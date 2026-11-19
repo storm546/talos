@@ -7,8 +7,7 @@ import java.util.zip.GZIPInputStream
 fun runFormBatch(inDir: File, outFile: File, exercise: String = "squat", side: String? = null,
     view: JumpAnalyzer.View = JumpAnalyzer.View.AUTO): String {
     require(inDir.isDirectory) { "input directory not found: $inDir" }
-    require(exercise in listOf("squat", "single_leg_squat")) { "invalid exercise" }
-    require(if (exercise == "squat") side == null else side in listOf("L", "R")) { "invalid exercise side" }
+    FormExercises[exercise].validateSide(side)
     fun quote(s: String) = "\"" + s.map { c -> when (c) {
         '\\' -> "\\\\"
         '"' -> "\\\""
