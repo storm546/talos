@@ -487,6 +487,12 @@ def current_user(
     return user
 
 
+@contextmanager
+def authorized_write(db, request):
+    with write_transaction(db, request.app.state.events) as emit:
+        yield current_user(request.headers.get("authorization"), db), emit
+
+
 def require_role(user, *roles):
     if user["role"] not in roles:
         raise HTTPException(403, "Not permitted for this role")
@@ -941,8 +947,12 @@ def create_app(db_path=None):
                                        ("knee_ankle_ratio", "knee_flexion_peak_mean", "flexion_asymmetry_pct")}})
         return result
 
-    @app.post("/api/jumps", status_code=201)
-    def add_jump(body: Jump, user=Depends(current_user), db=Depends(get_db)):
+    @app.post("/api/jumps", status_code=201, dependencies=[Depends(current_user)])
+    def add_jump(body: Jump, request: Request, db=Depends(get_db)):
+        with authorized_write(db, request) as (user, emit):
+            return record_jump(body, user, db, emit)
+
+    def record_jump(body, user, db, emit):
         require_role(user, "athlete")
         if not user["consent_recorded"]:
             raise HTTPException(403, "Consent must be recorded by a coach or admin before uploading jumps")
@@ -962,25 +972,12 @@ def create_app(db_path=None):
         created_at = now_iso()
         metrics = {key: value for key, value in body.model_dump().items()
                    if key not in ("session_id", "client_id")}
-        try:
-            cursor = db.execute(
-                "INSERT INTO jumps(athlete_id, created_at, metrics, session_id, client_id) VALUES (?, ?, ?, ?, ?)",
-                (user["id"], created_at, json.dumps(metrics), body.session_id, body.client_id))
-        except sqlite3.IntegrityError:
-            db.rollback()
-            previous = db.execute(
-                "SELECT id, created_at FROM jumps WHERE athlete_id = ? AND client_id = ?",
-                (user["id"], body.client_id)).fetchone()
-            if previous is None:
-                raise
-            return JSONResponse(status_code=200,
-                                content={"id": previous["id"], "created_at": previous["created_at"]})
+        cursor = db.execute(
+            "INSERT INTO jumps(athlete_id, created_at, metrics, session_id, client_id) VALUES (?, ?, ?, ?, ?)",
+            (user["id"], created_at, json.dumps(metrics), body.session_id, body.client_id))
         jump_id = cursor.lastrowid
-        athlete = db.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
-        db.commit()
-        app.state.events.publish(athlete_viewers(db, athlete),
-                                 {"type": "jump", "id": jump_id, "athlete_id": user["id"],
-                                  "club_id": user["club_id"], "at": created_at})
+        emit(athlete_viewers(db, user), {"type": "jump", "id": jump_id, "athlete_id": user["id"],
+                                       "club_id": user["club_id"], "at": created_at})
         return JSONResponse(status_code=201, content={"id": jump_id, "created_at": created_at})
 
     @app.get("/api/jumps")
@@ -1308,9 +1305,9 @@ def create_app(db_path=None):
             result.append(session)
         return result
 
-    @app.post("/api/sessions", status_code=201)
-    def add_session(body: SessionBody, user=Depends(current_user), db=Depends(get_db)):
-        with write_transaction(db, app.state.events) as emit:
+    @app.post("/api/sessions", status_code=201, dependencies=[Depends(current_user)])
+    def add_session(body: SessionBody, request: Request, db=Depends(get_db)):
+        with authorized_write(db, request) as (user, emit):
             return create_session(body, user, db, emit)
 
     def create_session(body: SessionBody, user, db, emit):
@@ -1330,9 +1327,9 @@ def create_app(db_path=None):
              {"type": "session", "id": session_id, "club_id": user["club_id"], "at": now_iso()})
         return {**dict(session), "jump_count": 0}
 
-    @app.patch("/api/sessions/{session_id}")
-    def edit_session(session_id: int, body: SessionBody, user=Depends(current_user), db=Depends(get_db)):
-        with write_transaction(db, app.state.events) as emit:
+    @app.patch("/api/sessions/{session_id}", dependencies=[Depends(current_user)])
+    def edit_session(session_id: int, body: SessionBody, request: Request, db=Depends(get_db)):
+        with authorized_write(db, request) as (user, emit):
             return update_session(session_id, body, user, db, emit)
 
     def update_session(session_id: int, body: SessionBody, user, db, emit):
@@ -1427,9 +1424,9 @@ def create_app(db_path=None):
         return Response(body + "\r\n", media_type="text/calendar",
                         headers={"Content-Disposition": 'attachment; filename="jumpscan.ics"'})
 
-    @app.put("/api/me/checkins/{day}", status_code=201)
-    def put_checkin(day: str, body: Checkin, user=Depends(current_user), db=Depends(get_db)):
-        with write_transaction(db, app.state.events) as emit:
+    @app.put("/api/me/checkins/{day}", status_code=201, dependencies=[Depends(current_user)])
+    def put_checkin(day: str, body: Checkin, request: Request, db=Depends(get_db)):
+        with authorized_write(db, request) as (user, emit):
             return save_checkin(day, body, user, db, emit)
 
     def save_checkin(day: str, body: Checkin, user, db, emit):
@@ -1538,9 +1535,9 @@ def create_app(db_path=None):
                            "below_usual": below})
         return result
 
-    @app.post("/api/comments", status_code=201)
-    def add_comment(body: CommentBody, user=Depends(current_user), db=Depends(get_db)):
-        with write_transaction(db, app.state.events) as emit:
+    @app.post("/api/comments", status_code=201, dependencies=[Depends(current_user)])
+    def add_comment(body: CommentBody, request: Request, db=Depends(get_db)):
+        with authorized_write(db, request) as (user, emit):
             return write_comment(body, user, db, emit)
 
     def write_comment(body: CommentBody, user, db, emit):

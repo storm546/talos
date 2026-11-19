@@ -13,7 +13,7 @@ from pathlib import Path
 import sqlite3
 from typing import Annotated, Literal
 
-from fastapi import Depends, HTTPException, Query
+from fastapi import Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -440,9 +440,9 @@ def install(app, h):
                           (club_id, club_id)).fetchall()
         return [plan_json(db, row) for row in rows if plan_visible(db, user, row)]
 
-    @app.post("/api/plans", status_code=201)
-    def add_plan(body: PlanBody, user=Depends(current_user), db=Depends(get_db)):
-        with h.write_transaction(db, app.state.events) as emit:
+    @app.post("/api/plans", status_code=201, dependencies=[Depends(current_user)])
+    def add_plan(body: PlanBody, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
             return create_plan(body, user, db, emit)
 
     def create_plan(body: PlanBody, user, db, emit):
@@ -463,9 +463,9 @@ def install(app, h):
     def get_plan(plan_id: int, user=Depends(current_user), db=Depends(get_db)):
         return plan_json(db, scoped_plan(db, user, plan_id))
 
-    @app.put("/api/plans/{plan_id}")
-    def replace_plan(plan_id: int, body: PlanBody, user=Depends(current_user), db=Depends(get_db)):
-        with h.write_transaction(db, app.state.events) as emit:
+    @app.put("/api/plans/{plan_id}", dependencies=[Depends(current_user)])
+    def replace_plan(plan_id: int, body: PlanBody, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
             return edit_plan(plan_id, body, user, db, emit)
 
     def edit_plan(plan_id: int, body: PlanBody, user, db, emit):
@@ -498,9 +498,9 @@ def install(app, h):
         return {key: row[key] for key in ("id", "athlete_id", "day", "exercise_id", "set_no", "reps", "load_kg",
                                           "rpe", "plan_id", "client_id", "created_at")}
 
-    @app.post("/api/set-logs", status_code=201)
-    def add_set_log(body: SetLog, user=Depends(current_user), db=Depends(get_db)):
-        with h.write_transaction(db, app.state.events) as emit:
+    @app.post("/api/set-logs", status_code=201, dependencies=[Depends(current_user)])
+    def add_set_log(body: SetLog, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
             return log_set(body, user, db, emit)
 
     def log_set(body: SetLog, user, db, emit):
@@ -672,9 +672,9 @@ def install(app, h):
                            **food_macros(per100, r["grams"])})
         return result
 
-    @app.post("/api/food-logs", status_code=201)
-    def add_food_log(body: FoodLog, user=Depends(current_user), db=Depends(get_db)):
-        with h.write_transaction(db, app.state.events) as emit:
+    @app.post("/api/food-logs", status_code=201, dependencies=[Depends(current_user)])
+    def add_food_log(body: FoodLog, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
             return log_food(body, user, db, emit)
 
     def log_food(body: FoodLog, user, db, emit):
@@ -723,9 +723,9 @@ def install(app, h):
 
     # --- weights and the trend ---
 
-    @app.put("/api/me/weights/{day}", status_code=201)
-    def put_weight(day: str, body: Weight, user=Depends(current_user), db=Depends(get_db)):
-        with h.write_transaction(db, app.state.events) as emit:
+    @app.put("/api/me/weights/{day}", status_code=201, dependencies=[Depends(current_user)])
+    def put_weight(day: str, body: Weight, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
             return save_weight(day, body, user, db, emit)
 
     def save_weight(day: str, body: Weight, user, db, emit):
@@ -818,9 +818,9 @@ def install(app, h):
     def get_target(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
         return target_json(db, h.athlete_access(db, user, athlete_id))
 
-    @app.put("/api/athletes/{athlete_id}/nutrition/target")
-    def put_target(athlete_id: int, body: Target, user=Depends(current_user), db=Depends(get_db)):
-        with h.write_transaction(db, app.state.events) as emit:
+    @app.put("/api/athletes/{athlete_id}/nutrition/target", dependencies=[Depends(current_user)])
+    def put_target(athlete_id: int, body: Target, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
             return save_target(athlete_id, body, user, db, emit)
 
     def save_target(athlete_id: int, body: Target, user, db, emit):
@@ -952,9 +952,9 @@ def install(app, h):
     def get_program(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
         return program_view(db, h.athlete_access(db, user, athlete_id))
 
-    @app.put("/api/athletes/{athlete_id}/nutrition/program")
-    def set_program(athlete_id: int, body: Program, user=Depends(current_user), db=Depends(get_db)):
-        with h.write_transaction(db, app.state.events) as emit:
+    @app.put("/api/athletes/{athlete_id}/nutrition/program", dependencies=[Depends(current_user)])
+    def set_program(athlete_id: int, body: Program, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
             return save_program(athlete_id, body, user, db, emit)
 
     def save_program(athlete_id: int, body: Program, user, db, emit, *, require_applicable=False):
@@ -1007,26 +1007,26 @@ def install(app, h):
         publish(db, athlete, "coaching", athlete_id, now, emit)
         return program_view(db, athlete)
 
-    @app.put("/api/me/nutrition/days/{day}/complete")
-    def mark_day_complete(day: str, user=Depends(current_user), db=Depends(get_db)):
-        require_role(user, "athlete")
-        need_consent(user, "a complete diary day")
-        try:
-            day = iso_day(day)
-        except ValueError:
-            raise HTTPException(422, "day must be YYYY-MM-DD") from None
-        check_log_day(day)
-        now = h.now_iso()
-        fingerprint = diary_fingerprint(db, user["id"], day)
-        db.execute("INSERT INTO nutrition_day_complete(athlete_id, day, diary_fingerprint, confirmed_at) "
-                   "VALUES (?, ?, ?, ?) ON CONFLICT(athlete_id, day) DO UPDATE SET "
-                   "diary_fingerprint = excluded.diary_fingerprint, confirmed_at = excluded.confirmed_at",
-                   (user["id"], day, fingerprint, now))
-        audit(db, user["id"], "nutrition_day_completed", day)
-        db.commit()
-        publish_athlete(db, user, "nutrition_day", user["id"], now)
-        return {"athlete_id": user["id"], "day": day, "status": "complete",
-                "calories": round(day_calories(db, user["id"], day), 1)}
+    @app.put("/api/me/nutrition/days/{day}/complete", dependencies=[Depends(current_user)])
+    def mark_day_complete(day: str, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
+            require_role(user, "athlete")
+            need_consent(user, "a complete diary day")
+            try:
+                day = iso_day(day)
+            except ValueError:
+                raise HTTPException(422, "day must be YYYY-MM-DD") from None
+            check_log_day(day)
+            now = h.now_iso()
+            fingerprint = diary_fingerprint(db, user["id"], day)
+            db.execute("INSERT INTO nutrition_day_complete(athlete_id, day, diary_fingerprint, confirmed_at) "
+                       "VALUES (?, ?, ?, ?) ON CONFLICT(athlete_id, day) DO UPDATE SET "
+                       "diary_fingerprint = excluded.diary_fingerprint, confirmed_at = excluded.confirmed_at",
+                       (user["id"], day, fingerprint, now))
+            audit(db, user["id"], "nutrition_day_completed", day)
+            publish(db, user, "nutrition_day", user["id"], now, emit)
+            return {"athlete_id": user["id"], "day": day, "status": "complete",
+                    "calories": round(day_calories(db, user["id"], day), 1)}
 
     @app.delete("/api/me/nutrition/days/{day}/complete", status_code=204)
     def unmark_day_complete(day: str, user=Depends(current_user), db=Depends(get_db)):
