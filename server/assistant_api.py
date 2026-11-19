@@ -244,13 +244,15 @@ def build_tools(h, operations):
     write("log_weight", "save_weight", tn.Weight, "Propose saving your weight (athlete only).",
           "Log {kg:g} kg on {day}.", day=(day, ...))
     write("save_checkin", "save_checkin", h.Checkin, "Propose saving your check-in (athlete only).",
-          "Save check-in for {day}: sleep {sleep}, fatigue {fatigue}, soreness {soreness}, stress {stress}, mood {mood}.",
+          "Save check-in for {day}: sleep {sleep}, fatigue {fatigue}, soreness {soreness}, stress {stress}, mood {mood}; "
+          "training minutes: {training_minutes}, RPE: {rpe}.",
           day=(day, ...))
     write("set_nutrition_target", "save_target", tn.Target, "Propose setting the requested daily nutrition target.",
           "Set athlete #{athlete_id}'s daily target to {kcal} kcal (grams: protein {protein_g}, carbs {carbs_g}, fat {fat_g}).",
           **target)
     write("set_nutrition_program", "save_program", tn.Program, "Propose changing the requested nutrition goal and rate.",
-          "Set athlete #{athlete_id}'s nutrition goal to {goal}, at {rate_kg_week:g} kg/week.", **target)
+          "Set athlete #{athlete_id}'s nutrition goal to {goal}, at {rate_kg_week:g} kg/week "
+          "(protein {protein_g:g} g, fat {fat_g:g} g).", **target)
     write("create_session", "create_session", h.SessionBody, "Propose creating a jump-test session (staff only).",
           "Create the session ‘{title}’ starting {starts_at}.")
     write("edit_session", "update_session", h.SessionBody, "Propose editing a scoped jump-test session (staff only).",
@@ -260,8 +262,28 @@ def build_tools(h, operations):
     write("edit_plan", "edit_plan", tn.PlanBody, "Propose replacing a scoped training plan (staff only).",
           "Replace training plan #{plan_id} with ‘{title}’ starting {starts_on}.", plan_id=(record_id, ...))
     write("write_coach_note", "write_comment", h.CommentBody, "Propose adding a coach note (staff only).",
-          "Add a note for athlete #{athlete_id}: {body}")
+          "Add a note for athlete #{athlete_id} (jump ID: {jump_id}, session ID: {session_id}): {body}")
     return tools
+
+
+def describe_action(name, tool, args):
+    summary = tool.summary.format(**args)
+    if name in ("create_session", "edit_session"):
+        audience = "whole club" if args["group_id"] is None else f"group #{args['group_id']}"
+        summary += (f" Audience: {audience}; test: {args['test']}; trials: {args['trials']}; "
+                    f"cancelled: {args['cancelled']}; place: {args['place']!r}; notes: {args['notes']!r}.")
+    elif name in ("assign_plan", "edit_plan"):
+        audience = "whole club"
+        if args["athlete_id"] is not None:
+            audience = f"athlete #{args['athlete_id']}"
+        elif args["group_id"] is not None:
+            audience = f"group #{args['group_id']}"
+        items = "; ".join(
+            f"weekday {item['weekday'] + 1}: exercise #{item['exercise_id']}, {item['sets']} sets, "
+            f"{item['reps']}–{item['reps_max'] or item['reps']} reps, "
+            f"load kg: {item['load_kg']}, RPE: {item['rpe_target']}" for item in args["items"])
+        summary += f" Audience: {audience}; weeks: {args['weeks']}; notes: {args['notes']!r}; exercises: {items or 'none'}."
+    return summary
 
 
 def install(app, h, operations):
@@ -325,7 +347,7 @@ def install(app, h, operations):
             return {"status": error.status_code, "error": error.detail}
         if tool.body is None:
             return {"data": result}
-        action = {"tool": name, "args": args, "human_summary": tool.summary.format(**args)}
+        action = {"tool": name, "args": args, "human_summary": describe_action(name, tool, args)}
         actions.append(action)
         return {"pending_confirmation": action["human_summary"]}
 

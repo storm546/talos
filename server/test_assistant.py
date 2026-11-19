@@ -337,6 +337,21 @@ def test_staff_proposals_use_real_session_plan_and_comment_operations(api, auth,
         assert note["body"] not in str([row["detail"] for row in assistant_audit(db)])
 
 
+def test_dashboard_summary_discloses_cancellation_and_plan_recipient(api, auth, fake_model):
+    client, path = api
+    coach = auth("coach")
+    athlete = user_id(path, "athlete4")
+    session = {"title": "Assistant session", "test": "cmj", "starts_at": today() + "T12:00:00Z"}
+    session_id = client.post("/api/sessions", json=session, headers=coach).json()["id"]
+    plan = plan_body(client, coach, title="Assistant plan", athlete_id=athlete)
+    fake_model(calls(("edit_session", {**session, "session_id": session_id, "cancelled": True}),
+                     ("assign_plan", plan)), "Review changes.")
+    actions = chat(client, coach).json()["proposal"]["actions"]
+    assert "cancelled: True" in actions[0]["human_summary"]
+    assert f"athlete #{athlete}" in actions[1]["human_summary"]
+    assert f"exercise #{plan['items'][0]['exercise_id']}" in actions[1]["human_summary"]
+
+
 def test_program_guardrail_is_rechecked_at_confirmation(api, auth, fake_model):
     client, path = api
     athlete_id = user_id(path, "athlete4")
