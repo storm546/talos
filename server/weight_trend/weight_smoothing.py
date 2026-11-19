@@ -21,16 +21,19 @@ def _at(values, index):
     return values[index]
 
 
-def smooth_state_to_horizon(history, start, end):
+def smooth_state_to_horizon(history, start, end, gains=None):
+    if gains is None:
+        gains = {}
     state = list(_at(history[0x13], end))
     for k in range(end - 1, start - 1, -1):
-        transition = _at(history[0x1f], k + 1)
-        covariance = _at(history[0x0f], k)
-        transposed = [transition[j] for j in (0, 3, 6, 1, 4, 7, 2, 5, 8)]
-        gain = matrix_product(matrix_product(covariance, transposed),
-                              inverse(_at(history[0x17], k + 1)))
+        if k not in gains:
+            transition = _at(history[0x1f], k + 1)
+            covariance = _at(history[0x0f], k)
+            transposed = [transition[j] for j in (0, 3, 6, 1, 4, 7, 2, 5, 8)]
+            gains[k] = matrix_product(matrix_product(covariance, transposed),
+                                      inverse(_at(history[0x17], k + 1)))
         stored = _at(history[0x13], k)
         delta = difference(state, _at(history[0x1b], k + 1))
-        correction = matrix_vector(gain, delta)
+        correction = matrix_vector(gains[k], delta)
         state = [stored[j] + correction[j] for j in range(3)]
     return state

@@ -55,6 +55,7 @@ def horizon(dates, covariance, stored, membership, predicted_covariance,
                0x1b: predicted_state, 0x1f: transitions}
     selected_dates = [dates[index] for index in positions]
     result = []
+    gains = {}
     for index, date in enumerate(dates):
         pair = anchor_cluster_positions(positions, selected_dates, index, date)
         if pair is None:
@@ -65,11 +66,11 @@ def horizon(dates, covariance, stored, membership, predicted_covariance,
             first, second = positions[left], positions[right]
             factor = selected_blend_factor(first, second, date + HORIZON_MICROS,
                                            selected_dates[left], selected_dates[right])
-        base = _finite(smooth_state_to_horizon(history, index, first))
+        base = _finite(smooth_state_to_horizon(history, index, first, gains))
         if first == second or factor == 0.0:
             result.append(base)
             continue
-        target = _finite(smooth_state_to_horizon(history, index, second))
+        target = _finite(smooth_state_to_horizon(history, index, second, gains))
         delta = _finite(difference(target, base))
         products = _finite([value * factor for value in delta])
         result.append(_finite([base[j] + products[j] for j in range(3)]))

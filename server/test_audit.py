@@ -1,12 +1,15 @@
 """Regression tests for server audit findings."""
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 
 import pytest
 
-from server import main
+from server import coaching, main
 from server.test_server import METRICS, api, auth, template, user_id
+from server.test_training_nutrition import series
+from server.weight_trend import weight_smoothing, weight_trend_pipeline
 
 
 @pytest.mark.parametrize("kind", ["jump", "checkin", "food", "weight", "set", "complete"])
@@ -99,5 +102,42 @@ def test_summary_reads_only_the_first_and_last_three_jumps(api, auth, monkeypatc
     assert response.status_code == 200, response.text
     assert response.json()["jump_count"] == 11
     assert fps_decoded == [31, 32, 33, 39, 40, 41]
+
+
+def test_weight_smoothing_reuses_gains_and_preserves_exact_values(monkeypatch):
+    def track(values):
+        nonlocal calls
+        calls += 1
+        return original(values)
+
+    calls = 0
+    original = weight_smoothing.inverse
+    monkeypatch.setattr(weight_smoothing, "inverse", track)
+    rows = weight_trend_pipeline(series(180, -0.02, (3, 11, 20)))
+    assert hashlib.sha256(json.dumps(rows).encode()).hexdigest() == (
+        "9baa9395bbdd487a782edfd2f98ff4e864c40c2a28bd25be22d76db71eab62d3")
+    assert calls <= 179
+
+
+def test_expenditure_reuses_exact_inputs_and_rechecks_after_edit(api, auth, monkeypatch):
+    client, path = api
+    athlete = user_id(path, "athlete6")
+    headers = auth("coach")
+    prefix = f"/api/athletes/{athlete}/nutrition"
+    computes = []
+    original = coaching.compute
+
+    def compute(*args):
+        computes.append(args)
+        return original(*args)
+
+    monkeypatch.setattr(coaching, "compute", compute)
+    for suffix in ("expenditure", "program", "expenditure"):
+        response = client.get(f"{prefix}/{suffix}", headers=headers)
+        assert response.status_code == 200, response.text
+    with main.database(path) as db:
+        db.execute("UPDATE weights SET kg = kg + 0.25 WHERE athlete_id = ?", (athlete,))
+    assert client.get(f"{prefix}/expenditure", headers=headers).status_code == 200
+    assert len(computes) == 2
 
 

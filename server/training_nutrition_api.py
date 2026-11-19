@@ -6,8 +6,10 @@ is the main module (its auth, scope, audit and event helpers are reused, never c
 
 import csv
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 import hashlib
 import io
+from itertools import groupby
 import json
 from pathlib import Path
 import sqlite3
@@ -886,10 +888,13 @@ def install(app, h):
 
     def diary_fingerprint(db, athlete_id, day):
         """Stable hash of a day's diary, so a day confirmed complete is noticed when it is later edited."""
-        rows = [[r["id"], r["meal"], r["food_id"], r["grams"]] for r in db.execute(
+        return fingerprint_rows(db.execute(
             "SELECT id, meal, food_id, grams FROM food_logs WHERE athlete_id = ? AND day = ? ORDER BY id",
-            (athlete_id, day))]
-        return hashlib.blake2b(json.dumps(rows, separators=(",", ":")).encode("utf-8")).hexdigest()
+            (athlete_id, day)))
+
+    def fingerprint_rows(rows):
+        values = [[r["id"], r["meal"], r["food_id"], r["grams"]] for r in rows if r["id"] is not None]
+        return hashlib.blake2b(json.dumps(values, separators=(",", ":")).encode("utf-8")).hexdigest()
 
     def day_calories(db, athlete_id, day):
         return db.execute(
@@ -899,20 +904,35 @@ def install(app, h):
 
     def coaching_snaps(db, athlete_id):
         """Explicitly confirmed diary days: complete unless edited since confirmation (then not counted)."""
-        snaps = {}
-        for r in db.execute("SELECT day, diary_fingerprint FROM nutrition_day_complete WHERE athlete_id = ?",
-                            (athlete_id,)):
-            snaps[r["day"]] = {"status": "complete", "calories": day_calories(db, athlete_id, r["day"]),
-                               "changed": diary_fingerprint(db, athlete_id, r["day"]) != r["diary_fingerprint"]}
-        return snaps
+        rows = db.execute(
+            "SELECT complete.day, complete.diary_fingerprint, food_logs.id, food_logs.meal, food_logs.food_id, "
+            "food_logs.grams, SUM(food_logs.grams * foods.kcal / 100) OVER (PARTITION BY complete.day "
+            "ORDER BY food_logs.id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS calories "
+            "FROM nutrition_day_complete AS complete LEFT JOIN food_logs "
+            "ON food_logs.athlete_id = complete.athlete_id AND food_logs.day = complete.day "
+            "LEFT JOIN foods ON foods.id = food_logs.food_id WHERE complete.athlete_id = ? "
+            "ORDER BY complete.day, food_logs.id", (athlete_id,))
+        for day, group in groupby(rows, key=lambda row: row["day"]):
+            diary = list(group)
+            yield day, diary[0]["calories"] or 0.0, fingerprint_rows(diary) != diary[0]["diary_fingerprint"]
 
     def program_row(db, athlete_id):
         return db.execute("SELECT * FROM coaching_programs WHERE athlete_id = ?", (athlete_id,)).fetchone()
 
     def expenditure_series(db, athlete, program):
-        weights = {day: kg for day, kg in weight_series(db, athlete["id"])[0]}
-        return co.compute(program["effective_date"], program["seed_kcal"], program["mode"],
-                          coaching_snaps(db, athlete["id"]), weights, utc_today().isoformat())
+        athlete_id = athlete["id"]
+        weights = tuple(tuple(row) for row in db.execute(
+            "SELECT day, kg FROM weights WHERE athlete_id = ? ORDER BY day", (athlete_id,)))
+        snaps = tuple(coaching_snaps(db, athlete_id))
+        compute = cached_expenditure if len(weights) + len(snaps) <= 4096 else cached_expenditure.__wrapped__
+        return compute(athlete_id, program["effective_date"], program["seed_kcal"], program["mode"],
+                       snaps, weights, utc_today().isoformat())
+
+    @lru_cache(maxsize=16)
+    def cached_expenditure(athlete_id, effective_date, seed_kcal, mode, snaps, weights, today):
+        return co.compute(effective_date, seed_kcal, mode,
+                          {day: {"status": "complete", "calories": calories, "changed": changed}
+                           for day, calories, changed in snaps}, dict(weights), today)
 
     def recommended(expenditure, program, today):
         return co.program_targets(expenditure, program["goal"], program["rate_kg_week"],
