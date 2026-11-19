@@ -15,13 +15,13 @@
     "signal": {"metric": "angle:hip:knee:ankle", "up": 158, "down": 115, "min_range": 35},
     "checks": [
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "max": 125, "cue_en": "Bend your knee a little more.", "cue_bg": "Сгънете коляното малко повече."},
-      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте гърдите по-изправени."}
+      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "split_squat", "name_en": "Split squat", "name_bg": "Клек в разкрач", "mode": "reps", "sided": true, "view": "side",
+  {"id": "split_squat", "name_en": "Split squat", "name_bg": "Статичен напад", "mode": "reps", "sided": true, "view": "side",
     "signal": {"metric": "angle:hip:knee:ankle", "up": 153, "down": 112, "min_range": 32},
     "checks": [
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "max": 125, "cue_en": "Bend your knee a little more.", "cue_bg": "Сгънете коляното малко повече."},
-      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте гърдите по-изправени."}
+      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
   {"id": "lateral_lunge", "name_en": "Lateral lunge", "name_bg": "Страничен напад", "mode": "reps", "sided": true, "view": "front",
     "signal": {"metric": "angle:hip:knee:ankle", "up": 160, "down": 123, "min_range": 30},
@@ -29,37 +29,37 @@
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "max": 125, "cue_en": "Bend your knee a little more.", "cue_bg": "Сгънете коляното малко повече."},
       {"key": "knee_alignment", "label_en": "Knee alignment", "label_bg": "Подравняване на коляното", "unit": "°", "metric": "fppa", "max": 12, "cue_en": "Guide your knee over your foot.", "cue_bg": "Насочете коляното над стъпалото."}
     ]},
-  {"id": "step_up", "name_en": "Step-up", "name_bg": "Качване на платформа", "mode": "reps", "sided": true, "view": "side",
+  {"id": "step_up", "name_en": "Step-up", "name_bg": "Качване на пейка", "mode": "reps", "sided": true, "view": "side",
     "signal": {"peak": "top", "metric": "angle:hip:knee:ankle", "up": 120, "down": 158, "min_range": 32},
     "checks": [
-      {"key": "hip_angle", "label_en": "Hip angle", "label_bg": "Ъгъл в таза", "unit": "°", "metric": "angle:shoulder:hip:knee", "min": 158, "cue_en": "Straighten through your hips.", "cue_bg": "Изправете таза."},
-      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте гърдите по-изправени."}
+      {"key": "hip_angle", "label_en": "Hip angle", "label_bg": "Ъгъл в тазобедрената става", "unit": "°", "metric": "angle:shoulder:hip:knee", "min": 158, "cue_en": "Straighten through your hips.", "cue_bg": "Изправете се докрай горе."},
+      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
   {"id": "glute_bridge", "name_en": "Glute bridge", "name_bg": "Глутеус мост", "mode": "reps", "sided": false, "view": "side",
     "signal": {"peak": "top", "metric": "angle:shoulder:hip:knee", "up": 140, "down": 164, "min_range": 23},
     "checks": [
-      {"key": "hip_angle", "label_en": "Hip angle", "label_bg": "Ъгъл в таза", "unit": "°", "metric": "angle:shoulder:hip:knee", "min": 158, "cue_en": "Straighten through your hips.", "cue_bg": "Изправете таза."},
+      {"key": "hip_angle", "label_en": "Hip angle", "label_bg": "Ъгъл в тазобедрената става", "unit": "°", "metric": "angle:shoulder:hip:knee", "min": 158, "cue_en": "Straighten through your hips.", "cue_bg": "Повдигнете таза докрай."},
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "min": 65, "max": 115, "cue_en": "Keep your feet planted under your knees.", "cue_bg": "Дръжте стъпалата под коленете."}
     ]},
   {"id": "romanian_deadlift", "name_en": "Romanian deadlift", "name_bg": "Румънска тяга", "mode": "reps", "sided": false, "view": "side",
     "signal": {"metric": "angle:shoulder:hip:knee", "up": 159, "down": 118, "min_range": 32},
     "checks": [
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "min": 137, "max": 175, "cue_en": "Keep a slight bend in your knees.", "cue_bg": "Дръжте коленете леко сгънати."},
-      {"key": "hip_angle", "label_en": "Hip angle", "label_bg": "Ъгъл в таза", "unit": "°", "metric": "angle:shoulder:hip:knee", "max": 120, "cue_en": "Send your hips farther back.", "cue_bg": "Изнесете таза още назад."}
+      {"key": "hip_angle", "label_en": "Hip angle", "label_bg": "Ъгъл в тазобедрената става", "unit": "°", "metric": "angle:shoulder:hip:knee", "max": 120, "cue_en": "Send your hips farther back.", "cue_bg": "Избутайте таза по-назад."}
     ]},
   {"id": "calf_raise", "name_en": "Calf raise", "name_bg": "Повдигане на пръсти", "mode": "reps", "sided": false, "view": "side",
     "signal": {"peak": "top", "metric": "height:toe:heel", "up": 0.035, "down": 0.1, "min_range": 0.055},
     "checks": [
       {"key": "heel_lift", "label_en": "Heel lift", "label_bg": "Повдигане на петата", "unit": "×", "metric": "height:toe:heel", "min": 0.1, "cue_en": "Lift your heels higher.", "cue_bg": "Повдигнете петите по-високо."},
-      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте гърдите по-изправени."}
+      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "wall_sit", "name_en": "Wall sit", "name_bg": "Седеж до стена", "mode": "hold", "sided": false, "view": "side",
+  {"id": "wall_sit", "name_en": "Wall sit", "name_bg": "Клек до стена", "mode": "hold", "sided": false, "view": "side",
     "signal": {"metric": "angle:hip:knee:ankle", "up": 116, "down": 110, "min_range": 0, "gate": {"metric": "angle:hip:knee:ankle", "min": 65, "max": 125}},
     "checks": [
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "max": 125, "cue_en": "Bend your knee a little more.", "cue_bg": "Сгънете коляното малко повече."},
-      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте гърдите по-изправени."}
+      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "push_up", "name_en": "Push-up", "name_bg": "Лицева опора", "mode": "reps", "sided": false, "view": "side",
+  {"id": "push_up", "name_en": "Push-up", "name_bg": "Лицеви опори", "mode": "reps", "sided": false, "view": "side",
     "signal": {"metric": "angle:shoulder:elbow:wrist", "up": 153, "down": 105, "min_range": 36, "gate": {"metric": "tilt:ankle:shoulder", "min": 45, "max": 90}},
     "checks": [
       {"key": "body_line", "label_en": "Body line", "label_bg": "Линия на тялото", "unit": "°", "metric": "angle:shoulder:hip:ankle", "min": 158, "cue_en": "Keep shoulders, hips and ankles in line.", "cue_bg": "Дръжте раменете, таза и глезените в една линия."},
@@ -68,20 +68,20 @@
   {"id": "overhead_press", "name_en": "Overhead press", "name_bg": "Раменна преса", "mode": "reps", "sided": false, "view": "front",
     "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 113, "down": 155, "min_range": 33, "gate": {"metric": "angle:hip:shoulder:elbow", "min": 55, "max": 180}},
     "checks": [
-      {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл на мишницата", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 148, "cue_en": "Reach higher with your arms.", "cue_bg": "Вдигнете ръцете по-високо."},
-      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте гърдите по-изправени."}
+      {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 148, "cue_en": "Reach higher with your arms.", "cue_bg": "Вдигнете ръцете по-високо."},
+      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "pull_up", "name_en": "Pull-up", "name_bg": "Набиране", "mode": "reps", "sided": false, "view": "front",
+  {"id": "pull_up", "name_en": "Pull-up", "name_bg": "Набирания", "mode": "reps", "sided": false, "view": "front",
     "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 153, "down": 100, "min_range": 40, "gate": {"metric": "height:shoulder:wrist", "min": 0.1, "max": 3}},
     "checks": [
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."},
-      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте гърдите по-изправени."}
+      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "dip", "name_en": "Dip", "name_bg": "Кофичка", "mode": "reps", "sided": false, "view": "side",
+  {"id": "dip", "name_en": "Dip", "name_bg": "Кофички", "mode": "reps", "sided": false, "view": "side",
     "signal": {"metric": "angle:shoulder:elbow:wrist", "up": 154, "down": 108, "min_range": 35, "gate": {"metric": "height:shoulder:wrist", "min": -3, "max": -0.05}},
     "checks": [
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."},
-      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте гърдите по-изправени."}
+      {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
   {"id": "bent_over_row", "name_en": "Bent-over row", "name_bg": "Гребане от наклон", "mode": "reps", "sided": false, "view": "side",
     "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 155, "down": 108, "min_range": 35, "gate": {"metric": "tilt:hip:shoulder", "min": 40, "max": 90}},
@@ -93,12 +93,12 @@
     "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 150, "down": 85, "min_range": 50},
     "checks": [
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."},
-      {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл на мишницата", "unit": "°", "metric": "angle:hip:shoulder:elbow", "max": 34, "cue_en": "Keep your upper arms near your sides.", "cue_bg": "Дръжте мишниците близо до тялото."}
+      {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "max": 34, "cue_en": "Keep your upper arms near your sides.", "cue_bg": "Дръжте мишниците близо до тялото."}
     ]},
-  {"id": "lateral_raise", "name_en": "Lateral raise", "name_bg": "Странично повдигане на ръце", "mode": "reps", "sided": false, "view": "front",
+  {"id": "lateral_raise", "name_en": "Lateral raise", "name_bg": "Разтваряне встрани", "mode": "reps", "sided": false, "view": "front",
     "signal": {"peak": "top", "metric": "angle:hip:shoulder:elbow", "up": 27, "down": 75, "min_range": 40},
     "checks": [
-      {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл на мишницата", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 70, "max": 115, "cue_en": "Raise to about shoulder height.", "cue_bg": "Вдигнете до нивото на раменете."},
+      {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 70, "max": 115, "cue_en": "Raise to about shoulder height.", "cue_bg": "Вдигнете до нивото на раменете."},
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "min": 137, "cue_en": "Keep only a slight bend in your elbows.", "cue_bg": "Дръжте лактите леко сгънати."}
     ]},
   {"id": "plank", "name_en": "Plank", "name_bg": "Планк", "mode": "hold", "sided": false, "view": "side",
@@ -113,10 +113,10 @@
       {"key": "body_line", "label_en": "Body line", "label_bg": "Линия на тялото", "unit": "°", "metric": "angle:shoulder:hip:ankle", "min": 158, "cue_en": "Keep shoulders, hips and ankles in line.", "cue_bg": "Дръжте раменете, таза и глезените в една линия."},
       {"key": "body_tilt", "label_en": "Body tilt", "label_bg": "Наклон на тялото", "unit": "°", "metric": "tilt:ankle:shoulder", "min": 55, "cue_en": "Keep your body close to horizontal.", "cue_bg": "Дръжте тялото почти хоризонтално."}
     ]},
-  {"id": "jumping_jack", "name_en": "Jumping jack", "name_bg": "Джъмпинг джак", "mode": "reps", "sided": false, "view": "front",
+  {"id": "jumping_jack", "name_en": "Jumping jack", "name_bg": "Подскоци с разтваряне", "mode": "reps", "sided": false, "view": "front",
     "signal": {"peak": "top", "metric": "span:ankle", "up": 0.65, "down": 1.05, "min_range": 0.37},
     "checks": [
-      {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл на мишницата", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 148, "cue_en": "Reach higher with your arms.", "cue_bg": "Вдигнете ръцете по-високо."},
+      {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 148, "cue_en": "Reach higher with your arms.", "cue_bg": "Вдигнете ръцете по-високо."},
       {"key": "foot_span", "label_en": "Foot span", "label_bg": "Разстояние между стъпалата", "unit": "× torso", "metric": "span:ankle", "min": 1.05, "cue_en": "Land with your feet farther apart.", "cue_bg": "Приземете се с по-раздалечени стъпала."}
     ]}
 ]

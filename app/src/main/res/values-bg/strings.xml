@@ -337,13 +337,13 @@
     <string name="form_in_band">В диапазона: %1$.1f сек</string>
     <string name="form_set_too_long">Серията надвишава ограничението за качване от 100 повторения.</string>
     <string name="form_reason_range">Амплитуда под прага за броене.</string>
-    <string name="form_camera_front">Поставете телефона пред вас.</string>
-    <string name="form_camera_side">Поставете телефона отстрани, за изглед в профил.</string>
+    <string name="form_camera_front">Поставете телефона пред себе си.</string>
+    <string name="form_camera_side">Поставете телефона встрани, за да се виждате в профил.</string>
     <string name="form_camera_either">Използвайте изглед отпред или отстрани.</string>
     <string name="form_finding_camera">Включване на камерата…</string>
     <string name="form_start">Започнете серия</string>
     <string name="form_stop">Край и преглед</string>
-    <string name="form_camera_permission">Разрешете достъпа до камерата в настройките за тренировка на живо.</string>
+    <string name="form_camera_permission">За треньора на живо разрешете достъпа до камерата в настройките.</string>
     <string name="form_camera_error">Камерата или проследяването не са достъпни. Отворете отново треньора на живо.</string>
     <string name="form_full_body">Отстъпете, докато се виждате от глава до пети.</string>
     <string name="form_hold_frame">Останете в кадър, докато камерата провери ъгъла.</string>
@@ -353,8 +353,8 @@
     <string name="form_more_range">Опитайте малко по-голяма амплитуда.</string>
     <string name="form_get_position">Заемете позицията за упражнението.</string>
     <string name="form_tracking">Серията се проследява</string>
-    <string name="form_voice_pending">Проверка за глас…</string>
+    <string name="form_voice_pending">Проверка на гласа…</string>
     <string name="form_voice_unavailable">Няма офлайн глас. Насоките са на екрана.</string>
-    <string name="form_voice_counts_only">Няма глас на този език. Чуват се само броячите, а насоките са на екрана.</string>
-    <string name="form_voice_local">Включени гласово броене и насоки</string>
+    <string name="form_voice_counts_only">Няма глас на този език. Чува се само броенето, а насоките са на екрана.</string>
+    <string name="form_voice_local">Гласовото броене и насоките са включени</string>
 </resources>
