@@ -493,6 +493,29 @@ def test_events_data_shape_via_bus(api, auth):
     assert bus.open_count(1) == 0
 
 
+def test_event_bus_delivers_from_worker_to_waiting_stream():
+    async def verify():
+        bus = main.EventBus()
+        stream = bus.try_open(1, 3)
+        owner = threading.get_ident()
+        enqueue = stream.put_nowait
+
+        def put_nowait(event):
+            assert threading.get_ident() == owner
+            enqueue(event)
+
+        stream.put_nowait = put_nowait
+        next_event = asyncio.create_task(stream.get())
+        await asyncio.sleep(0)
+        event = {"type": "checkin", "id": 2}
+        await asyncio.to_thread(bus.publish, {1}, event)
+        assert await asyncio.wait_for(next_event, 1) == event
+        bus.close(1, stream)
+        assert not bus._subscribers
+
+    asyncio.run(verify(), debug=True)
+
+
 # --- security: rate limits, pruning, HSTS ---
 
 def test_per_address_login_limit(api):

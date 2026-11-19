@@ -592,19 +592,24 @@ class EventBus:
         self._lock = threading.Lock()
 
     def try_open(self, user_id, limit):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
         with self._lock:
             subscriptions = self._subscribers.setdefault(int(user_id), [])
             if len(subscriptions) >= limit:
                 return None
             queue = asyncio.Queue()
-            subscriptions.append(queue)
+            subscriptions.append((loop, queue))
             return queue
 
     def close(self, user_id, queue):
         with self._lock:
             subscriptions = self._subscribers.get(int(user_id), [])
-            if queue in subscriptions:
-                subscriptions.remove(queue)
+            subscriptions[:] = [(loop, stream) for loop, stream in subscriptions if stream is not queue]
+            if not subscriptions:
+                self._subscribers.pop(int(user_id), None)
 
     def open_count(self, user_id):
         with self._lock:
@@ -613,10 +618,16 @@ class EventBus:
     def publish(self, viewers, event):
         """Queue the event onto every open stream whose user id is in `viewers`."""
         with self._lock:
-            queues = [(user, q) for user, queues in self._subscribers.items()
-                      for q in queues if user in viewers]
-        for _, queue in queues:
-            queue.put_nowait(event)
+            queues = [subscription for user in viewers for subscription in self._subscribers.get(user, ())]
+        for loop, queue in queues:
+            if loop is None:
+                queue.put_nowait(event)
+                continue
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, event)
+            except RuntimeError:
+                if not loop.is_closed():
+                    raise
 
 
 def jump_rows(db, athlete_id):
