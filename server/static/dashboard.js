@@ -27,7 +27,7 @@ const dictionary = {
     deactivate:'Деактивирайте', reactivate:'Активирайте', resetPassword:'Нова парола', newPassword:'Нова парола (поне 8 знака)',
     passwordNote:'Всички текущи сесии на потребителя ще бъдат прекратени.', actions:'Действия', action:'Действие', target:'Обект', actor:'Извършител', detail:'Подробности',
     previous:'Предишни', next:'Следващи', noRows:'Няма записи.', guideTitle:'Как да четем числата',
-    guide:'Стойностите са приблизителни оценки от една камера на телефон. Следете промяната спрямо първите скокове на всеки спортист при сходни условия на заснемане. Това са числа за обсъждане с треньор. Видеото остава на телефона.',
+    guide:'Стойностите са приблизителни оценки от една камера на телефон. Ако отношението е под 1, коленете са по-близо едно до друго от глезените. Следете промяната спрямо първите скокове на всеки спортист при сходни условия на заснемане. Видеото остава на телефона.',
     login_success:'Успешен вход', login_failure:'Неуспешен вход', user_created:'Създаден потребител', consent_changed:'Променено съгласие',
     user_activated:'Активиран потребител', user_deactivated:'Деактивиран потребител', password_reset:'Сменена парола',
     csv_export:'Изнесена таблица', json_export:'Изнесени данни', data_deleted:'Изтрити скокове', club_created:'Създаден клуб',
@@ -91,15 +91,15 @@ const dictionary = {
     proposalGone:'Предложението е използвано или изтекло.', assistantError:'Помощникът не успя да отговори.'
   },
   en: {
-    language:'Language', title:'Landing mechanics', intro:'Your team’s history and change against each athlete’s own baseline.',
+    language:'Language', title:'Jump and landing analysis', intro:'See how each athlete’s results have changed since their first jumps.',
     signIn:'Sign in', signOut:'Sign out', email:'Email', password:'Password', name:'Name', role:'Role', club:'Club',
     admin:'Admin', coach:'Coach', athlete:'Athlete', team:'Team', users:'Users', clubs:'Clubs', audit:'Audit log',
     ownHistory:'My jumps', loading:'Loading…', error:'Request failed. Check your entries and try again.',
     expired:'Your session expired. Sign in again.', invalidLogin:'Invalid email or password.', rateLimit:'Too many attempts. Try again in 15 minutes.',
     forbidden:'You do not have access to this action.', notFound:'Record not found.', conflict:'This record already exists.',
     badInput:'Check your entries. Passwords need at least 8 characters.', saved:'Changes saved.',
-    jumps:'Jumps', lastJump:'Last jump', ratio:'Knee / ankle', peakMean:'Mean peak flexion (°)',
-    asymmetry:'Asymmetry (%)', consent:'Consent', recorded:'Recorded', missing:'Missing', record:'Record',
+    jumps:'Jumps', lastJump:'Last jump', ratio:'Knee spacing compared with ankle spacing', peakMean:'Average deepest knee bend (°)',
+    asymmetry:'Difference between knees (%)', consent:'Consent', recorded:'Recorded', missing:'Missing', record:'Record',
     consentBy:'Who gave consent (for example, a parent’s name)', consentNote:'Record consent only after it has been obtained.',
     saveConsent:'Record consent', revokeConsent:'Withdraw consent', cancel:'Cancel', addAthlete:'Add athlete',
     createUser:'Create user', createClub:'Create club', create:'Create', changeNote:'Change: median of the last 3 jumps against the first 3. Arrows show direction, not a rating.',
@@ -117,7 +117,7 @@ const dictionary = {
     deactivate:'Deactivate', reactivate:'Reactivate', resetPassword:'Reset password', newPassword:'New password (at least 8 characters)',
     passwordNote:'All current sessions for this user will end.', actions:'Actions', action:'Action', target:'Target', actor:'Actor', detail:'Detail',
     previous:'Previous', next:'Next', noRows:'No records.', guideTitle:'How to read these numbers',
-    guide:'Values are estimates from one phone camera. Follow change against the athlete’s own baseline under similar filming conditions. These are numbers to discuss with a coach. Video stays on the phone.',
+    guide:'Values are estimates from one phone camera. A ratio below 1 means the knees are closer together than the ankles. Compare with the athlete’s first jumps filmed under similar conditions. Video stays on the phone.',
     login_success:'Successful login', login_failure:'Failed login', user_created:'User created', consent_changed:'Consent changed',
     user_activated:'User activated', user_deactivated:'User deactivated', password_reset:'Password reset',
     csv_export:'CSV export', json_export:'JSON export', data_deleted:'Jumps deleted', club_created:'Club created',
@@ -862,7 +862,11 @@ function sessions(content) {
     const report = state.sessionReport;
     const panel = node('section', null, 'inline-panel report-panel');
     const head = node('div', null, 'inline-actions');
-    head.append(node('h2', t('report')), button('cancel', () => { state.sessionReport = null; render(); }));
+    const title = state.sessions.find(session => session.id === report.session_id)?.title;
+    const heading = node('h2', title ? t('report') + ': ' + title : t('report'));
+    heading.id = 'session-report-title';
+    heading.tabIndex = -1;
+    head.append(heading, button('cancel', () => { state.sessionReport = null; render(); }));
     panel.append(head);
     panel.append(reportGrid(report));
     content.append(panel);
@@ -891,7 +895,7 @@ function sessionTable(rows, staff) {
     if (staff) {
       const cell = node('td'); const actions = node('div', null, 'cell-actions');
       actions.append(button('editSession', () => { state.sessionEdit = row; state.sessionReport = null; render('#session-title'); }));
-      actions.append(button('report', async () => { const report = await api('/api/sessions/'+row.id+'/report'); state.sessionReport = report; render('#calendar-download'); }));
+      actions.append(button('report', async () => { state.sessionReport = await api('/api/sessions/'+row.id+'/report'); render('#session-report-title'); }));
       actions.append(button(row.cancelled ? 'restoreSession' : 'cancelSession', async () => { await api('/api/sessions/'+row.id, {method:'PATCH', body:JSON.stringify(cancelFrom(row))}); await load(); message('saved'); }));
       cell.append(actions); tr.append(cell);
     }

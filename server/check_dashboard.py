@@ -132,6 +132,12 @@ def check():
         page.get_by_role('button', name='Календар (.ics)', exact=True).wait_for()
         page.locator('tbody').get_by_role('button', name='Доклад', exact=True).first.click()
         page.locator('.report-panel table').wait_for()
+        assert page.evaluate('document.activeElement.id') == 'session-report-title'
+        page.set_viewport_size({'width': 390, 'height': 844})
+        assert page.locator('.report-panel .table-scroll').evaluate('(table) => table.scrollWidth > table.clientWidth')
+        assert page.locator('.report-panel th').first.bounding_box()['width'] >= 60
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        page.set_viewport_size({'width': 1440, 'height': 1000})
         page.get_by_role('button', name='Самочувствие', exact=True).click()
         page.get_by_role('heading', name='Самочувствие', exact=True).wait_for()
         page.locator('table tbody tr').first.wait_for()

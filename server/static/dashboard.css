@@ -108,6 +108,7 @@ h2 {font-size:1.18rem;letter-spacing:-.022em}
 .series-line {stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
 .chart-grid {stroke-dasharray:3 4}
 .table-scroll {border-radius:14px}
+.report-panel table {min-width:44rem;overflow-wrap:normal}
 th {background:var(--table-head)}
 th.num,td.num {text-align:right}
 th.num button {text-align:right}
