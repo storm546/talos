@@ -157,6 +157,7 @@ required consent gate on uploads. Login and `/api/me` still expose only `id`, `n
 | `GET /api/athletes?limit=100&offset=0` | coach, admin | own club (admin: all); identity, jump count, last date, active state, consent fields and `changes` for the three headline metrics |
 | `POST /api/jumps` (section 1 JSON) | athlete | requires recorded consent, otherwise 403 with a clear message; stores a jump for the caller; returns `{id, created_at}` |
 | `GET /api/jumps?athlete_id=&limit=100&offset=0` | all | athlete: own only; coach: athletes of own club; admin: any. Newest first, ID descending for tied dates |
+| `GET /api/jumps/baseline?test=cmj` | athlete | Median of the athlete's first three measured jumps of the requested kind. Omits metrics missing from any of the three. `before_id` limits it to earlier jumps; `exclude_client_id` excludes an upload still awaiting confirmation. |
 | `GET /api/athletes/{id}/summary` | same scope as jumps | counts, first/last jump dates, baseline completeness and all numeric metric summaries |
 | `GET /api/me/export` | athlete | JSON attachment with own public profile, email, active state, consent, all jumps and export time; no passwords or tokens |
 | `GET /api/athletes/{id}/export.csv` | admin, coach of club | CSV attachment with all athlete jumps, metric fields and athlete name; oldest first; cells protected against spreadsheet formulas |

@@ -1058,6 +1058,34 @@ def create_app(db_path=None):
                  "created_at": row["created_at"], "session_id": row["session_id"],
                  "client_id": row["client_id"]} for row in rows]
 
+    @app.get("/api/jumps/baseline")
+    def jump_baseline(test: Literal["cmj", "drop_jump"], user=Depends(current_user), db=Depends(get_db),
+                      before_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
+                      exclude_client_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None):
+        if user["role"] != "athlete":
+            raise HTTPException(403, "Athlete account required")
+        cutoff = ()
+        if before_id is not None:
+            jump = db.execute("SELECT created_at, id FROM jumps WHERE athlete_id = ? AND id = ?",
+                              (user["id"], before_id)).fetchone()
+            if jump is None:
+                raise HTTPException(404, "Jump not found")
+            cutoff = tuple(jump)
+        rows = db.execute(
+            "SELECT metrics FROM jumps WHERE athlete_id = ? AND json_extract(metrics, '$.test') = ? "
+            "AND json_extract(metrics, '$.flight_time_ms') > 0 AND client_id IS NOT ? "
+            "AND NOT EXISTS (SELECT 1 FROM json_each(metrics, '$.warnings') "
+            "WHERE value = 'no_flight_detected') "
+            + ("AND (created_at, id) < (?, ?) " if cutoff else "")
+            + "ORDER BY created_at, id LIMIT 3",
+            (user["id"], test, exclude_client_id or "", *cutoff),
+        ).fetchall()
+        if len(rows) != 3:
+            return {}
+        metrics = [json.loads(row["metrics"]) for row in rows]
+        keys = ("jump_height_cm", "flight_time_ms", "knee_flexion_peak_l", "knee_flexion_peak_r", "flexion_asymmetry_pct")
+        return {key: median(row[key] for row in metrics) for key in keys if all(row.get(key) is not None for row in metrics)}
+
     @app.post("/api/form", status_code=201, dependencies=[Depends(current_user)])
     def add_form_set(body: FormSet, request: Request, db=Depends(get_db)):
         with authorized_write(db, request) as (athlete, emit):

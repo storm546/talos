@@ -5,11 +5,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
+import android.media.AudioManager
 import android.media.MediaMetadataRetriever
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.Surface
@@ -17,7 +19,6 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -57,7 +58,7 @@ class LiveFormActivity : ComponentActivity() {
     private lateinit var counter: TextView
     private lateinit var subcount: TextView
     private lateinit var banner: TextView
-    private lateinit var voice: TextView
+    private lateinit var voice: Button
     private lateinit var action: Button
     private var mirror = false
     private var aspect = 0f
@@ -69,8 +70,10 @@ class LiveFormActivity : ComponentActivity() {
     private var spokenCue: String? = null
     private var spokenCount = 0
     private var tts: TextToSpeech? = null
-    private var countsOnly = true
     private var ttsReady = false
+    private var voiceNoticeShown = false
+    private var voiceSettingsOpened = false
+    private var countTone: ToneGenerator? = null
     private var firstResultAt = 0L
     private var lastResultAt = 0L
     private val latencyMs = mutableListOf<Long>()
@@ -93,55 +96,65 @@ class LiveFormActivity : ComponentActivity() {
     }
 
     private fun buildScreen() {
-        val root = FrameLayout(this).apply { setBackgroundColor(getColor(R.color.hero)) }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(getColor(R.color.hero))
+        }
         preview = LiveFormPreview(this)
-        root.addView(preview, FrameLayout.LayoutParams(-1, -1))
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(12), dp(20), dp(44))
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xF2101F1A.toInt(), 0xD9101F1A.toInt(), 0x00101F1A))
+            setPadding(dp(16), dp(10), dp(16), dp(6))
         }
+        root.addView(header, LinearLayout.LayoutParams(-1, -2))
         val name = exercise.label(bg)
         val title = side?.let { getString(R.string.form_named_side, name, getString(if (it == "L") R.string.form_left else R.string.form_right)) } ?: name
         header.addView(label(getString(if (replay) R.string.form_replay_debug else R.string.ui_live).uppercase(appLocale), 12, R.color.signal).apply {
             letterSpacing = .12f; setTypeface(null, Typeface.BOLD)
         })
-        header.addView(label(title, 26, R.color.surface).apply { typeface = Typeface.create("sans-serif-black", Typeface.NORMAL) })
-        header.addView(label(getString(exercise.viewGuide()), 14, R.color.on_hero))
-        root.addView(header, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(16), dp(20), dp(16))
-            background = shape(0xE0101F1A.toInt(), 28)
-        }
-        val tally = LinearLayout(this).apply { gravity = Gravity.BOTTOM }
-        counter = label("", 64, R.color.signal).apply {
+        val tally = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        tally.addView(label(title, 22, R.color.surface).apply {
+            typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        counter = label("", 28, R.color.signal).apply {
             typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
             includeFontPadding = false
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         tally.addView(counter)
         val unit = label(getString(if (exercise.mode == "hold") R.string.ui_held else R.string.ui_reps_unit), 16, R.color.on_hero)
-        tally.addView(unit, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10); bottomMargin = dp(10) })
-        panel.addView(tally)
-        subcount = label("", 14, R.color.on_hero)
-        panel.addView(subcount)
-        banner = label(getString(R.string.form_finding_camera), 16, R.color.ink).apply {
-            minHeight = dp(52); gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(10), dp(14), dp(10)); setTypeface(null, Typeface.BOLD)
+        tally.addView(unit, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(6) })
+        header.addView(tally)
+        subcount = label("", 13, R.color.on_hero)
+        header.addView(subcount)
+        banner = label(getString(R.string.form_finding_camera), 14, R.color.ink).apply {
+            minHeight = dp(36); gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(5), dp(10), dp(5)); setTypeface(null, Typeface.BOLD)
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
-        panel.addView(banner, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        header.addView(banner, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
         tone(Tone.NEUTRAL)
-        voice = label(getString(R.string.form_voice_pending), 12, R.color.on_hero)
-        panel.addView(voice, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        voice = Button(this).apply {
+            text = getString(R.string.form_voice_settings)
+            textSize = 13f
+            isAllCaps = false
+            minHeight = dp(48)
+            setTextColor(getColor(R.color.on_hero))
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            visibility = View.GONE
+            setOnClickListener {
+                visibility = View.GONE
+                voiceSettingsOpened = true
+                sequenceOf(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA, "com.android.settings.TTS_SETTINGS", Settings.ACTION_SETTINGS)
+                    .any { runCatching { startActivity(Intent(it)) }.isSuccess }
+            }
+        }
+        header.addView(voice, LinearLayout.LayoutParams(-1, -2))
+        root.addView(preview, LinearLayout.LayoutParams(-1, 0, 1f))
         action = styleButton(Button(this), primary = true).apply {
-            text = getString(R.string.form_start); isAllCaps = false; isEnabled = false; minHeight = dp(56); textSize = 17f
+            text = getString(R.string.form_start); isAllCaps = false; isEnabled = false; minHeight = dp(48); textSize = 16f
             setOnClickListener { if (stream == null) startSet() else finishSet() }
         }
-        panel.addView(action, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
-        root.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { setMargins(dp(12), 0, dp(12), dp(12)) })
+        root.addView(action, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(16), dp(6), dp(16), dp(8)) })
         root.setOnApplyWindowInsetsListener { view, insets ->
             if (Build.VERSION.SDK_INT >= 30) {
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
@@ -314,6 +327,7 @@ class LiveFormActivity : ComponentActivity() {
 
     private fun startSet() {
         if (!action.isEnabled || aspect <= 0) return
+        voice.visibility = View.GONE
         stream = FormStream(exercise.id, side, aspect)
         setStarted = -1
         spokenCount = 0; spokenCue = null; feedbackAt = Long.MIN_VALUE / 2
@@ -378,26 +392,34 @@ class LiveFormActivity : ComponentActivity() {
         if (status == TextToSpeech.SUCCESS) {
             val installed = engine.voices.orEmpty().filter { !it.isNetworkConnectionRequired && "notInstalled" !in it.features.orEmpty() }
             val match = installed.firstOrNull { it.locale == appLocale } ?: installed.firstOrNull { it.locale.language == appLocale.language }
-            val fallback = installed.firstOrNull { it.locale.language == "en" } ?: installed.firstOrNull()
-            val selected = match ?: fallback
-            ttsReady = selected != null && engine.setVoice(selected) == TextToSpeech.SUCCESS
-            countsOnly = match == null
+            ttsReady = match != null && engine.setVoice(match) == TextToSpeech.SUCCESS
         }
-        voice.setText(when {
-            !ttsReady -> R.string.form_voice_unavailable
-            countsOnly -> R.string.form_voice_counts_only
-            else -> R.string.form_voice_local
-        })
+        if (!ttsReady && !voiceNoticeShown && stream == null) {
+            voiceNoticeShown = true
+            voice.visibility = View.VISIBLE
+            voice.postDelayed({ voice.visibility = View.GONE }, 8000)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (voiceSettingsOpened) {
+            voiceSettingsOpened = false
+            tts?.shutdown()
+            tts = TextToSpeech(this) { status -> voice.post { setupVoice(status) } }
+        }
     }
 
     private fun speak(progress: FormProgress, key: String?, message: String) {
-        if (!ttsReady) return
         val now = SystemClock.elapsedRealtime()
         if (progress.complete > spokenCount) {
             spokenCount = progress.complete
-            tts?.speak(spokenCount.toString(), TextToSpeech.QUEUE_FLUSH, null, "rep-$spokenCount")
+            if (!ttsReady || tts?.speak(spokenCount.toString(), TextToSpeech.QUEUE_FLUSH, null, "rep-$spokenCount") != TextToSpeech.SUCCESS) {
+                if (countTone == null) countTone = runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 65) }.getOrNull()
+                countTone?.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
+            }
             feedbackAt = now
-        } else if (!countsOnly && key != null && key != spokenCue && now - feedbackAt >= 2500) {
+        } else if (ttsReady && key != null && key != spokenCue && now - feedbackAt >= 2500) {
             tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "cue-$now")
             spokenCue = key
             feedbackAt = now
@@ -430,6 +452,8 @@ class LiveFormActivity : ComponentActivity() {
     override fun onDestroy() {
         tts?.shutdown()
         tts = null
+        countTone?.release()
+        countTone = null
         worker.shutdown()
         super.onDestroy()
     }

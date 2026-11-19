@@ -205,7 +205,7 @@ class MainActivity : Activity() {
         }
     }
 
-    internal fun login(message: String? = null, showServer: Boolean = false) {
+    internal fun login(message: String? = null, showServer: Boolean = false, server: String = base()) {
         layout(getString(R.string.sign_in), "login")
         hero(R.string.ui_workbench, R.string.privacy)
         text(getString(R.string.login_intro))
@@ -214,11 +214,7 @@ class MainActivity : Activity() {
         val password = field(getString(R.string.password), type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
         password.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         lateinit var connection: LinearLayout
-        button(getString(R.string.ui_server_settings)) {
-            connection.visibility = if (connection.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-        }
-        connection = card().apply { visibility = if (showServer) View.VISIBLE else View.GONE }
-        val url = field(getString(R.string.server_url), base(), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, connection)
+        lateinit var url: EditText
         button(getString(R.string.sign_in), primary = true) {
             val address = try { serverUrl(url.text.toString()) } catch (e: IOException) {
                 Toast.makeText(this, errorMessage(e), Toast.LENGTH_LONG).show()
@@ -256,19 +252,34 @@ class MainActivity : Activity() {
                     .putString("name", name).putLong("user_id", id).apply()
                 if (analysis != null) result() else home()
                 sendPending(automatic = true)
-            }, { login(it, showServer = connection.visibility == View.VISIBLE) })
+            }, { login(it, showServer = connection.visibility == View.VISIBLE, server = address) })
         }
         button(getString(R.string.continue_offline)) { if (analysis != null) result() else home() }
+        button(getString(R.string.ui_server_settings)) {
+            connection.visibility = if (connection.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            if (connection.visibility == View.VISIBLE) connection.post {
+                connection.requestRectangleOnScreen(android.graphics.Rect(0, 0, connection.width, connection.height))
+            }
+        }.apply {
+            val style = android.util.TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackground, style, true)
+            setBackgroundResource(style.resourceId)
+            setTextColor(green)
+            textSize = 14f
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        }
+        connection = card().apply { visibility = if (showServer) View.VISIBLE else View.GONE }
+        url = field(getString(R.string.server_url), server, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, connection)
     }
 
     internal fun home(message: String? = null) {
-        layout(getString(R.string.ui_today), "home")
+        layout(getString(R.string.home), "home")
         val signedIn = token().isNotEmpty()
         val name = prefs.getString("name", "").orEmpty()
         val day = localDate(todayLocal(), locale)
         text(if (signedIn) "$day  ·  $name" else day, 14)
         if (message != null) notice(message, caution = true)
-        val jump = hero(R.string.ui_jump, R.string.ui_jump_intro, "01 / JUMP LAB")
+        val jump = hero(R.string.ui_jump, R.string.ui_jump_intro)
         selectedSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 14, getColor(R.color.on_hero), jump) }
         val types = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
         listOf(Triple("cmj", R.string.ui_cmj_short, R.string.cmj),
@@ -287,26 +298,33 @@ class MainActivity : Activity() {
             }, RadioGroup.LayoutParams(0, -2, 1f))
         }
         jump.addView(types)
-        button(getString(R.string.record), primary = true, parent = jump) {
-            filmingGuide { launchVideo(Intent(MediaStore.ACTION_VIDEO_CAPTURE).putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1), 10) }
-        }
+        button(getString(R.string.record), primary = true, parent = jump) { recordJump() }
         button(getString(R.string.pick_video), parent = jump) {
             val pick = if (Build.VERSION.SDK_INT >= 33) Intent(MediaStore.ACTION_PICK_IMAGES)
                 else Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
             filmingGuide { launchVideo(pick.setType("video/*"), 11) }
         }
-        section(R.string.ui_tools).setPadding(0, dp(20), 0, dp(3))
+        section(R.string.ui_tools).setPadding(0, dp(14), 0, dp(3))
         if (signedIn) {
-            tiles(UiTile(R.string.form_title, "form") { formHome() }, UiTile(R.string.history, "history") { history() },
-                UiTile(R.string.training_title, "training") { trainingHome() }, UiTile(R.string.nutrition_title, "food") { nutritionHome() },
+            tiles(UiTile(R.string.ui_technique, "form") { formHome() }, UiTile(R.string.history, "history") { history() },
                 UiTile(R.string.ui_club, "club") { clubHome() }, UiTile(R.string.checkin_title, "checkin") { checkin() },
-                UiTile(R.string.assistant_title, "assistant") { assistantScreen() }, UiTile(R.string.ui_profile, "profile") { profile() })
+                UiTile(R.string.ui_profile, "profile") { profile() })
+            button(getString(R.string.ui_more)) { more() }
         } else {
-            tiles(UiTile(R.string.form_title, "form") { formHome() }, UiTile(R.string.sign_in, "profile") { login() })
+            tiles(UiTile(R.string.ui_technique, "form") { formHome() }, UiTile(R.string.sign_in, "profile") { login() })
         }
         if (analysis != null) button(getString(R.string.last_result)) { result() }
         if (signedIn) pendingControls()
         text(getString(R.string.coach_note), 14).setPadding(0, dp(18), 0, 0)
+    }
+
+    private fun more() {
+        layout(getString(R.string.ui_more), "more")
+        text(getString(R.string.ui_extras))
+        tiles(UiTile(R.string.training_title, "training") { trainingHome() },
+            UiTile(R.string.nutrition_title, "food") { nutritionHome() },
+            UiTile(R.string.assistant_title, "assistant") { assistantScreen() })
+        button(getString(R.string.home)) { home() }
     }
 
     private fun profile() {
@@ -525,8 +543,13 @@ class MainActivity : Activity() {
         if (offset > 0) button(getString(R.string.feedback_newest)) { feedback() }
     }
 
+    private fun recordJump() {
+        filmingGuide { launchVideo(Intent(MediaStore.ACTION_VIDEO_CAPTURE).putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1), 10) }
+    }
+
     private fun filmingGuide(continueAction: () -> Unit) {
         layout(getString(R.string.filming_guide), "guide")
+        text(getString(if (test == "cmj") R.string.film_cmj else R.string.film_drop), 16)
         page.addView(ImageView(this).apply {
             setImageResource(R.drawable.filming_guide)
             contentDescription = getString(R.string.guide_diagram)
@@ -606,30 +629,35 @@ class MainActivity : Activity() {
         val current = analysis ?: return home()
         layout(getString(R.string.result), "result")
         val metrics = JSONObject(current.metrics.toJson())
+        val hasFlight = hasFlight(metrics)
+        if (!hasFlight) {
+            notice(getString(R.string.no_flight_help), caution = true)
+            if (uploadedId == null && queuedId == null) {
+                button(getString(R.string.check_frames), primary = true) { editFrames(current) }
+            }
+            button(getString(R.string.film_again)) {
+                test = current.metrics.test
+                selectedSession = resultSession
+                recordJump()
+            }
+        }
         text(if (current.metrics.test == "cmj") getString(R.string.cmj) else getString(R.string.drop_jump), 14)
-        jumpHighlights(metrics)
-        metricWarnings(metrics)
+        if (hasFlight) {
+            metricWarnings(metrics)
+            if (uploadedId == null && queuedId == null) button(getString(R.string.check_frames)) { editFrames(current) }
+            jumpHighlights(metrics, uploadedId, clientId)
+        }
         if (message != null) notice(message, caution = true)
         resultSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 16, green) }
         if (current.truncated) text(getString(R.string.truncated), 14)
-        text(edgeTimes(current.landing.takeoffMs, current.landing.contactMs), 16)
-        if ("no_flight_detected" in current.metrics.warnings) {
-            text(getString(R.string.no_flight_help), 16)
-            button(getString(R.string.film_again)) { home() }
-        }
+        if (hasFlight) text(edgeTimes(current.landing.takeoffMs, current.landing.contactMs), 16)
         if ("low_visibility" in current.metrics.warnings) text(getString(R.string.visibility_help), 16)
         // After upload (or once queued) the result is read-only: editing frames would create a second jump.
-        if (uploadedId == null && queuedId == null) button(getString(R.string.check_frames)) {
-            val suggestion = current.landing.learnedSuggestion
-                ?.takeIf { "no_flight_detected" in current.metrics.warnings }
-            val takeoff = suggestion?.takeoffMs ?: current.landing.takeoffMs
-            val landing = suggestion?.landingMs ?: current.landing.contactMs
-            val start = takeoff ?: peakFlexionFrame(current.frames).tMs
-            edits = FrameEdits(current.timesUs.indexOfFirst { it / 1000 == start }.coerceAtLeast(0),
-                takeoff, landing, suggested = suggestion != null)
-            frameEditor()
-        }
-        text(getString(if (current.contactFound) R.string.landing_frame else R.string.peak_frame), 18)
+        text(getString(when {
+            !hasFlight -> R.string.preview_check
+            current.contactFound -> R.string.landing_frame
+            else -> R.string.peak_frame
+        }), 18)
         page.addView(ImageView(this).apply {
             setImageBitmap(current.preview)
             adjustViewBounds = true
@@ -647,7 +675,7 @@ class MainActivity : Activity() {
         }
         page.addView(legend)
         if (current.previewUnclear) text(getString(R.string.preview_unclear), 14, warning)
-        if (uploadedId == null && queuedId == null) button(if (token().isEmpty()) getString(R.string.sign_in_upload) else getString(R.string.upload), primary = true) {
+        if (hasFlight && uploadedId == null && queuedId == null) button(if (token().isEmpty()) getString(R.string.sign_in_upload) else getString(R.string.upload), primary = true) {
             if (token().isEmpty()) login() else {
                 val savedToken = token()
                 val savedBase = base()
@@ -671,12 +699,24 @@ class MainActivity : Activity() {
         if (uploadedId != null) text(getString(R.string.uploaded, uploadedId), 16, green)
         if (queuedId != null) text(getString(R.string.saved_pending), 16, green)
         if (uploadedId != null || queuedId != null) text(getString(R.string.uploaded_readonly), 14)
-        metricRows(metrics)
-        text(getString(R.string.depth_note), 14)
+        if (hasFlight) {
+            metricRows(metrics)
+            text(getString(R.string.depth_note), 14)
+        }
         pendingControls()
         if (token().isNotEmpty()) button(getString(R.string.history)) { history() }
         button(getString(R.string.home)) { home() }
         text(getString(R.string.no_video_upload), 13)
+    }
+
+    private fun editFrames(current: Analysis) {
+        val suggestion = current.landing.learnedSuggestion?.takeIf { "no_flight_detected" in current.metrics.warnings }
+        val takeoff = suggestion?.takeoffMs ?: current.landing.takeoffMs
+        val landing = suggestion?.landingMs ?: current.landing.contactMs
+        val start = takeoff ?: peakFlexionFrame(current.frames).tMs
+        edits = FrameEdits(current.timesUs.indexOfFirst { it / 1000 == start }.coerceAtLeast(0),
+            takeoff, landing, suggested = suggestion != null)
+        frameEditor()
     }
 
     private fun edgeTimes(takeoff: Long?, landing: Long?): String {
@@ -882,27 +922,60 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun jumpHighlights(json: JSONObject) {
-        val metrics = listOf(
-            Triple("jump_height_cm", R.string.ui_height, getString(R.string.ui_cm)),
-            Triple("flight_time_ms", R.string.ui_flight, getString(R.string.ui_ms)),
-            Triple("knee_flexion_peak_l", R.string.ui_flex_left, "°"),
-            Triple("knee_flexion_peak_r", R.string.ui_flex_right, "°"),
-            Triple("flexion_asymmetry_pct", R.string.ui_asymmetry, "%")
-        )
-        for ((index, pair) in metrics.chunked(2).withIndex()) {
-            if (index == 1) text(getString(R.string.ui_at_peak), 13).setPadding(0, dp(13), 0, 0)
-            val row = LinearLayout(this)
-            page.addView(row)
-            pair.forEachIndexed { column, (key, label, unit) ->
-                val value = if (json.isNull(key)) "—" else number(json, key)
-                stat(getString(label), value, unit, row).layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply {
-                    topMargin = dp(8)
-                    if (column > 0) marginStart = dp(8)
+    private fun hasFlight(json: JSONObject) = json.optDouble("flight_time_ms", 0.0) > 0 &&
+        json.optJSONArray("warnings")?.let { warnings ->
+            (0 until warnings.length()).none { warnings.optString(it) == "no_flight_detected" }
+        } != false
+
+    private fun jumpHighlights(json: JSONObject, beforeId: Long? = null, excludeClient: String? = null) {
+        val highlights = listOf(
+            JumpHighlight("jump_height_cm", R.string.ui_height, R.string.jump_height_meaning, getString(R.string.ui_cm)),
+            JumpHighlight("flight_time_ms", R.string.ui_flight, R.string.jump_flight_meaning, getString(R.string.ui_ms)),
+            JumpHighlight("knee_flexion_peak_l", R.string.ui_flex_left, R.string.jump_flex_meaning, "°"),
+            JumpHighlight("knee_flexion_peak_r", R.string.ui_flex_right, R.string.jump_flex_meaning, "°"),
+            JumpHighlight("flexion_asymmetry_pct", R.string.ui_asymmetry, R.string.jump_asymmetry_meaning, "%")
+        ).filterNot { json.isNull(it.key) }
+        val auth = token()
+        val host = page
+        val address = base()
+        section(R.string.jump_comparison, host)
+        text(getString(if (auth.isEmpty()) R.string.jump_baseline_sign_in else R.string.jump_baseline_info), 14, parent = host)
+        val comparisons = highlights.associateWith { metric ->
+            val panel = stat(getString(metric.label), number(json, metric.key), metric.unit, host)
+            text(getString(metric.meaning), 14, parent = panel)
+            text(getString(if (auth.isEmpty()) R.string.jump_baseline_offline else R.string.jump_baseline_loading), 14, parent = panel)
+        }
+        if (auth.isEmpty()) return
+        val path = buildString {
+            append("/api/jumps/baseline?test=").append(if (json.optString("test") == "cmj") "cmj" else "drop_jump")
+            beforeId?.let { append("&before_id=").append(it) }
+            excludeClient?.let { append("&exclude_client_id=").append(Uri.encode(it)) }
+        }
+        clubExecutor.submit {
+            val baseline = runCatching { JSONObject(api(address, path, token = auth)) }.getOrNull()
+            runOnUiThread {
+                if (host !== page || auth != token() || address != base()) return@runOnUiThread
+                for ((metric, caption) in comparisons) {
+                    caption.text = when {
+                        baseline == null -> getString(R.string.jump_baseline_unavailable)
+                        baseline.isNull(metric.key) -> getString(R.string.jump_baseline_pending)
+                        else -> {
+                            val change = json.getDouble(metric.key) - baseline.getDouble(metric.key)
+                            val value = metricNumber(kotlin.math.abs(change), metric.key, locale)
+                            val unit = if (metric.unit == "%") getString(R.string.jump_percentage_points) else metric.unit
+                            when {
+                                value == metricNumber(0.0, metric.key, locale) -> getString(R.string.jump_baseline_equal)
+                                change > 0 -> getString(R.string.jump_baseline_higher, value, unit)
+                                else -> getString(R.string.jump_baseline_lower, value, unit)
+                            }
+                        }
+                    }
                 }
             }
         }
     }
+
+    private data class JumpHighlight(val key: String, val label: Int, val meaning: Int, val unit: String)
 
     private fun metricRows(json: JSONObject) {
         val groups = listOf(
@@ -969,15 +1042,26 @@ class MainActivity : Activity() {
                 val metrics = item.optJSONObject("metrics") ?: item
                 val panel = card()
                 text(getString(R.string.history_item, item.getLong("id"), localDateTime(item.getString("created_at"), locale)), 16, green, panel)
-                text(getString(R.string.history_numbers,
-                    getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump),
-                    number(metrics, "knee_flexion_peak_l"), number(metrics, "knee_flexion_peak_r"),
-                    number(metrics, "knee_ankle_ratio")), 14, parent = panel)
+                val hasFlight = hasFlight(metrics)
+                text(getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump), 14, parent = panel)
+                if (!hasFlight) text(getString(R.string.no_flight_detected), 14, parent = panel)
+                else if (!metrics.isNull("jump_height_cm")) {
+                    text(getString(R.string.jump_history_height, number(metrics, "jump_height_cm")), 14, parent = panel)
+                }
                 button(getString(R.string.view_jump, item.getLong("id")), parent = panel) {
                     layout(getString(R.string.jump_title, item.getLong("id")), "history_detail")
-                    jumpHighlights(metrics)
-                    metricWarnings(metrics)
-                    metricRows(metrics)
+                    if (hasFlight) {
+                        jumpHighlights(metrics, item.getLong("id"))
+                        metricWarnings(metrics)
+                        metricRows(metrics)
+                    } else {
+                        notice(getString(R.string.no_flight_detected), caution = true)
+                        button(getString(R.string.film_again)) {
+                            test = metrics.getString("test")
+                            selectedSession = null
+                            recordJump()
+                        }
+                    }
                     button(getString(R.string.history)) { history() }
                     button(getString(R.string.home)) { home() }
                 }

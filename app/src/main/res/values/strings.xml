@@ -43,7 +43,7 @@
     <string name="low_fps">Low frame rate: timing may be less precise.</string>
     <string name="uncertain_timing">Tracking lost near take-off or landing: flight time uses the nearest observed frames.</string>
     <string name="low_visibility">Low visibility: keep hips, knees and feet in view.</string>
-    <string name="no_flight_detected">No flight detected. Numbers use the start of the clip.</string>
+    <string name="no_flight_detected">Take-off and landing could not be confirmed.</string>
     <string name="single_leg_view">Side view: only the better-seen leg is measured.</string>
     <string name="unknown_warning">Some frames could not be analysed reliably. Try filming again.</string>
     <string name="not_available">Not available</string>
@@ -67,7 +67,7 @@
     <string name="knee_flexion_peak_r">Peak knee flexion · right (°)</string>
     <string name="fppa_peak_l">FPPA at peak · left (°)</string>
     <string name="fppa_peak_r">FPPA at peak · right (°)</string>
-    <string name="knee_ankle_ratio">Knee / ankle ratio</string>
+    <string name="knee_ankle_ratio">Knee spacing relative to ankle spacing</string>
     <string name="flexion_asymmetry_pct">Peak flexion asymmetry (%)</string>
     <string name="quality">Landmark visibility (0–1)</string>
     <string name="duration_error">Cannot read this video\'s duration. Try another video.</string>
@@ -110,7 +110,7 @@
     <string name="group_knees">Knees at landing</string>
     <string name="explain_knees">Bending at first contact and the deepest bend within the next half second.</string>
     <string name="group_sides">Left / right</string>
-    <string name="explain_sides">Compare leg movement and tracking quality against your own previous jumps.</string>
+    <string name="explain_sides">A spacing ratio below 1 means the knees were closer together than the ankles.</string>
     <string name="filming_guide">Filming guide</string>
     <string name="guide_diagram">A level phone at knee height faces a person whose whole body fits inside the frame with headroom.</string>
     <string name="guide_phone">Place the phone at knee height, level and steady.</string>
@@ -132,7 +132,26 @@
     <string name="preview_unclear">Unclear joints are hidden in this frame. Keep your whole body visible and use good light.</string>
     <string name="check_frames">Check frames</string>
     <string name="manual_edges">Frames set by hand.</string>
-    <string name="no_flight_help">No flight was found automatically. Check the frames to mark take-off and landing, or film again.</string>
+    <string name="no_flight_help">We could not see the take-off and landing. Check the video frames or film the jump again.</string>
+    <string name="jump_comparison">Your jump</string>
+    <string name="jump_baseline_info">Your starting point is the middle value from your first three measured jumps of this kind.</string>
+    <string name="jump_baseline_sign_in">Sign in to compare with your first three measured jumps of this kind.</string>
+    <string name="jump_baseline_offline">No comparison offline.</string>
+    <string name="jump_baseline_loading">Checking your earlier jumps…</string>
+    <string name="jump_baseline_unavailable">Could not load your earlier jumps.</string>
+    <string name="jump_baseline_pending">Not yet measured in three earlier jumps.</string>
+    <string name="preview_check">Frame to review</string>
+    <string name="film_cmj">Start standing. Bend your knees, then jump straight up.</string>
+    <string name="film_drop">Step off a low platform and jump up as soon as you touch the floor.</string>
+    <string name="jump_baseline_equal">Same as your starting point.</string>
+    <string name="jump_baseline_higher">%1$s\u00a0%2$s higher than your starting point.</string>
+    <string name="jump_baseline_lower">%1$s\u00a0%2$s lower than your starting point.</string>
+    <string name="jump_percentage_points">percentage points</string>
+    <string name="jump_height_meaning">How high you rose, estimated from time in the air.</string>
+    <string name="jump_flight_meaning">How long both feet were off the ground.</string>
+    <string name="jump_flex_meaning">How far this knee bent at its deepest point after landing.</string>
+    <string name="jump_asymmetry_meaning">How much the knees differed in their deepest bend after landing.</string>
+    <string name="jump_history_height">Estimated height: %1$s\u00a0cm</string>
     <string name="visibility_help">Try filming again with the whole body in frame and space above the head.</string>
     <string name="film_again">Film again</string>
     <string name="frame_instructions">Mark the first frame with the feet off the ground, then the first frame touching the ground. For a drop jump, mark the rebound take-off.</string>
@@ -353,8 +372,5 @@
     <string name="form_more_range">Try a little more range.</string>
     <string name="form_get_position">Get into the exercise position.</string>
     <string name="form_tracking">Tracking your set</string>
-    <string name="form_voice_pending">Checking for a voice…</string>
-    <string name="form_voice_unavailable">No offline voice. Cues are on screen.</string>
-    <string name="form_voice_counts_only">No voice in this language. Spoken counts only; cues stay on screen.</string>
-    <string name="form_voice_local">Spoken counts and cues on</string>
+    <string name="form_voice_settings">Counting with beeps · Set up a voice</string>
 </resources>

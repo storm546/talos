@@ -344,6 +344,34 @@ def test_upload_returns_ids_and_roundtrips_metrics_newest_first(api, auth):
     assert {key: jumps[1][key] for key in METRICS} == METRICS
 
 
+def test_jump_baseline_uses_own_first_three_measured_jumps_of_same_kind(api, auth):
+    client, path = api
+    headers = auth("athlete1")
+    athlete_id = user_id(path, "athlete1")
+    with main.database(path) as db:
+        db.execute("DELETE FROM jumps WHERE athlete_id = ?", (athlete_id,))
+
+    def jump(**metrics):
+        reply = client.post("/api/jumps", json={**METRICS, **metrics}, headers=headers)
+        assert reply.status_code == 201
+        return reply.json()["id"]
+
+    jump(test="drop_jump", jump_height_cm=50)
+    jump(flight_time_ms=None, jump_height_cm=None, warnings=["no_flight_detected"])
+    jump(jump_height_cm=10, knee_flexion_peak_r=None)
+    jump(jump_height_cm=30)
+    third = jump(client_id="third", jump_height_cm=20)
+    fourth = jump(jump_height_cm=40)
+    url = "/api/jumps/baseline?test=cmj"
+    assert client.get(url + f"&before_id={third}", headers=headers).json() == {}
+    baseline = client.get(url + f"&before_id={fourth}", headers=headers).json()
+    assert baseline["jump_height_cm"] == 20
+    assert "knee_flexion_peak_r" not in baseline
+    assert client.get(url + "&exclude_client_id=third", headers=headers).json()["jump_height_cm"] == 30
+    assert client.get(url + f"&before_id={fourth}", headers=auth("athlete2")).status_code == 404
+    assert client.get(url, headers=auth("coach")).status_code == 403
+
+
 @pytest.mark.parametrize("account", ["admin", "coach", "coach2"])
 def test_staff_cannot_upload_or_delete_athlete_data(api, auth, account):
     client, _ = api
