@@ -71,6 +71,22 @@ class FormStreamTest {
     }
 
     @Test
+    fun liveCadenceWithDroppedAndLowVisibilityFramesKeepsSquatCount() {
+        // Recorded at about 30 fps; live delivers frames irregularly (about 15 per s, some intervals doubled)
+        // and loses a joint now and then. Neither may split a repetition into unclear halves.
+        val (aspect, frames) = GZIPInputStream(checkNotNull(javaClass.getResourceAsStream("/squat_jumps_one_person.csv.gz")))
+            .bufferedReader().use(::readLandmarkCsv)
+        val live = frames.filterIndexed { index, _ -> index % 2 == 0 && index % 14 != 0 }.mapIndexed { index, frame ->
+            if (index % 25 == 3) frame.copy(landmarks = frame.landmarks.map { it.copy(visibility = 0f) }) else frame }
+        val recorded = FormAnalyzer.analyze(frames, "squat", null, aspect)
+        val stream = FormStream("squat", null, aspect)
+        live.forEach { stream.feed(it) }
+        val result = stream.finish()
+        assertEquals(recorded.summary.repetitionCount, result.summary.repetitionCount)
+        assertTrue(result.repetitions.none { "tracking_gap" in it.reasons })
+    }
+
+    @Test
     fun legacyVideoAndLiveProduceIdenticalFinalJson() {
         val (aspect, frames) = GZIPInputStream(checkNotNull(javaClass.getResourceAsStream("/squat_jumps_one_person.csv.gz")))
             .bufferedReader().use(::readLandmarkCsv)

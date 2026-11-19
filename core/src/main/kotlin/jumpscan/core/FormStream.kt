@@ -32,6 +32,7 @@ class FormStream(exercise: String, private val side: String?, private val aspect
     private var trackingLost = false
     private var quality = 0.0
     private var previous = -1L
+    private var lastValid = -1L
     private var lastGate = false
     private var lastBand = false
     private var gapStart: Long? = null
@@ -47,6 +48,8 @@ class FormStream(exercise: String, private val side: String?, private val aspect
     init { require(aspect.isFinite() && aspect > 0f) { "aspect must be finite and positive" } }
 
     companion object {
+        /** Longest unobserved stretch between usable frames that a repetition or hold may bridge. */
+        const val MAX_GAP_MS = 300L
         fun cameraView(frames: List<Frame>, aspect: Float): JumpAnalyzer.View {
             val ratios = frames.mapNotNull { frame ->
                 val points = frame.landmarks
@@ -122,8 +125,7 @@ class FormStream(exercise: String, private val side: String?, private val aspect
 
     private fun advance(frame: Frame, events: MutableList<FormEvent>) {
         val time = frame.tMs
-        val gap = previous >= 0 && time - previous > 300
-        if (gap) lost(previous, events)
+        if (lastValid >= 0 && time - lastValid > MAX_GAP_MS) lost(lastValid, events)
         val left = FormGeometry(frame, aspect, 0)
         val right = FormGeometry(frame, aspect, 1)
         fun confidence(geometry: FormGeometry) = geometry.required(signal.metric).minOf {
@@ -141,29 +143,25 @@ class FormStream(exercise: String, private val side: String?, private val aspect
         }
         quality += geometry.map(::confidence).average()
         val raw = measure(signal.metric)
-        if (raw == null) {
-            lost(time, events)
-            previous = time
-            return
-        }
+        // A dropped or low-visibility frame is skipped; only an unobserved stretch longer than MAX_GAP_MS
+        // since the last usable frame interrupts the repetition or hold.
+        if (raw == null) { previous = time; return }
         val checks = entry.checks.associate { it.key to measure(it.band.metric, true) }
         fun offBand(values: Map<String, Double?>) = entry.checks.firstOrNull { check ->
             values[check.key]?.let { !check.band.contains(it) } == true
         }?.key
         val gates = signal.gates.map { measure(it.metric) }
         val gated = signal.gates.zip(gates).all { (band, value) -> band.contains(value) }
-        if (gates.any { it == null }) {
-            lost(time, events)
-            previous = time
-            return
-        }
+        if (gates.any { it == null }) { previous = time; return }
         usable++
+        val prior = lastValid
+        lastValid = time
         closeGap(time, events)
         if (isHold) {
             val threshold = if (lastBand) signal.up else signal.down
             val inBand = gated && direction * (raw - threshold) >= 0 && entry.checks.all { it.band.contains(checks[it.key]) }
-            if (gated && lastGate && previous >= 0) {
-                val step = time - previous
+            if (gated && lastGate && prior >= 0) {
+                val step = time - prior
                 progress = progress.copy(holdMs = progress.holdMs + step,
                     inBandMs = progress.inBandMs + if (inBand && lastBand) step else 0)
             }

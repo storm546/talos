@@ -1,6 +1,6 @@
 [
   {"id": "squat", "name_en": "Squat", "name_bg": "Клек", "mode": "reps", "sided": false, "view": "either",
-    "signal": {"metric": "legacy_hip_drop", "up": 0.025, "down": 0.05, "min_range": 0.05, "legacy": true, "depth_min": 45, "open_flexion": 30, "min_phase_ms": 150},
+    "signal": {"metric": "legacy_hip_drop", "up": 0.025, "down": 0.05, "min_range": 0.05, "legacy": true, "depth_min": 45, "open_flexion": 45, "min_phase_ms": 150},
     "checks": [
       {"key": "knee_flexion_peak", "label_en": "Knee flexion", "label_bg": "Сгъване на коляното", "unit": "°", "metric": "flexion:knee", "min": 45, "cue_en": "Go a little lower.", "cue_bg": "Слезте малко по-ниско."},
       {"key": "knee_alignment", "label_en": "Knee alignment", "label_bg": "Подравняване на коляното", "unit": "°", "metric": "fppa", "max": 12, "cue_en": "Guide your knee over your foot.", "cue_bg": "Насочете коляното над стъпалото."}
