@@ -765,29 +765,18 @@ def test_review_upload_conflict_returns_original(api, auth):
     client, path = api
     headers = auth("athlete1")
     body = {**METRICS, "client_id": "racing-upload"}
-    first = client.post("/api/jumps", headers=headers, json=body)
-    assert first.status_code == 201
+    ready = threading.Barrier(2)
+
+    def upload():
+        ready.wait(timeout=5)
+        return client.post("/api/jumps", headers=headers, json=body)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        requests = [executor.submit(upload) for _ in range(2)]
+        responses = [request.result(timeout=10) for request in requests]
+    assert sorted(response.status_code for response in responses) == [200, 201]
+    assert responses[0].json() == responses[1].json()
     with main.database(path) as db:
-        user = main.current_user(headers["Authorization"], db)
-
-        class MissedRepeat:
-            """Simulate a competing commit between the repeat lookup and insert."""
-            missed = False
-
-            def execute(self, sql, params=()):
-                if sql.startswith("SELECT id, created_at FROM jumps") and not self.missed:
-                    self.missed = True
-                    return db.execute("SELECT id, created_at FROM jumps WHERE 0")
-                return db.execute(sql, params)
-
-            def __getattr__(self, name):
-                return getattr(db, name)
-
-        endpoint = next(route.endpoint for route in client.app.routes
-                        if route.path == "/api/jumps" and "POST" in route.methods)
-        response = endpoint(main.Jump(**body), user, MissedRepeat())
-        assert response.status_code == 200
-        assert json.loads(response.body) == first.json()
         assert db.execute("SELECT COUNT(*) FROM jumps WHERE client_id = 'racing-upload'").fetchone()[0] == 1
 
 
