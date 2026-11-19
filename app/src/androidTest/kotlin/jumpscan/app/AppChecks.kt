@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.os.Bundle
 import jumpscan.core.Frame
 import jumpscan.core.FormMetrics
+import jumpscan.core.FormRepetition
 import jumpscan.core.FormSummary
 import jumpscan.core.JumpMetrics
 import jumpscan.core.JumpAnalyzer
@@ -63,6 +64,7 @@ class AppChecks : Instrumentation() {
             check(PendingUploads(root, "https://club.example", 2).count() == 0)
             check(runCatching { queue.enqueueFeature(FeatureWrite.FORM, "", JSONObject(form.toString())
                 .put("video", "local only"), uuid) }.isFailure)
+            liveFormChecks(root)
             val restored = PendingUploads(root, "https://club.example", 1)
             val firstAttempt = runCatching {
                 restored.send(linkedMapOf(), featureSend = { _, path, json ->
@@ -88,6 +90,36 @@ class AppChecks : Instrumentation() {
                 "POST /api/set-logs", "PUT /api/me/nutrition/days/$day/complete"))
             check(sent[formName] == 17L && restored.count() == 0)
         } finally { root.deleteRecursively() }
+    }
+
+    /** Live sets carry mode, source, per-repetition checks and hold times, and are queued like recorded sets. */
+    private fun liveFormChecks(root: File) {
+        val queue = PendingUploads(root.resolve("live"), "https://club.example", 1)
+        val rep = FormRepetition(1, "complete", emptyList(), 0, 400, 900, null, null, null, null, null, null,
+            400, 500, null, mapOf("elbow_angle" to 82.5, "body_line" to null))
+        val pushUp = JSONObject(FormMetrics("push_up", null, "side", 14.0, .9, listOf(rep),
+            FormSummary(1, 0, 0, null, null, null, null, null, null, null, null, null, null), emptyList(),
+            mode = "reps", source = "live").toJson())
+        val plank = JSONObject(FormMetrics("plank", null, "side", 14.0, .9, emptyList(),
+            FormSummary(0, 0, 0, null, null, null, null, null, null, null, null, null, null, 31_000, 27_500),
+            emptyList(), mode = "hold", source = "live").toJson())
+        val names = listOf(pushUp, plank).map { queue.enqueueFeature(FeatureWrite.FORM, "", it, UUID.randomUUID().toString()) }
+        check(listOf(pushUp to "reps", plank to "hold").all { (body, mode) -> body.getString("mode") == mode })
+        for (bad in listOf(JSONObject(plank.toString()).put("mode", "reps"), JSONObject(plank.toString()).put("source", "camera"),
+            JSONObject(pushUp.toString()).apply { getJSONArray("repetitions").getJSONObject(0)
+                .getJSONObject("checks").put("hip_angle", 1) })) {
+            check(runCatching { queue.enqueueFeature(FeatureWrite.FORM, "", bad, UUID.randomUUID().toString()) }.isFailure)
+        }
+        val sent = linkedMapOf<String, Long>()
+        val bodies = mutableListOf<JSONObject>()
+        PendingUploads(root.resolve("live"), "https://club.example", 1).send(sent, featureSend = { kind, path, json ->
+            check(kind == FeatureWrite.FORM && path == "/api/form")
+            bodies += json
+            bodies.size.toLong()
+        }) { error("Not a jump") }
+        check(sent.keys == names.toSet() && bodies.all { it.getString("source") == "live" && it.has("client_id") })
+        check(bodies[1].getJSONObject("summary").getLong("in_band_ms") == 27_500L)
+        check(bodies[0].getJSONArray("repetitions").getJSONObject(0).getJSONObject("checks").getDouble("elbow_angle") == 82.5)
     }
 
     private fun clubChecks() {

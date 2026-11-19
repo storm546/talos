@@ -28,6 +28,8 @@ internal fun validateFormFields(body: JSONObject) {
         repFields.keys.map { "median_$it" }
     val rep = setOf("index", "status", "reasons", "start_ms", "bottom_ms", "end_ms", "hip_below_knee") + repFields.keys
     val exercise = FormExercises[body.getString("exercise")]
+    if (body.has("mode")) require(body.getString("mode") == exercise.mode)
+    if (body.has("source")) require(body.getString("source") in setOf("live", "video"))
     val hold = if (exercise.mode == "hold") setOf("hold_ms", "in_band_ms") else emptySet()
     require(body.getJSONObject("summary").keys().asSequence().toSet() == summary + hold)
     val rows = body.getJSONArray("repetitions").objects()
@@ -173,16 +175,8 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
 private fun MainActivity.saveFormResult(result: FormResult, done: (Int?, String) -> Unit) {
     if (token().isEmpty()) return login()
     val body = JSONObject(result.metrics.toString())
-    if (body.optString("source") != "live") {
-        body.remove("mode")
-        saveFeature(FeatureWrite.FORM, body, clientId = result.clientId, done = done)
-        return
-    }
-    body.put("client_id", result.clientId)
-    val api = featureApi()
-    work(getString(R.string.feature_saving), { api.post("/api/form", body) }, {
-        done(R.string.feature_saved, getString(R.string.feature_saved))
-    }, { done(null, it) })
+    if (body.optString("source") != "live") body.remove("mode")
+    saveFeature(FeatureWrite.FORM, body, clientId = result.clientId, done = done)
 }
 
 @Suppress("DEPRECATION")

@@ -11,8 +11,9 @@ import java.util.UUID
 
 internal val uploadLock = Any()
 
-internal enum class FeatureWrite(val method: String, val keys: Set<String>) {
-    FORM("POST", setOf("exercise", "side", "view", "fps", "quality", "repetitions", "summary", "warnings")),
+internal enum class FeatureWrite(val method: String, val keys: Set<String>, val optional: Set<String> = emptySet()) {
+    FORM("POST", setOf("exercise", "side", "view", "fps", "quality", "repetitions", "summary", "warnings"),
+        setOf("mode", "source")),
     FOOD("POST", setOf("day", "meal", "food_id", "grams")),
     WEIGHT("PUT", setOf("kg")),
     SET("POST", setOf("day", "exercise_id", "set_no", "reps", "load_kg", "rpe", "plan_id")),
@@ -28,7 +29,8 @@ internal enum class FeatureWrite(val method: String, val keys: Set<String>) {
 
     fun validate(body: JSONObject) {
         val expected = if (method == "POST") keys + "client_id" else keys
-        require(body.keys().asSequence().toSet() == expected)
+        val present = body.keys().asSequence().toSet()
+        require(present.containsAll(expected) && optional.containsAll(present - expected))
         if (method == "POST") UUID.fromString(body.getString("client_id"))
         if (this == FORM) validateFormFields(body)
     }
