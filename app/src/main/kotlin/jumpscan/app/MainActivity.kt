@@ -6,8 +6,6 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.RippleDrawable
-import android.graphics.drawable.StateListDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -178,23 +176,7 @@ class MainActivity : Activity() {
         minHeight = dp(48)
         minimumWidth = 0
         setPadding(dp(12), dp(10), dp(12), dp(10))
-        setTypeface(null, Typeface.BOLD)
-        setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
-            intArrayOf(muted, if (primary) getColor(R.color.hero) else ink)))
-        fun shape(fill: Int) = GradientDrawable().apply {
-            setColor(fill)
-            cornerRadius = dp(14).toFloat()
-            setStroke(dp(1), if (primary) fill else getColor(R.color.line))
-        }
-        val states = StateListDrawable().apply {
-            addState(intArrayOf(-android.R.attr.state_enabled), shape(getColor(R.color.hover)))
-            addState(intArrayOf(android.R.attr.state_focused), this@MainActivity.shape(getColor(R.color.hover), 14, green))
-            addState(intArrayOf(), shape(getColor(if (primary) R.color.signal else R.color.surface)))
-        }
-        backgroundTintList = null
-        background = RippleDrawable(ColorStateList.valueOf(if (primary) getColor(R.color.accent_pressed)
-            else getColor(R.color.hover)), states, null)
-        stateListAnimator = null
+        styleButton(this, primary)
         setOnClickListener { action() }
         parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
     }

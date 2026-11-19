@@ -16,6 +16,7 @@ internal class LiveFormPreview(context: Context) : View(context) {
     private var bitmap: Bitmap? = null
     private var frame: Frame? = null
     private var mirror = false
+    private val bone = context.getColor(R.color.signal)
 
     fun show(image: Bitmap, pose: Frame, flipped: Boolean) {
         bitmap = image
@@ -25,7 +26,7 @@ internal class LiveFormPreview(context: Context) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        canvas.drawColor(Color.rgb(16, 31, 26))
+        canvas.drawColor(context.getColor(R.color.hero))
         val image = bitmap ?: return
         val zoom = min(width.toFloat() / image.width, height.toFloat() / image.height)
         val drawWidth = zoom * image.width
@@ -36,15 +37,22 @@ internal class LiveFormPreview(context: Context) : View(context) {
         if (mirror) canvas.scale(-1f, 1f, width * .5f, height * .5f)
         canvas.drawBitmap(image, null, rect, paint)
         frame?.landmarks?.let { points ->
-            paint.color = Color.rgb(155, 255, 198)
-            paint.strokeWidth = 2.5f * resources.displayMetrics.density
+            val density = resources.displayMetrics.density
             paint.strokeCap = Paint.Cap.ROUND
-            for ((from, to) in bones) {
-                val start = points[from]
-                val end = points[to]
-                if (start.visibility < .5f || end.visibility < .5f) continue
-                canvas.drawLine(rect.left + start.x * drawWidth, rect.top + start.y * drawHeight,
-                    rect.left + end.x * drawWidth, rect.top + end.y * drawHeight, paint)
+            fun x(index: Int) = rect.left + points[index].x * drawWidth
+            fun y(index: Int) = rect.top + points[index].y * drawHeight
+            // A dark under-stroke keeps the accent skeleton visible on light backgrounds.
+            for ((width, color) in listOf(6f to Color.argb(150, 16, 31, 26), 3.5f to bone)) {
+                paint.strokeWidth = width * density
+                paint.color = color
+                for ((from, to) in bones) {
+                    if (points[from].visibility < .5f || points[to].visibility < .5f) continue
+                    canvas.drawLine(x(from), y(from), x(to), y(to), paint)
+                }
+            }
+            paint.color = Color.WHITE
+            for (joint in bones.flatMap { listOf(it.first, it.second) }.distinct()) {
+                if (points[joint].visibility >= .5f) canvas.drawCircle(x(joint), y(joint), 3.5f * density, paint)
             }
         }
         canvas.restore()

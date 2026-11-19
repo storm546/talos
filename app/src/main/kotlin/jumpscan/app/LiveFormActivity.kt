@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Bundle
@@ -12,9 +13,11 @@ import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.Surface
+import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -72,7 +75,7 @@ class LiveFormActivity : ComponentActivity() {
     private var lastResultAt = 0L
     private val latencyMs = mutableListOf<Long>()
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted && running) openFeed() else if (!granted) banner.setText(R.string.form_camera_permission)
+        if (granted && running) openFeed() else if (!granted) { banner.setText(R.string.form_camera_permission); tone(Tone.WARNING) }
     }
 
     override fun onCreate(state: Bundle?) {
@@ -90,40 +93,56 @@ class LiveFormActivity : ComponentActivity() {
     }
 
     private fun buildScreen() {
-        val page = LinearLayout(this).apply {
+        val root = FrameLayout(this).apply { setBackgroundColor(getColor(R.color.hero)) }
+        preview = LiveFormPreview(this)
+        root.addView(preview, FrameLayout.LayoutParams(-1, -1))
+        val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.paper))
+            setPadding(dp(20), dp(12), dp(20), dp(44))
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xF2101F1A.toInt(), 0xD9101F1A.toInt(), 0x00101F1A))
         }
-        val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), dp(8)) }
         val name = exercise.label(bg)
         val title = side?.let { getString(R.string.form_named_side, name, getString(if (it == "L") R.string.form_left else R.string.form_right)) } ?: name
-        header.addView(label(getString(if (replay) R.string.form_replay_debug else R.string.form_live), 13, R.color.accent).apply { letterSpacing = .10f })
-        header.addView(label(title, 24, R.color.ink).apply { setTypeface(null, Typeface.BOLD) })
-        header.addView(label(getString(exercise.viewGuide()), 14, R.color.muted))
-        page.addView(header)
-        preview = LiveFormPreview(this)
-        page.addView(preview, LinearLayout.LayoutParams(-1, 0, 1f))
-        val controls = LinearLayout(this).apply {
+        header.addView(label(getString(if (replay) R.string.form_replay_debug else R.string.ui_live).uppercase(appLocale), 12, R.color.signal).apply {
+            letterSpacing = .12f; setTypeface(null, Typeface.BOLD)
+        })
+        header.addView(label(title, 26, R.color.surface).apply { typeface = Typeface.create("sans-serif-black", Typeface.NORMAL) })
+        header.addView(label(getString(exercise.viewGuide()), 14, R.color.on_hero))
+        root.addView(header, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+        val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(6), dp(18), dp(8))
+            setPadding(dp(20), dp(16), dp(20), dp(16))
+            background = shape(0xE0101F1A.toInt(), 28)
         }
-        fun display(value: String, size: Int, tint: Int) = label(value, size, tint).also {
-            it.gravity = Gravity.CENTER
-            controls.addView(it, LinearLayout.LayoutParams(-1, -2))
+        val tally = LinearLayout(this).apply { gravity = Gravity.BOTTOM }
+        counter = label("", 64, R.color.signal).apply {
+            typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
+            includeFontPadding = false
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
-        counter = display("", 46, R.color.ink).apply { setTypeface(Typeface.MONOSPACE, Typeface.BOLD) }
-        subcount = display("", 14, R.color.muted)
-        banner = display(getString(R.string.form_finding_camera), 16, R.color.ink).apply {
-            setBackgroundColor(getColor(R.color.hover)); minHeight = dp(50); setPadding(dp(10), dp(4), dp(10), dp(4))
+        tally.addView(counter)
+        val unit = label(getString(if (exercise.mode == "hold") R.string.ui_held else R.string.ui_reps_unit), 16, R.color.on_hero)
+        tally.addView(unit, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10); bottomMargin = dp(10) })
+        panel.addView(tally)
+        subcount = label("", 14, R.color.on_hero)
+        panel.addView(subcount)
+        banner = label(getString(R.string.form_finding_camera), 16, R.color.ink).apply {
+            minHeight = dp(52); gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(10), dp(14), dp(10)); setTypeface(null, Typeface.BOLD)
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
-        voice = display(getString(R.string.form_voice_pending), 12, R.color.muted)
-        action = Button(this).apply {
-            text = getString(R.string.form_start); isAllCaps = false; isEnabled = false; minHeight = dp(48)
+        panel.addView(banner, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        tone(Tone.NEUTRAL)
+        voice = label(getString(R.string.form_voice_pending), 12, R.color.on_hero)
+        panel.addView(voice, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        action = styleButton(Button(this), primary = true).apply {
+            text = getString(R.string.form_start); isAllCaps = false; isEnabled = false; minHeight = dp(56); textSize = 17f
             setOnClickListener { if (stream == null) startSet() else finishSet() }
         }
-        controls.addView(action, LinearLayout.LayoutParams(-1, -2))
-        page.addView(controls)
-        page.setOnApplyWindowInsetsListener { view, insets ->
+        panel.addView(action, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        root.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { setMargins(dp(12), 0, dp(12), dp(12)) })
+        root.setOnApplyWindowInsetsListener { view, insets ->
             if (Build.VERSION.SDK_INT >= 30) {
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
                 view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -134,9 +153,30 @@ class LiveFormActivity : ComponentActivity() {
             }
             insets
         }
-        setContentView(page)
-        page.requestApplyInsets()
+        setContentView(root)
+        @Suppress("DEPRECATION")
+        window.statusBarColor = getColor(R.color.hero)
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = getColor(R.color.hero)
+        // Light system-bar icons over the dark camera surface.
+        if (Build.VERSION.SDK_INT >= 30) window.insetsController?.setSystemBarsAppearance(0,
+            android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
+        else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = 0
+        }
+        root.requestApplyInsets()
         showProgress(FormProgress())
+    }
+
+    private enum class Tone(val fill: Int, val text: Int) {
+        GOOD(R.color.signal, R.color.hero), NEUTRAL(R.color.on_hero, R.color.hero), WARNING(R.color.notice, R.color.warning)
+    }
+
+    private fun tone(value: Tone) {
+        banner.background = shape(getColor(value.fill), 14)
+        banner.setTextColor(getColor(value.text))
     }
 
     private fun label(value: String, size: Int, foreground: Int) = TextView(this).apply {
@@ -238,11 +278,17 @@ class LiveFormActivity : ComponentActivity() {
             }
             val ready = calibration.size == 10 && (exercise.view == "either" || exercise.view.equals(observedView.name, true))
             action.isEnabled = replay || ready
-            banner.setText(when {
+            val status = when {
                 ready || replay -> R.string.form_frame_ready
                 !inFrame -> R.string.form_full_body
                 calibration.size < 10 || observedView == JumpAnalyzer.View.AUTO -> R.string.form_hold_frame
                 else -> exercise.viewGuide()
+            }
+            banner.setText(status)
+            tone(when (status) {
+                R.string.form_frame_ready -> Tone.GOOD
+                R.string.form_hold_frame -> Tone.NEUTRAL
+                else -> Tone.WARNING
             })
             return
         }
@@ -257,6 +303,11 @@ class LiveFormActivity : ComponentActivity() {
         val key = if (inFrame) active.progress.cue else "tracking_gap"
         val message = cue(key)
         banner.text = message
+        tone(when (key) {
+            null -> Tone.GOOD
+            "ready_position", "hold_position" -> Tone.NEUTRAL
+            else -> Tone.WARNING
+        })
         speak(active.progress, key, message)
         if (frame.tMs - setStarted >= 60_000) finishSet()
     }
@@ -269,6 +320,7 @@ class LiveFormActivity : ComponentActivity() {
         latencyMs.clear()
         action.setText(R.string.form_stop)
         banner.setText(R.string.form_begin)
+        tone(Tone.GOOD)
         if (replay) replayStart = SystemClock.elapsedRealtime()
     }
 
@@ -301,7 +353,7 @@ class LiveFormActivity : ComponentActivity() {
 
     private fun showProgress(progress: FormProgress) {
         if (exercise.mode == "hold") {
-            counter.text = getString(R.string.form_seconds, progress.holdMs / 1000.0)
+            counter.text = String.format(appLocale, "%.1f", progress.holdMs / 1000.0)
             subcount.text = getString(R.string.form_in_band, progress.inBandMs / 1000.0)
         } else {
             counter.text = String.format(appLocale, "%d", progress.complete)
@@ -356,6 +408,7 @@ class LiveFormActivity : ComponentActivity() {
         if (stream != null) finishSet()
         action.isEnabled = false
         banner.setText(R.string.form_camera_error)
+        tone(Tone.WARNING)
     }
 
     override fun onStop() {

@@ -4,10 +4,11 @@ package jumpscan.app
 
 import android.content.Intent
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.Fragment
 import android.os.Build
 import android.provider.MediaStore
+import android.graphics.Typeface
+import android.widget.LinearLayout
 import jumpscan.core.FormExercise
 import jumpscan.core.FormExercises
 import org.json.JSONObject
@@ -53,71 +54,151 @@ private fun MainActivity.formLabel(choice: FormChoice): String {
     }
 }
 
+private class FormGroup(val label: Int, val icon: String, val ids: Set<String>)
+
+private val formGroups = listOf(
+    FormGroup(R.string.ui_group_legs, "legs", setOf("squat", "single_leg_squat", "lunge", "split_squat",
+        "lateral_lunge", "step_up", "calf_raise", "wall_sit")),
+    FormGroup(R.string.ui_group_hinge, "hinge", setOf("glute_bridge", "romanian_deadlift")),
+    FormGroup(R.string.ui_group_push, "push", setOf("push_up", "overhead_press", "dip", "lateral_raise")),
+    FormGroup(R.string.ui_group_pull, "pull", setOf("pull_up", "bent_over_row", "biceps_curl")),
+    FormGroup(R.string.ui_group_core, "core", setOf("plank", "side_plank")),
+    FormGroup(R.string.ui_group_conditioning, "conditioning", emptySet()),
+)
+
+/** Exercises missing from the groups above fall into conditioning, so a catalogue addition is never hidden. */
+private fun formGroup(id: String) = formGroups.firstOrNull { id in it.ids } ?: formGroups.last()
+internal fun formIcon(id: String) = formGroup(id).icon
+
+private fun MainActivity.exerciseFacts(exercise: FormExercise) = listOfNotNull(
+    getString(when (exercise.view) { "front" -> R.string.form_front; "side" -> R.string.form_side; else -> R.string.ui_view_either }),
+    if (exercise.sided) getString(R.string.ui_one_side) else null).joinToString(" · ")
+
+internal fun MainActivity.unitLabel(unit: String) = unit.replace("torso", getString(R.string.ui_torso))
+
+/** The value already carries its unit, so drop a "(°)" style suffix from the label. */
+private fun MainActivity.repLabel(key: String) = getString(repFields.getValue(key)).replace(Regex(" \\((°|%|ms|мс)\\)$"), "")
+
 internal fun MainActivity.formHome(message: String? = null) {
     layout(getString(R.string.form_title), "form")
-    featureError(message)
-    val exercise = FormExercises[formChoice.exercise]
-    val bg = locale.language == "bg"
-    text(getString(R.string.form_modes_guide))
-    button(getString(R.string.form_change_exercise, exercise.label(bg))) {
-        val rows = FormExercises.all
-        AlertDialog.Builder(this).setTitle(R.string.form_choose_exercise)
-            .setSingleChoiceItems(rows.map { it.label(bg) }.toTypedArray(), rows.indexOf(exercise)) { dialog, index ->
-                val selected = rows[index]
-                formChoice = FormChoice(selected.id, if (selected.sided) formChoice.side ?: "L" else null)
-                dialog.dismiss()
-                formHome()
-            }.setNegativeButton(R.string.cancel, null).show()
+    message?.let { notice(it, caution = true) }
+    hero(getString(R.string.ui_form_hero), getString(R.string.form_modes_guide),
+        getString(R.string.ui_form_eyebrow, FormExercises.all.size)).also { panel ->
+        val links = row(panel)
+        if (token().isNotEmpty()) button(getString(R.string.ui_form_history), parent = links) { techniqueHistory() }
+            .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(12) }
+        lastForm?.let { result -> button(getString(R.string.last_result), parent = links) { formResult(result.metrics, result) }
+            .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(12); marginStart = dp(8) } }
     }
-    if (exercise.sided) {
-        button(formLabel(formChoice)) {
-            formChoice = formChoice.copy(side = if (formChoice.side == "L") "R" else "L")
-            formHome()
-        }
+    notice(getString(R.string.ui_form_validated_note))
+    val replay = BuildConfig.DEBUG && File(filesDir, LIVE_REPLAY_FILE).isFile
+    if (replay) text(getString(R.string.ui_replay_hint), 13)
+    for (group in formGroups) {
+        val members = FormExercises.all.filter { formGroup(it.id) == group }
+        if (members.isEmpty()) continue
+        section(group.label).setPadding(0, dp(20), 0, 0)
+        members.forEach { exerciseCard(it, group.icon, replay) }
     }
-    text(getString(exercise.viewGuide()), 14)
-    if (!exercise.signal.legacy) text(getString(R.string.form_experimental), 14)
-    button(getString(R.string.form_live), primary = true) { openLiveForm(false) }
-    if (BuildConfig.DEBUG && File(filesDir, LIVE_REPLAY_FILE).isFile) {
-        button(getString(R.string.form_replay_debug)) { openLiveForm(true) }
-    }
-    text(getString(R.string.form_clip_limit), 14)
-    button(getString(R.string.record)) {
-        launchVideo(Intent(MediaStore.ACTION_VIDEO_CAPTURE).putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1)
-            .putExtra(MediaStore.EXTRA_DURATION_LIMIT, 60), 12)
-    }
-    button(getString(R.string.pick_video)) {
-        val pick = if (Build.VERSION.SDK_INT >= 33) Intent(MediaStore.ACTION_PICK_IMAGES)
-            else Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-        launchVideo(pick.setType("video/*"), 13)
-    }
-    lastForm?.let { result -> button(getString(R.string.last_result)) { formResult(result.metrics, result) } }
-    if (token().isNotEmpty()) button(getString(R.string.form_history)) { formHistory() }
     button(getString(R.string.home)) { home() }
 }
 
-private fun MainActivity.formCounts(summary: JSONObject) = if (summary.has("hold_ms")) getString(R.string.form_hold_counts,
-    summary.getLong("hold_ms") / 1000.0, summary.getLong("in_band_ms") / 1000.0) else getString(R.string.form_counts,
-        summary.getInt("repetition_count"), summary.getInt("partial_count"), summary.getInt("unclear_count"))
+private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, replay: Boolean) {
+    val panel = card()
+    val head = row(panel, center = true)
+    iconTile(icon, head)
+    val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    head.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
+    text(exercise.label(locale.language == "bg"), 18, parent = column).apply {
+        setTypeface(null, Typeface.BOLD)
+        setPadding(0, 0, 0, 0)
+    }
+    chip(getString(if (exercise.mode == "hold") R.string.ui_mode_hold else R.string.ui_mode_reps), row(column))
+    text(exerciseFacts(exercise), 13, parent = column).setPadding(0, dp(6), 0, 0)
+    var side = if (exercise.sided) formChoice.takeIf { it.exercise == exercise.id }?.side ?: "L" else null
+    if (exercise.sided) {
+        val sides = row(panel, 4)
+        val toggles = listOf("L" to R.string.form_left, "R" to R.string.form_right).mapIndexed { index, (value, label) ->
+            button(getString(label), parent = sides) { side = value }.apply {
+                layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(8); if (index > 0) marginStart = dp(8) }
+                contentDescription = getString(R.string.ui_side_choice, getString(label))
+            } to value
+        }
+        fun mark() = toggles.forEach { (toggle, value) ->
+            toggle.isSelected = value == side
+            toggle.background = shape(getColor(if (toggle.isSelected) R.color.hover else R.color.surface), 14,
+                getColor(if (toggle.isSelected) R.color.accent else R.color.line))
+            toggle.setTextColor(getColor(if (toggle.isSelected) R.color.accent else R.color.ink))
+        }
+        toggles.forEach { (toggle, value) -> toggle.setOnClickListener { side = value; mark() } }
+        mark()
+    }
+    val actions = row(panel, 4)
+    fun choose() { formChoice = FormChoice(exercise.id, side) }
+    button(getString(R.string.ui_live), primary = true, parent = actions) { choose(); openLiveForm(false) }.apply {
+        layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10) }
+        contentDescription = getString(R.string.ui_live_for, exercise.label(locale.language == "bg"))
+        setCompoundDrawablesRelativeWithIntrinsicBounds(UiIcon("form", getColor(R.color.hero), dp(18)), null, null, null)
+        if (replay) setOnLongClickListener { choose(); openLiveForm(true); true }
+    }
+    button(getString(R.string.ui_from_video), parent = actions) { choose(); formVideo() }.apply {
+        layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10); marginStart = dp(8) }
+        contentDescription = getString(R.string.ui_video_for, exercise.label(locale.language == "bg"))
+    }
+}
+
+internal fun MainActivity.formVideo() {
+    val exercise = FormExercises[formChoice.exercise]
+    layout(getString(R.string.form_title), "form_video")
+    hero(formLabel(formChoice), getString(exercise.viewGuide()), getString(R.string.ui_from_video).uppercase(locale)).also { panel ->
+        button(getString(R.string.record), primary = true, parent = panel) {
+            launchVideo(Intent(MediaStore.ACTION_VIDEO_CAPTURE).putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1)
+                .putExtra(MediaStore.EXTRA_DURATION_LIMIT, 60), 12)
+        }
+        button(getString(R.string.pick_video), parent = panel) {
+            val pick = if (Build.VERSION.SDK_INT >= 33) Intent(MediaStore.ACTION_PICK_IMAGES)
+                else Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+            launchVideo(pick.setType("video/*"), 13)
+        }
+    }
+    if (!exercise.signal.legacy) notice(getString(R.string.form_experimental), caution = true)
+    text(getString(R.string.form_clip_limit), 14)
+    text(getString(R.string.no_video_upload), 14)
+    button(getString(R.string.ui_all_exercises)) { formHome() }
+}
+
+private fun median(values: List<Double>) = values.sorted().let { if (it.isEmpty()) null
+    else if (it.size % 2 == 1) it[it.size / 2] else (it[it.size / 2 - 1] + it[it.size / 2]) / 2 }
 
 internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = null, error: String? = null) {
-    layout(getString(R.string.form_result), if (result == null) "form_detail" else "form_result")
+    layout(getString(if (result == null) R.string.form_result else R.string.ui_set_done), if (result == null) "form_detail" else "form_result")
     val exercise = FormExercises[metrics.getString("exercise")]
-    text(formLabel(FormChoice(exercise.id, if (metrics.isNull("side")) null else metrics.getString("side"))), 18, green)
+    val bg = locale.language == "bg"
+    val head = row(page, 2, center = true)
+    iconTile(formIcon(exercise.id), head)
+    val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    head.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
+    text(formLabel(FormChoice(exercise.id, if (metrics.isNull("side")) null else metrics.getString("side"))), 20, parent = column)
+        .setTypeface(null, Typeface.BOLD)
+    text(listOfNotNull(getString(if (metrics.getString("view") == "front") R.string.form_front else R.string.form_side),
+        when (metrics.optString("source")) { "live" -> getString(R.string.ui_live); "video" -> getString(R.string.ui_video); else -> null },
+        if (metrics.has("created_at")) localDateTime(metrics.getString("created_at"), locale) else null)
+        .joinToString(" · "), 13, parent = column)
     val summary = metrics.getJSONObject("summary")
-    text(formCounts(summary), 18)
-    text(getString(if (metrics.getString("view") == "front") R.string.form_front else R.string.form_side), 14)
-    for (warning in metrics.getJSONArray("warnings").let { array -> List(array.length()) { array.getString(it) } }) {
-        text(getString(when (warning) {
-            "unclear_reps" -> R.string.form_unclear_warning
-            "single_leg_view" -> R.string.form_one_leg_warning
-            "low_visibility" -> R.string.low_visibility
-            else -> R.string.unknown_warning
-        }), 14, getColor(R.color.warning))
-    }
+    if (exercise.mode == "hold") statGrid(listOf("hold_ms" to R.string.ui_hold, "in_band_ms" to R.string.ui_in_band).map { (key, label) ->
+        Triple(getString(label), if (summary.isNull(key)) "—" else metricNumber(summary.getLong(key) / 1000.0, key, locale), getString(R.string.ui_seconds))
+    }) else statGrid(listOf(Triple(getString(R.string.ui_complete), "${summary.getInt("repetition_count")}", ""),
+        Triple(getString(R.string.ui_partial), "${summary.getInt("partial_count")}", ""),
+        Triple(getString(R.string.ui_unclear), "${summary.getInt("unclear_count")}", "")), columns = 3)
+    val warnings = metrics.getJSONArray("warnings").let { array -> List(array.length()) { array.getString(it) } }
+    if (warnings.isNotEmpty()) notice(getString(R.string.ui_reviews) + "\n" + warnings.joinToString("\n") { getString(when (it) {
+        "unclear_reps" -> R.string.form_unclear_warning
+        "single_leg_view" -> R.string.form_one_leg_warning
+        "low_visibility" -> R.string.low_visibility
+        else -> R.string.unknown_warning
+    }) }, caution = true)
     if (result != null) {
-        featureError(error)
-        result.status?.let { text(getString(it), 15, if (it == R.string.feature_rejected) getColor(R.color.error) else green) }
+        error?.let { notice(it, caution = true) }
+        result.status?.let { notice(getString(it), caution = it == R.string.feature_rejected) }
         if (metrics.getJSONArray("repetitions").length() > 100) text(getString(R.string.form_set_too_long), 14)
         else if (result.status !in listOf(R.string.feature_saved, R.string.saved_pending)) {
             button(getString(if (token().isEmpty()) R.string.sign_in_upload else R.string.upload), primary = true) {
@@ -128,34 +209,54 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
             }
         }
         if (result.status == R.string.saved_pending) pendingControls()
-        text(getString(R.string.no_video_upload), 14)
+        text(getString(R.string.no_video_upload), 13)
     }
-    if (metrics.has("created_at")) text(localDateTime(metrics.getString("created_at"), locale), 14)
-    if (!summary.isNull("worst_repetition")) {
-        text(getString(R.string.form_medians), 18, green)
-        formMeasurements(summary, "median_")
-        text(getString(R.string.form_shallowest, summary.getInt("worst_repetition")), 14)
+    val reps = metrics.getJSONArray("repetitions").objects()
+    val medians = if (exercise.signal.legacy) repFields.keys.filter { !summary.isNull("median_$it") }.map { key ->
+        Triple(repLabel(key), number(summary, "median_$key"), when {
+            key.endsWith("_ms") -> getString(R.string.unit_ms)
+            key == "flexion_asymmetry_pct" -> "%"
+            else -> "°"
+        })
+    } else exercise.checks.mapNotNull { check ->
+        median(reps.filter { it.getString("status") == "complete" }.mapNotNull { rep ->
+            rep.optJSONObject("checks")?.takeIf { !it.isNull(check.key) }?.getDouble(check.key) })
+            ?.let { Triple(if (bg) check.labelBg else check.labelEn, metricNumber(it, check.key, locale), unitLabel(check.unit)) }
     }
-    for (rep in metrics.getJSONArray("repetitions").objects()) {
-        val status = getString(when (rep.getString("status")) {
+    if (medians.isNotEmpty()) {
+        section(R.string.form_medians).setPadding(0, dp(20), 0, 0)
+        statGrid(medians)
+        if (!summary.isNull("worst_repetition")) text(getString(R.string.form_shallowest, summary.getInt("worst_repetition")), 13)
+    }
+    if (reps.isNotEmpty()) section(R.string.ui_repetitions).setPadding(0, dp(20), 0, 0)
+    for (rep in reps) {
+        val panel = card()
+        val title = row(panel, center = true)
+        text(getString(R.string.ui_rep_number, rep.getInt("index")), 17, parent = title).apply {
+            setTypeface(null, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+        }
+        val status = rep.getString("status")
+        chip(getString(when (status) {
             "complete" -> R.string.form_complete
             "partial" -> R.string.form_partial
             else -> R.string.form_unclear
-        })
-        text(getString(R.string.form_rep, rep.getInt("index"), status), 18, green).setPadding(0, dp(14), 0, dp(4))
-        if (rep.getString("status") != "unclear") {
-            if (exercise.signal.legacy) formMeasurements(rep)
-            if (!exercise.signal.legacy) rep.optJSONObject("checks")?.let { checks ->
-                for (check in exercise.checks) {
-                    val label = if (locale.language == "bg") check.labelBg else check.labelEn
-                    val value = if (checks.isNull(check.key)) getString(R.string.not_available)
-                        else "${number(checks, check.key)} ${check.unit}"
-                    text(getString(R.string.feature_value, label, value), 14)
-                }
+        }), title, caution = status != "complete").apply { (layoutParams as LinearLayout.LayoutParams).topMargin = 0 }
+        if (status != "unclear") {
+            if (exercise.signal.legacy) for (key in repFields.keys) {
+                if (!rep.isNull(key)) valueRow(repLabel(key), number(rep, key) + when {
+                    key.endsWith("_ms") -> " " + getString(R.string.unit_ms)
+                    key == "flexion_asymmetry_pct" -> "%"
+                    else -> "°"
+                }, panel)
+            } else rep.optJSONObject("checks")?.let { checks ->
+                for (check in exercise.checks) valueRow(if (bg) check.labelBg else check.labelEn,
+                    if (checks.isNull(check.key)) getString(R.string.not_available)
+                    else "${number(checks, check.key)} ${unitLabel(check.unit)}".replace(" °", "°"), panel)
             }
         }
         if (!rep.isNull("hip_below_knee")) text(getString(if (rep.getBoolean("hip_below_knee"))
-            R.string.form_hip_below else R.string.form_hip_not_below), 14)
+            R.string.form_hip_below else R.string.form_hip_not_below), 13, parent = panel)
         val reasons = rep.getJSONArray("reasons")
         for (index in 0 until reasons.length()) text(getString(when (reasons.getString(index)) {
             "below_min_depth" -> if (exercise.signal.legacy) R.string.form_reason_depth else R.string.form_reason_range
@@ -164,11 +265,10 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
             "tracking_gap" -> R.string.form_reason_gap
             "too_fast" -> R.string.form_reason_fast
             else -> R.string.form_reason_geometry
-        }), 14)
+        }), 13, parent = panel)
     }
-    button(getString(if (result == null) R.string.form_history else R.string.form_title)) {
-        if (result == null) formHistory() else formHome()
-    }
+    if (result != null) button(getString(R.string.ui_another_set)) { formHome() }
+    if (token().isNotEmpty()) button(getString(R.string.ui_form_history)) { techniqueHistory() }
     button(getString(R.string.home)) { home() }
 }
 
@@ -206,33 +306,4 @@ internal fun FormExercise.viewGuide() = when (view) {
     "front" -> R.string.form_camera_front
     "side" -> R.string.form_camera_side
     else -> R.string.form_camera_either
-}
-
-private fun MainActivity.formMeasurements(values: JSONObject, prefix: String = "") {
-    for ((key, label) in repFields) {
-        val value = number(values, prefix + key)
-        val unit = when {
-            key.endsWith("_ms") -> getString(R.string.unit_ms)
-            key == "depth" -> "°"
-            else -> ""
-        }
-        text(getString(R.string.feature_value, getString(label), if (unit.isEmpty() || values.isNull(prefix + key)) value else "$value $unit"), 14)
-    }
-}
-
-private fun MainActivity.formHistory(offset: Int = 0) {
-    val api = featureApi()
-    work(getString(R.string.loading_history), { api.array("/api/form?limit=20&offset=$offset") }, { rows ->
-        layout(getString(R.string.form_history), "form_history")
-        button(getString(R.string.form_title)) { formHome() }
-        if (rows.isEmpty()) text(getString(R.string.form_history_empty))
-        for (item in rows) {
-            val exercise = formLabel(FormChoice(item.getString("exercise"), item.optString("side")))
-            val date = localDateTime(item.getString("created_at"), locale)
-            button(getString(R.string.feature_value, exercise, date)) { formResult(item) }
-            text(formCounts(item.getJSONObject("summary")), 14)
-        }
-        if (offset > 0) button(getString(R.string.feedback_newest)) { formHistory() }
-        if (rows.size == 20) button(getString(R.string.form_older)) { formHistory(offset + 20) }
-    }, { formHome(it) })
 }

@@ -1,5 +1,6 @@
 package jumpscan.app
 
+import jumpscan.core.FormExercises
 import org.json.JSONObject
 
 internal fun MainActivity.techniqueHistory(offset: Int = 0) {
@@ -10,16 +11,44 @@ internal fun MainActivity.techniqueHistory(offset: Int = 0) {
         api.array("/api/form?limit=20&offset=$offset") to catalogue.associateBy { it.getString("id") }
     }, { (sets, catalogue) ->
         layout(getString(R.string.ui_form_history), "technique_history")
-        button(getString(R.string.form_title)) { formHome() }
         if (sets.isEmpty()) notice(getString(R.string.form_history_empty))
         for (set in sets) {
             val exercise = catalogue[set.getString("exercise")]
             val panel = card()
-            renderSetTitle(set, exercise, panel)
-            button(getString(R.string.result), parent = panel) { techniqueDetail(set, exercise, offset) }
+            val line = row(panel, center = true)
+            iconTile(formIcon(set.getString("exercise")), line)
+            val column = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
+            line.addView(column, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
+            renderSetTitle(set, exercise, column)
+            val summary = set.optJSONObject("summary") ?: JSONObject()
+            val hold = set.optString("mode", exercise?.optString("mode").orEmpty()) == "hold" || summary.has("hold_ms")
+            val total = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                gravity = android.view.Gravity.END
+            }
+            line.addView(total, android.widget.LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10) })
+            text(if (hold) metricNumber(summary.optLong("hold_ms") / 1000.0, "hold_ms", locale)
+                else summary.optInt("repetition_count").toString(), 24, green, total).apply {
+                typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.NORMAL)
+                gravity = android.view.Gravity.END
+                setPadding(0, 0, 0, 0)
+            }
+            text(getString(if (hold) R.string.ui_seconds else R.string.ui_reps_unit), 12, parent = total).apply {
+                gravity = android.view.Gravity.END
+                setPadding(0, 0, 0, 0)
+            }
+            panel.isClickable = true
+            panel.isFocusable = true
+            panel.foreground = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(getColor(R.color.hover)), null, shape(getColor(R.color.surface), 20))
+            panel.setOnClickListener {
+                if (FormExercises.all.any { it.id == set.getString("exercise") }) formResult(set)
+                else techniqueDetail(set, exercise, offset)
+            }
         }
         if (offset > 0) button(getString(R.string.feedback_newest)) { techniqueHistory() }
         if (sets.size == 20) button(getString(R.string.form_older)) { techniqueHistory(offset + 20) }
+        button(getString(R.string.form_title), primary = true) { formHome() }
         button(getString(R.string.home)) { home() }
     }, { home(it) })
 }
@@ -45,11 +74,14 @@ private fun MainActivity.renderSetTitle(set: JSONObject, exercise: JSONObject?, 
             else -> ""
         }
     } else ""
-    text(name + side, 20, green, panel)
+    text(name + side, 17, parent = panel).apply {
+        setTypeface(null, android.graphics.Typeface.BOLD)
+        setPadding(0, 0, 0, dp(2))
+    }
     val view = getString(if (set.optString("view", exercise?.optString("view").orEmpty()) == "front")
         R.string.form_front else R.string.form_side)
     val source = getString(if (set.optString("source") == "live") R.string.ui_live else R.string.ui_video)
-    text("$view · $source · ${localDateTime(set.getString("created_at"), locale)}", 13, parent = panel)
+    text("$view · $source\n${localDateTime(set.getString("created_at"), locale)}", 13, parent = panel).setPadding(0, 0, 0, 0)
 }
 
 private fun MainActivity.techniqueDetail(set: JSONObject, exercise: JSONObject?, offset: Int) {
