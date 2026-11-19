@@ -406,7 +406,7 @@ invalid exercise/side/aspect, malformed landmark shape or non-increasing timesta
 visibility is averaged across all input frames, rejected frames included; front measured joints use
 the lower of image/world visibility. Mean quality <0.7 or any rejected frame adds `low_visibility`.
 
-Rejected frames and timestamp gaps above min(1.5 median intervals, 150 ms) split observations;
+Unobserved stretches (rejected frames or timestamp gaps) longer than max(200 ms, 1.5 median intervals) split observations (before 2026-11-19: any rejected frame, or a gap above min(1.5 median intervals, 150 ms));
 smoothing never crosses them. Open boundaries (`incomplete_start`, `incomplete_end`), interruptions
 (`tracking_gap`), either phase shorter than 150 ms (`too_fast`), or zero-length segments
 (`degenerate_geometry`) produce `unclear` observations and `unclear_reps`. An initial mean flexion
@@ -555,3 +555,96 @@ phases need separate tracking and occlusion remains unresolved. The kit director
 distinct protocols; it was not used to validate this product. Countix/RepCount include YouTube-sourced
 clips without a verified reusable licence per clip. No usable Kaggle credentials were found in the
 kit builder environment, and no token was printed or copied.
+
+## 2026-11-19: Repetition benchmark, live cadence fix and hidden exercises
+
+### Protocol
+
+Sets are continuous camera shots of one person, cut from openly licensed videos: Creative Commons
+Attribution YouTube videos (downloaded one at a time, licence read from the video metadata), the Kaggle
+dataset `hasyimabdillah/workoutfitness-video` (CC BY-NC-SA 4.0, mostly re-cut from YouTube by the dataset
+author) and the existing Pexels 5034571 crops. 257 YouTube videos and 180 Kaggle clips were screened;
+automatic shot detection plus a whole-body-in-frame check (the app's framing rule) left 332 candidate
+shots (`/root/jumpscan/logs/reps/full-body-shots.csv`). Ground truth is a hand count from the frames:
+person-cropped contact sheets at 2 to 6 frames per second and pixel time slices through the person. The
+pose model only places the crop box; it never supplies the counted signal. A repetition counts when the
+person is visibly back at the start position inside the set. Sets whose count was not certain, or which
+start in the middle of a movement after a camera cut, are marked unclear and excluded. People are
+assigned to train or test by a hash of exercise and person (`SHA-1 mod 3 == 0` is test), so nobody is in
+both. Test results were not looked at until the engine was frozen.
+
+Every set is scored in three paths, all through the Kotlin engine (`FormBatch`, `AUTO` view):
+recorded (heavy model, every source frame, `VIDEO` mode, 720 px, no-pose frames kept as empty rows like
+`VideoAnalysis`), and live-equivalent at 15 and 24 frames per second (lite model on an irregular
+schedule: each interval is 1/rate times U(0.8, 1.2) and 5% of intervals are doubled, as when
+`LIVE_STREAM` drops frames while busy; tracking runs only on the frames taken). The bar for offering an
+exercise, on the held-out sets in the live 15 fps path: exact complete count in at least 90% of sets, no
+set off by more than one repetition, and at most 10% unclear repetitions. Holds would need the hold time
+within max(1 s, 10%) of the hand-timed hold on 90% of sets.
+
+### Why live counts were unstable
+
+The squat counter split an observation at any interval above min(150 ms, 1.5 median intervals) and at
+any single rejected frame. At live cadence one dropped frame doubles an interval (about 133 ms at 15 fps
+against a 100 ms limit), so sets fell apart into `tracking_gap` halves. Replaying the stock 4-repetition
+clip through the simulator reproduced the emulator's spread (0 to 1 complete with 7 to 11 unclear at 15 fps;
+the emulator gave 3 to 5 complete). Fixes, the same rule in both engines:
+
+- The squat analyzer skips unusable frames and only splits on an unobserved stretch longer than
+  max(200 ms, 1.5 median intervals) between usable frames. `FormStream` likewise skips frames without the
+  signal or gate joints and only interrupts after 300 ms without a usable frame (holds bridge the same
+  stretch). The new test `liveCadenceWithDroppedAndLowVisibilityFramesKeepsSquatCount` fails on the old rule.
+- Squat `open_flexion` 30 -> 45 degrees. Standing knee flexion read 27-38 degrees on the lite model for a
+  loaded squat (development set squat-002), which marked a standing start as open; real open starts in the
+  development sets read 51-120 degrees. Single-leg squat keeps 30 (no evidence).
+
+Two further ideas were tried on the development sets and dropped: deciding open starts from hip height
+(counted a start that was already mid-descent) and accepting a last repetition after 75% of its return
+(counted the stock clip's clipped final return). The relative-hysteresis rewrite of `FormStream` was not
+kept because no non-squat exercise has enough hand-counted sets to measure it.
+
+The public squat tracks archived by the earlier form work give byte-identical JSON before and after (squat,
+single-leg L and R). The private jump fixtures change only in unclear and boundary counts (jump1 squat
+2/0/3 -> 2/0/2, jump3 2/0/3 -> 3/0/1); they are jump recordings, not squat references.
+
+### Results (squat; complete count against hand count)
+
+| Engine | Split | Path | Sets | People | Exact | Mean abs. error | False reps | Missed reps | Unclear per hand rep | Off by >1 | Same count as recorded |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| before | train | recorded heavy | 9 | 8 | 44% | 1.56 | 0 | 14 | 0.51 | 3 | — |
+| before | train | live 15 fps | 9 | 8 | 11% | 2.78 | 0 | 25 | 1.83 | 6 | 0% |
+| before | train | live 24 fps | 9 | 8 | 0% | 3.78 | 0 | 34 | 8.06 | 8 | 11% |
+| before | test | recorded heavy | 3 | 3 | 67% | 0.33 | 0 | 1 | 0.14 | 0 | — |
+| before | test | live 15 fps | 3 | 3 | 0% | 3.33 | 0 | 10 | 1.50 | 2 | 0% |
+| before | test | live 24 fps | 3 | 3 | 0% | 4.67 | 0 | 14 | 6.36 | 3 | 0% |
+| after | train | recorded heavy | 9 | 8 | 56% | 1.44 | 0 | 13 | 0.46 | 3 | — |
+| after | train | live 15 fps | 9 | 8 | 89% | 0.11 | 0 | 1 | 0.20 | 0 | 67% |
+| after | train | live 24 fps | 9 | 8 | 89% | 0.11 | 0 | 1 | 0.20 | 0 | 67% |
+| after | test | recorded heavy | 3 | 3 | 67% | 0.33 | 0 | 1 | 0.14 | 0 | — |
+| after | test | live 15 fps | 3 | 3 | 67% | 0.33 | 0 | 1 | 0.14 | 0 | 100% |
+| after | test | live 24 fps | 3 | 3 | 67% | 0.33 | 0 | 1 | 0.14 | 0 | 100% |
+
+After the fix every remaining live unclear is a boundary flag (`incomplete_start` or `incomplete_end`) on a
+set that starts or ends mid-movement; there are no `tracking_gap` or `too_fast` unclears. The live misses
+are one final repetition that returns 0.2 s before the shot ends (squat-007) and one fast cycle of the
+Pexels woman (squat-013, test, 8 of 9, the miss already documented above). Recorded heavy is worse than
+live on this data: on two gym clips and one cut-out studio video the heavy model reports leg visibility
+below 0.5 while standing, so the frames are rejected (squat-002 and squat-008 split into tracking gaps,
+squat-003 is refused). The lite model sees the same frames with visibility above 0.8.
+
+Squat misses the bar (2 of 3 held-out sets exact; 8 of 9 development sets), and the held-out split is far too
+small to show 90% either way. Glute bridge has two hand-counted sets (both exact live). No other exercise
+has hand-counted sets yet: the candidate shots exist, but counting them reliably by hand is the remaining
+work. Every catalogue entry is therefore `hidden: true` with a `hidden_reason`; the app's picker lists only
+entries without it, the server still accepts uploads and lists every entry so older sets keep working. To
+offer an exercise again, remove its `hidden` flag after its held-out sets pass the bar.
+
+Per-set results, the index (source, licence, URL, person, split, view, segment, hand count, notes), the
+scripts and the raw `FormBatch` outputs are in `/root/jumpscan/logs/reps/` (`INDEX.csv`, `gt.csv`,
+`results-final.csv`, `results-baseline.csv`, `detail-*.txt`, `batch/`). Videos, set cuts and landmark tracks
+stay on the kit under `/work/jumpscan-data/form/reps/`. Reproduce on the kit: `run_tracks.sh INDEX.csv`, then
+`run_batch.sh <tag> <core.jar>`, then on openclaw `score.py INDEX.csv batch/<tag> out.csv train test`.
+
+Limits: 12 squat sets from 11 people is a small sample; the Kaggle squat clips hold one or two repetitions;
+none of this is from a phone camera; the live path is simulated from recorded video, not measured on a
+Galaxy A54.

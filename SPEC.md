@@ -358,8 +358,12 @@ published, general ones named below, apart from the owner's own weight-trend mod
 
 ### 6.1 Form tracker (on-device analysis; server stores numbers only)
 
-The form tracker offers live coaching and recorded-video analysis for all 20 entries in
-`core/src/main/resources/form_exercises.json`. The catalogue defines the English/Bulgarian names, mode,
+The form tracker offers live coaching and recorded-video analysis for the entries in
+`core/src/main/resources/form_exercises.json` that are not marked `hidden`. An entry is offered only after
+its repetition counts pass the benchmark bar in `core/VALIDATION.md` (held-out sets, live 15 fps path: exact
+in at least 90% of sets, none off by more than one, at most 10% unclear). A hidden entry keeps a
+`hidden_reason`; the app does not list it, while the server still accepts and lists it so older sets keep
+working. The catalogue defines the English/Bulgarian names, mode,
 anatomical side selection, recommended view, joint or position signal, thresholds, checks, and bilingual
 cues. Live mode uses the MediaPipe lite model in `LIVE_STREAM` on the CPU; recorded video continues to use
 the heavy model in `VIDEO`. Both use `FormStream`. Given identical timestamped landmarks, aspect ratio,
@@ -375,13 +379,17 @@ The stream tracks rest-to-extremum-to-rest cycles with a minimum excursion and s
 It reports complete, partial, and unclear candidates separately. Repetition timing fields retain their
 legacy names; for movements that start low, descent/ascent fields refer to the first/second phase rather
 than physical vertical direction. Available checks are sampled at the signal extremum. Holds count observed
-time in the exercise posture and separately time inside the technique band; missing observations add no
-time. The two squat entries use the original whole-set calibration and measurement rules: live counts are
+time in the exercise posture and separately time inside the technique band; an unobserved stretch longer
+than 300 ms adds no time (shorter low-visibility or dropped-frame stretches are bridged). The two squat entries use the original whole-set calibration and measurement rules: live counts are
 provisional until `finish`. Depth is peak knee flexion (side: image plane; front: world), FPPA is measured
 at deepest flexion (front only), asymmetry uses both legs, and hips below knees is available from the side.
 
-All new exercises are experimental and unvalidated for real-world accuracy; see `core/VALIDATION.md` for
-synthetic coverage and real-clip comparisons. The two squat entries retain prior evidence and limitations.
+Validated status (benchmark of 19 November 2026): no entry passes the bar, so all 20 are hidden. Squat:
+exact on 2 of 3 held-out sets and 8 of 9 development sets at live 15 fps (no set off by more than one, no
+tracking-gap unclears). Glute bridge: 2 hand-counted sets only. All other entries: no hand-counted sets yet.
+See `core/VALIDATION.md` for the protocol, tables and limits. In the squat counter, unusable frames are
+skipped and only an unobserved stretch longer than max(200 ms, 1.5 median intervals) splits an observation;
+`FormStream` interrupts after 300 ms without a usable frame.
 Burpees are not included: the fast transition between upright and floor phases often hides joints, and
 push-up/jump variants cannot reliably be distinguished by the single cycle signal. No check measures load,
 contact with equipment, or medical outcomes. The checks are technique feedback only.
