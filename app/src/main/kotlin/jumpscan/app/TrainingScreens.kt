@@ -25,24 +25,34 @@ internal fun MainActivity.trainingHome(week: LocalDate = weekStart(LocalDate.now
 
 private fun MainActivity.trainingWeek(week: LocalDate, plans: List<JSONObject>?, message: String? = null) {
     layout(getString(R.string.training_title), "training")
-    if (message != null) text(message, 15)
-    text(getString(R.string.training_week, localDate(week.toString(), locale), localDate(week.plusDays(6).toString(), locale)), 18, green)
-    button(getString(R.string.training_choose_exercise), primary = true) { exercises(week, plans) }
-    button(getString(R.string.training_other_week)) { dayPickerWeek(week, plans) }
+    if (message != null) notice(message, caution = plans == null)
+    val overview = card(hero = true)
+    text(getString(R.string.training_week, localDate(week.toString(), locale), localDate(week.plusDays(6).toString(), locale)),
+        16, getColor(R.color.on_hero), overview)
+    button(getString(R.string.training_choose_exercise), primary = true, parent = overview) { exercises(week, plans) }
+    button(getString(R.string.training_other_week), parent = overview) { dayPickerWeek(week, plans) }
     val scheduled = plans.orEmpty().map { it to planDays(it, week) }.filter { it.second.isNotEmpty() }
-    if (plans != null && scheduled.isEmpty()) text(getString(R.string.training_no_plan))
+    val today = LocalDate.now()
+    if (plans != null && week == weekStart(today)) {
+        val items = scheduled.flatMap { it.second }.filter { it.first == today }
+        if (items.isEmpty()) notice(getString(R.string.ui_rest_day))
+        else section(R.string.ui_today_plan).setPadding(0, dp(14), 0, 0)
+    }
+    if (plans != null && scheduled.isEmpty()) notice(getString(R.string.training_no_plan))
     if (plans == null) button(getString(R.string.training_load_plan)) { trainingHome(week) }
     for ((plan, items) in scheduled) {
-        text(plan.getString("title"), 18, green)
-        plan.optString("notes").takeIf { it.isNotBlank() }?.let { text(it, 14) }
-        for ((day, item) in items) {
-            text(day.dayOfWeek.getDisplayName(TextStyle.FULL, locale), 14)
+        val panel = card()
+        text(plan.getString("title"), 21, green, panel)
+        plan.optString("notes").takeIf { it.isNotBlank() }?.let { text(it, 14, parent = panel) }
+        for ((day, item) in items.sortedBy { it.first != today }) {
+            val dayLabel = if (day == today) getString(R.string.ui_today) else day.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
+            text(dayLabel + " · " + item.getString("exercise"), 17, parent = panel).setPadding(0, dp(14), 0, 0)
             val reps = item.getInt("reps")
             val max = item.optInt("reps_max", reps)
             val repRange = if (max == reps) "$reps" else "$reps–$max"
             val load = number(item, "load_kg").let { if (item.isNull("load_kg")) it else getString(R.string.feature_kg, it) }
-            text(getString(R.string.training_prescribed, item.getInt("sets"), repRange, load, number(item, "rpe_target")), 14)
-            button(getString(R.string.training_log_exercise, item.getString("exercise"))) {
+            text(getString(R.string.training_prescribed, item.getInt("sets"), repRange, load, number(item, "rpe_target")), 14, parent = panel)
+            button(getString(R.string.training_log_exercise, item.getString("exercise")), parent = panel) {
                 setForm(week, plans, day.toString(), item.getLong("exercise_id"), item.getString("exercise"), plan.getLong("id"))
             }
         }

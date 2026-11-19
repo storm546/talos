@@ -19,13 +19,13 @@ internal fun MainActivity.goalName(goal: String) = getString(when (goal) {
 
 internal fun MainActivity.nutritionHome(day: String = todayLocal(), message: String? = null) {
     layout(getString(R.string.nutrition_title), "nutrition")
-    if (message != null) text(message, 15)
-    text(getString(R.string.feature_day), 14)
+    if (message != null) notice(message)
+    val panel = hero(R.string.nutr_summary, R.string.ui_food_intro, localDate(day, locale))
+    button(getString(R.string.nutr_summary), primary = true, parent = panel) { diary(day) }
+    tiles(UiTile(R.string.nutr_food, "food") { foods(day) }, UiTile(R.string.nutr_weight, "history") { weight(day) },
+        UiTile(R.string.nutr_program, "training") { nutritionProgram(day) })
+    text(getString(R.string.feature_day), 14).setPadding(0, dp(14), 0, 0)
     dayPicker(day) { nutritionHome(it) }
-    button(getString(R.string.nutr_food), primary = true) { foods(day) }
-    button(getString(R.string.nutr_weight)) { weight(day) }
-    button(getString(R.string.nutr_summary)) { diary(day) }
-    button(getString(R.string.nutr_program)) { nutritionProgram(day) }
     pendingControls()
     button(getString(R.string.home)) { home() }
 }
@@ -129,17 +129,22 @@ private fun MainActivity.diary(day: String, message: String? = null) {
         dayPicker(day) { diary(it) }
         val totals = summary.getJSONObject("totals")
         val target = summary.optJSONObject("target") ?: JSONObject()
-        text(getString(R.string.nutr_total_target), 18, green)
-        for ((key, label) in nutrients) text(getString(R.string.feature_value, getString(label),
-            if (target.isNull(key)) number(totals, key) else "${number(totals, key)} / ${number(target, key)}"))
-        if (target.length() == 0) text(getString(R.string.nutr_no_targets), 14)
-        text(getString(R.string.nutr_meal), 18, green)
+        val panel = card()
+        section(R.string.nutr_total_target, panel)
+        for ((key, label) in nutrients) {
+            val goal = target.optDouble(key)
+            targetBar(getString(label), if (target.isNull(key)) number(totals, key) else
+                "${number(totals, key)} / ${number(target, key)}",
+                if (goal > 0) totals.optDouble(key, 0.0) / goal else null, panel)
+        }
+        if (target.length() == 0) text(getString(R.string.nutr_no_targets), 14, parent = panel)
         val byMeal = summary.getJSONObject("by_meal_kcal")
         for ((meal, label) in meals) {
+            val mealCard = card()
             val kcal = metricNumber(byMeal.getDouble(meal), "kcal", locale)
-            text(getString(R.string.feature_value, getString(label), "$kcal ${getString(R.string.unit_kcal)}"))
+            text(getString(R.string.feature_value, getString(label), "$kcal ${getString(R.string.unit_kcal)}"), 18, green, mealCard)
             for (food in foods.filter { it.getString("meal") == meal }) {
-                text(getString(R.string.feature_value, foodName(food), "${number(food, "grams")} ${getString(R.string.unit_grams)}"), 14)
+                text(getString(R.string.feature_value, foodName(food), "${number(food, "grams")} ${getString(R.string.unit_grams)}"), 14, parent = mealCard)
             }
         }
         text(getString(R.string.nutr_complete_note), 14)

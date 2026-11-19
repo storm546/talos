@@ -15,15 +15,17 @@ internal class AssistantChat {
 internal fun MainActivity.assistantScreen(message: String? = null, draft: String = "") {
     val chat = assistantChat
     layout(getString(R.string.assistant_title), "assistant")
-    button(getString(R.string.home)) { home() }
-    text(getString(R.string.assistant_intro), 14)
+    hero(R.string.assistant_title, R.string.assistant_intro)
+    if (chat.turns.isEmpty()) notice(getString(R.string.ui_assistant_empty))
     for ((question, answer) in chat.turns) {
-        text(getString(R.string.assistant_you), 14, green)
-        text(question)
-        text(getString(R.string.assistant_title), 14, green)
-        text(answer)
+        val prompt = card()
+        text(getString(R.string.assistant_you), 14, green, prompt)
+        text(question, parent = prompt)
+        val reply = card()
+        text(getString(R.string.assistant_title), 14, green, reply)
+        text(answer, parent = reply)
     }
-    if (message != null) text(message, 15)
+    if (message != null) notice(message, caution = true)
     val api = featureApi()
     chat.proposal?.let { proposal ->
         text(getString(R.string.assistant_proposal), 18, green)
@@ -79,9 +81,10 @@ internal fun MainActivity.assistantScreen(message: String? = null, draft: String
             }, { assistantScreen(it, question) })
         }
     }
+    button(getString(R.string.home)) { home() }
     if (chat.turns.isNotEmpty()) (page.parent as? ScrollView)?.let { scroll ->
         scroll.post {
-            val last = if (chat.proposal == null) page.getChildAt(page.childCount - 2)
+            val last = if (chat.proposal == null) page.getChildAt(page.childCount - 3)
                 else (0 until page.childCount).map { page.getChildAt(it) }.filterIsInstance<android.widget.TextView>()
                     .lastOrNull { it.text == getString(R.string.assistant_proposal) }
             last?.let { scroll.scrollTo(0, it.top - dp(80)) }

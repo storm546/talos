@@ -1022,3 +1022,26 @@ The starting `stage` checkout had an empty release server default. Both APKs inc
 `MainActivity.kt` change restoring the editable HTTPS default without changing the debug default.
 That change is intentionally outside the two-file commit; apply it when rebuilding from the
 commit alone. A copy of the source diff is in `logs/release5/release-default.patch`.
+
+## 2026-11-19 — Competition interface redesign
+
+The Android build ran on `android-build-kit` with `ANDROID_HOME=/opt/android-sdk` and the
+shared Gradle lock. `:core:test :app:assembleDebug :app:assembleDebugAndroidTest` succeeded;
+the core report contains 65 passing tests. The installed `jumpscan.app.AppChecks` passed, as
+did the local mock API and localization checks. The 104,920,422-byte debug APK is 159,417 bytes
+larger than the preceding 104,761,005-byte debug build. No dependencies or model assets were added.
+
+The API 34 emulator used a single `jumpscan-worker-a` instance under `/work/jumpscan-emu.lock`.
+The app connected over an SSH/ADB reverse tunnel to a disposable seeded server on port 8196.
+Bulgarian and English app screenshots show the daily workspace, profile and connection controls,
+jump and technique history, club and check-in, training, nutrition, and the assistant’s
+model-unavailable state. The technique history used a synthetic squat set through the real
+API and the catalogue's 404 fallback. Result and frame-editor screenshots use the public squat
+clip and committed landmarks through the existing debug replay path; they are UI evidence,
+not a new full-inference accuracy run.
+
+The server suite returned 453 passed and one skipped. The Chrome smoke check passed with
+coach, athlete and administrator accounts at 1280 and 390 pixels, in both languages and both
+themes. It also checked axis labels and rendered a catalogue-backed hold fixture. See
+`/root/jumpscan/logs/uiv2/app/` and `/root/jumpscan/logs/uiv2/dashboard/` for the captures
+and logs. No production service, account, database or deployment was used.
