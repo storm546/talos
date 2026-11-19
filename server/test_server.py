@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import asyncio
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -157,6 +158,37 @@ def test_concurrent_failures_cannot_bypass_limit(api):
     assert statuses.count(429) == 3
 
 
+def test_login_limits_use_independent_address_buckets(api):
+    client, path = api
+    email = "coach@demo.test"
+    bad = {"email": email, "password": "wrong"}
+    with TestClient(main.create_app(path), client=("other-client", 50000)) as other:
+        for _ in range(2):
+            assert other.post("/api/auth/login", json=bad).status_code == 401
+        for _ in range(5):
+            assert client.post("/api/auth/login", json=bad).status_code == 401
+        assert other.post("/api/auth/login", json={"email": email, "password": "demo1234"}).status_code == 200
+    with main.database(path) as db:
+        assert [tuple(row) for row in db.execute("SELECT address, count(*) FROM login_failures GROUP BY address")] == [
+            ("testclient", 5)]
+    assert client.post("/api/auth/login", json={"email": email, "password": "demo1234"}).status_code == 429
+
+
+def test_login_failure_migration_drops_unattributed_failures_only(api):
+    _, path = api
+    with main.database(path) as db:
+        db.execute("DROP TABLE login_failures")
+        db.execute("CREATE TABLE login_failures(email TEXT NOT NULL, failed_at REAL NOT NULL)")
+        db.execute("CREATE INDEX failures_email ON login_failures(email, failed_at)")
+        db.executemany("INSERT INTO login_failures VALUES ('coach@demo.test', ?)", [(time.time(),)] * 5)
+        db.execute("INSERT INTO address_failures VALUES ('prior-client', ?)", (time.time(),))
+    with TestClient(main.create_app(path)) as client:
+        assert client.post("/api/auth/login", json={"email": "coach@demo.test", "password": "demo1234"}).status_code == 200
+    with main.database(path) as db:
+        assert not db.execute("SELECT 1 FROM login_failures").fetchone()
+        assert db.execute("SELECT address FROM address_failures").fetchone()[0] == "prior-client"
+
+
 @pytest.mark.parametrize("email,password,status", [
     ("coach@demo.test", "demo1234", 200),
     ("coach@demo.test", "wrong", 401),
@@ -170,7 +202,7 @@ def test_login_hash_runs_without_sqlite_write_lock(api, monkeypatch, email, pass
     def hash_without_lock(password, salt):
         with sqlite3.connect(path, timeout=0) as db:
             db.execute("BEGIN IMMEDIATE")
-            db.execute("INSERT INTO login_failures VALUES ('unrelated@demo.test', ?)", (time.time(),))
+            db.execute("INSERT INTO login_failures(email, address, failed_at) VALUES ('unrelated@demo.test', 'testclient', ?)", (time.time(),))
         hashes.append(salt)
         return original_hash(password, salt)
 
@@ -183,7 +215,7 @@ def test_login_hash_runs_without_sqlite_write_lock(api, monkeypatch, email, pass
 def test_login_purges_expired_failures_for_all_emails(api):
     client, path = api
     with main.database(path) as db:
-        db.executemany("INSERT INTO login_failures VALUES (?, ?)", [
+        db.executemany("INSERT INTO login_failures(email, address, failed_at) VALUES (?, 'testclient', ?)", [
             ("old1@demo.test", time.time() - 901),
             ("old2@demo.test", time.time() - 1800),
             ("recent@demo.test", time.time()),
@@ -704,6 +736,67 @@ def test_seed_command_is_idempotent_and_environment_selects_database(monkeypatch
         with TestClient(main.create_app()) as client:
             response = client.post("/api/auth/login", json={"email": "admin@demo.test", "password": "demo1234"})
             assert response.status_code == 200
+
+
+def test_reset_demo_rebuilds_only_demo_data(api, auth, monkeypatch):
+    client, path = api
+    demo_auth = auth("athlete1")
+    demo_id = user_id(path, "athlete1")
+    today = datetime.now(timezone.utc).date()
+    with main.database(path) as db:
+        demo_club = db.execute("SELECT club_id FROM users WHERE id = ?", (demo_id,)).fetchone()[0]
+        salt = b"non-demo-account"
+        personal_id = db.execute(
+            "INSERT INTO users(club_id,email,name,role,password_salt,password_hash,consent_recorded) "
+            "VALUES (?, 'personal@demo.test', 'Do not reset', 'athlete', ?, ?, 1)",
+            (demo_club, salt, main.password_hash("personal-password", salt))).lastrowid
+        other_club = db.execute("INSERT INTO clubs(name) VALUES ('Independent club')").lastrowid
+        shared_session = db.execute("SELECT id FROM sessions ORDER BY id LIMIT 1").fetchone()[0]
+        db.execute("INSERT INTO jumps(athlete_id,created_at,metrics,session_id) VALUES (?, ?, ?, ?)",
+                   (personal_id, main.now_iso(), json.dumps(METRICS), shared_session))
+        db.execute("INSERT INTO weights(athlete_id,day,kg) VALUES (?, ?, 76.2)", (personal_id, today.isoformat()))
+        db.execute("INSERT INTO nutrition_targets(athlete_id,kcal,updated_at) VALUES (?, 2400, ?)",
+                   (personal_id, main.now_iso()))
+        db.execute("UPDATE users SET active=0, consent_recorded=0, password_hash=? WHERE id=?", (b"changed", demo_id))
+        db.execute("DELETE FROM jumps WHERE athlete_id=?", (demo_id,))
+        db.execute("DELETE FROM checkins WHERE athlete_id=?", (demo_id,))
+        db.execute("DELETE FROM food_logs WHERE athlete_id=?", (demo_id,))
+        db.execute("UPDATE nutrition_targets SET kcal=1700 WHERE athlete_id=?", (demo_id,))
+        personal_before = {table: [tuple(row) for row in db.execute(f"SELECT * FROM {table} WHERE {column}=?", (value,))]
+                           for table, column, value in (("users", "id", personal_id), ("jumps", "athlete_id", personal_id),
+                                                        ("weights", "athlete_id", personal_id),
+                                                        ("nutrition_targets", "athlete_id", personal_id),
+                                                        ("sessions", "id", shared_session))}
+
+    monkeypatch.setenv("JUMPSCAN_DB", str(path))
+    for _ in range(2):
+        subprocess.run([sys.executable, "-m", "server.seed", "--reset-demo"], capture_output=True, text=True, check=True)
+    assert client.get("/api/me", headers=demo_auth).status_code == 401
+    login = client.post("/api/auth/login", json={"email": "athlete1@demo.test", "password": "demo1234"})
+    assert login.status_code == 200 and login.json()["user"]["id"] == demo_id
+    assert client.post("/api/auth/login", json={"email": "personal@demo.test", "password": "personal-password"}).status_code == 200
+    headers = {"Authorization": "Bearer " + login.json()["token"]}
+    jumps = client.get("/api/jumps", headers=headers).json()
+    assert len(jumps) == 10 and datetime.fromisoformat(jumps[0]["created_at"]).date() >= today - timedelta(days=2)
+    form = client.get("/api/form", headers=headers).json()
+    assert len(form) == 3 and all(datetime.fromisoformat(row["created_at"]).date() >= today - timedelta(days=14) for row in form)
+    coach = auth("coach")
+    sessions = client.get("/api/sessions", headers=coach).json()
+    weekly, = [session for session in sessions if session["title"] == "Седмичен тест на отбора"]
+    assert 6 <= (today - datetime.fromisoformat(weekly["starts_at"]).date()).days <= 8
+    report = client.get(f"/api/sessions/{weekly['id']}/report", headers=coach).json()
+    assert {row["trials_done"] for row in report["athletes"]} == {2, 3}
+    assert any(datetime.fromisoformat(session["starts_at"]).date() > today and not session["cancelled"] for session in sessions)
+    with main.database(path) as db:
+        assert db.execute("SELECT consent_recorded FROM users WHERE id=?", (demo_id,)).fetchone()[0] == 1
+        assert db.execute("SELECT COUNT(*) FROM checkins WHERE day=?", (today.isoformat(),)).fetchone()[0] == 6
+        assert db.execute("SELECT COUNT(DISTINCT day) FROM food_logs WHERE athlete_id=?", (demo_id,)).fetchone()[0] == 13
+        assert db.execute("SELECT kcal FROM nutrition_targets WHERE athlete_id=?", (demo_id,)).fetchone()[0] == 2200
+        assert not db.execute("SELECT 1 FROM exercises WHERE club_id=?", (other_club,)).fetchone()
+        for table, column, value in (("users", "id", personal_id), ("jumps", "athlete_id", personal_id),
+                                     ("weights", "athlete_id", personal_id), ("nutrition_targets", "athlete_id", personal_id),
+                                     ("sessions", "id", shared_session)):
+            assert [tuple(row) for row in db.execute(f"SELECT * FROM {table} WHERE {column}=?", (value,))] == personal_before[table]
 
 
 def test_uncertain_timing_warning_is_accepted_and_preserved(api, auth):

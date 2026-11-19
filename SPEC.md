@@ -192,7 +192,7 @@ the target is the submitted normalized email. Other targets are string IDs. Pass
 included. Mutations, exports and their audit entries commit before a success response.
 
 Security: bearer token in `Authorization`; parameterized SQL; strict validation and unknown-field rejection;
-object checks on every read and management operation; login limit of 5 failures per email per 15 minutes;
+object checks on every read and management operation; login limit of 5 failures per email and client address pair per 15 minutes;
 constant-time credential checks; no stack traces or submitted secrets in errors; 16 KiB body limit
 (64 KiB for form uploads, section 6.1).
 Paginated lists accept limits 1–500 and nonnegative offsets. Exports and summaries include all jumps.
@@ -314,7 +314,7 @@ limits 1–500. Unknown fields are rejected as in section 3.
 
 ### 5.3 Security additions
 
-- Login is limited both per email (section 3) and per client address: 30 failures per address per
+- In addition to the email and client address pair limit (section 3), login is limited to 30 failures per address per
   15 minutes. Behind a reverse proxy the address comes from the proxy's `X-Forwarded-For` only when the
   server is started with `--proxy-headers --forwarded-allow-ips <proxy address>` (deploy notes).
 - Expired tokens and login failures older than 15 minutes are deleted on each login.

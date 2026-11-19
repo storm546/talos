@@ -18,6 +18,7 @@ COPY server/requirements.txt server/requirements.txt
 RUN pip install --no-cache-dir -r server/requirements.txt
 
 COPY server/ server/
+COPY core/src/main/resources/form_exercises.json core/src/main/resources/form_exercises.json
 RUN chown -R jumpscan:jumpscan /app
 
 USER jumpscan
