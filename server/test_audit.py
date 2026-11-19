@@ -7,12 +7,13 @@ import json
 import pytest
 
 from server import coaching, main
+from server.test_form_api import FORM
 from server.test_server import METRICS, api, auth, template, user_id
 from server.test_training_nutrition import series
 from server.weight_trend import weight_smoothing, weight_trend_pipeline
 
 
-@pytest.mark.parametrize("kind", ["jump", "checkin", "food", "weight", "set", "complete", "custom food"])
+@pytest.mark.parametrize("kind", ["jump", "checkin", "food", "weight", "set", "complete", "custom food", "form"])
 def test_writes_check_committed_consent(api, auth, kind):
     client, path = api
     athlete = user_id(path, "athlete1")
@@ -34,15 +35,32 @@ def test_writes_check_committed_consent(api, auth, kind):
         "complete": ("PUT", f"/api/me/nutrition/days/{today}/complete", None),
         "custom food": ("POST", "/api/foods", {"name_bg": "Овес", "kcal": 100, "protein_g": 10,
                                                "carbs_g": 20, "fat_g": 5}),
+        "form": ("POST", "/api/form", FORM),
     }[kind]
     response = client.request(method, endpoint, headers=headers, json=body)
     assert response.status_code == 403, response.text
 
 
+@pytest.mark.parametrize("change", ["UPDATE users SET active = 0 WHERE id = ?", "DELETE FROM tokens WHERE user_id = ?"])
+def test_form_write_reauthenticates_inside_transaction(api, auth, change):
+    client, path = api
+    athlete = user_id(path, "athlete1")
+    headers = auth("athlete1")
+    with main.database(path) as db:
+        stale = db.execute("SELECT * FROM users WHERE id = ?", (athlete,)).fetchone()
+        db.execute(change, (athlete,))
+    client.app.dependency_overrides[main.current_user] = lambda: stale
+    response = client.post("/api/form", headers=headers, json=FORM)
+    assert response.status_code == 401, response.text
+    with main.database(path) as db:
+        assert db.execute("SELECT COUNT(*) FROM form_sets WHERE athlete_id = ?", (athlete,)).fetchone()[0] == 0
+
+
 @pytest.mark.parametrize("path", ["/api/athletes/9223372036854775808/summary",
                                   "/api/jumps?athlete_id=9223372036854775808",
                                   "/api/athletes?offset=9223372036854775808",
-                                  "/api/foods?offset=9223372036854775808"])
+                                  "/api/foods?offset=9223372036854775808",
+                                  "/api/athletes/9223372036854775808/form.csv"])
 def test_sqlite_integer_overflow_is_a_validation_error(api, auth, path):
     client, _ = api
     response = client.get(path, headers=auth("admin"))

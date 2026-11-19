@@ -1058,11 +1058,10 @@ def create_app(db_path=None):
                  "created_at": row["created_at"], "session_id": row["session_id"],
                  "client_id": row["client_id"]} for row in rows]
 
-    @app.post("/api/form", status_code=201)
-    def add_form_set(body: FormSet, user=Depends(current_user), db=Depends(get_db)):
-        require_role(user, "athlete")
-        with write_transaction(db, app.state.events) as emit:
-            athlete = athlete_access(db, user, user["id"])
+    @app.post("/api/form", status_code=201, dependencies=[Depends(current_user)])
+    def add_form_set(body: FormSet, request: Request, db=Depends(get_db)):
+        with authorized_write(db, request) as (athlete, emit):
+            require_role(athlete, "athlete")
             if not athlete["consent_recorded"]:
                 raise HTTPException(403, "Consent must be recorded by a coach or admin before uploading form sets")
             if body.client_id is not None:
@@ -1178,7 +1177,7 @@ def create_app(db_path=None):
                         headers={"Content-Disposition": f'attachment; filename="athlete-{athlete_id}.csv"'})
 
     @app.get("/api/athletes/{athlete_id}/form.csv")
-    def form_csv(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def form_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = athlete_access(db, user, athlete_id)
         output = io.StringIO(newline="")
