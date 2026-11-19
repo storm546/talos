@@ -141,5 +141,3 @@ def test_expenditure_reuses_exact_inputs_and_rechecks_after_edit(api, auth, monk
         db.execute("UPDATE weights SET kg = kg + 0.25 WHERE athlete_id = ?", (athlete,))
     assert client.get(f"{prefix}/expenditure", headers=headers).status_code == 200
     assert len(computes) == 2
-
-

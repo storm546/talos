@@ -83,9 +83,13 @@ def benchmark(name, request):
 
 def mock_model(client, url, model, headers, messages, tools, *, allow_tools):
     if messages[-1]["role"] == "tool":
-        return {"content": hashlib.sha256(messages[-1]["content"].encode()).hexdigest()}
+        content = messages[-1]["content"]
+        result = json.loads(content)
+        if "data" not in result and not (result.get("truncated") and result["preview"].startswith('{"data":')):
+            raise RuntimeError(f"Roster tool did not return data: {content}")
+        return {"content": hashlib.sha256(content.encode()).hexdigest()}
     return {"content": None, "tool_calls": [{"id": "bench", "type": "function", "function": {
-        "name": "team_summaries", "arguments": '{"limit": 100}'}}]}
+        "name": "team_summaries", "arguments": '{"limit": 50}'}}]}
 
 
 def run():
