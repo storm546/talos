@@ -361,6 +361,10 @@ class Jump(StrictModel):
 
 
 MAX_FORM_REPETITIONS = 100
+FORM_CATALOGUE_PATH = Path(os.environ.get("JUMPSCAN_FORM_CATALOGUE") or
+                           Path(__file__).resolve().parents[1] / "core/src/main/resources/form_exercises.json")
+FORM_EXERCISES = ({entry["id"]: entry for entry in json.loads(FORM_CATALOGUE_PATH.read_text(encoding="utf-8"))}
+                  if FORM_CATALOGUE_PATH.is_file() else None)
 FormTime = Annotated[int, Field(ge=0, le=2**63 - 1)]
 FormCount = Annotated[int, Field(ge=0, le=MAX_FORM_REPETITIONS)]
 FormIndex = Annotated[int, Field(ge=1, le=MAX_FORM_REPETITIONS)]
@@ -385,6 +389,7 @@ class FormRepetition(StrictModel):
     descent_time_ms: FormTime | None
     ascent_time_ms: FormTime | None
     hip_below_knee: bool | None
+    checks: dict[str, float | None] | None = Field(default=None, max_length=4)
 
     @model_validator(mode="after")
     def check_cycle(self):
@@ -420,10 +425,12 @@ class FormSummary(StrictModel):
     median_ascent_time_ms: float | None = Field(ge=0, le=2**63 - 1)
     hip_below_knee_count: FormCount | None
     worst_repetition: FormIndex | None
+    hold_ms: FormTime | None = None
+    in_band_ms: FormTime | None = None
 
 
 class FormSet(StrictModel):
-    exercise: Literal["squat", "single_leg_squat"]
+    exercise: str = Field(min_length=1, max_length=40)
     side: Literal["L", "R"] | None
     view: Literal["front", "side"]
     fps: float = Field(gt=0, le=480)
@@ -432,11 +439,28 @@ class FormSet(StrictModel):
     warnings: list[Literal["low_visibility", "unclear_reps", "single_leg_view"]] = Field(max_length=3)
     repetitions: list[FormRepetition] = Field(max_length=MAX_FORM_REPETITIONS)
     client_id: str | None = Field(default=None, min_length=1, max_length=128)
+    mode: Literal["reps", "hold"] | None = None
+    source: Literal["live", "video"] | None = None
 
     @model_validator(mode="after")
     def check_set(self):
-        if (self.exercise == "single_leg_squat") != (self.side is not None):
-            raise ValueError("Single-leg squat requires side L or R; squat requires null side")
+        if FORM_EXERCISES is None:
+            if (self.exercise not in {"squat", "single_leg_squat"} or self.mode is not None or self.source is not None
+                    or any(rep.checks is not None for rep in self.repetitions)):
+                raise HTTPException(503, "Form exercise catalogue is unavailable")
+            legacy, sided, mode, keys = True, self.exercise == "single_leg_squat", "reps", set()
+        else:
+            exercise = FORM_EXERCISES.get(self.exercise)
+            if exercise is None:
+                raise ValueError("Unknown form exercise")
+            legacy, sided, mode = exercise["signal"].get("legacy", False), exercise["sided"], exercise["mode"]
+            keys = {check["key"] for check in exercise["checks"]}
+        if sided != (self.side is not None):
+            raise ValueError("Exercise side must match the catalogue")
+        if self.mode is not None and self.mode != mode:
+            raise ValueError("Mode must match the exercise")
+        if any(rep.checks is not None and not keys.issuperset(rep.checks) for rep in self.repetitions):
+            raise ValueError("Check keys must belong to the exercise")
         if any(rep.index != index for index, rep in enumerate(self.repetitions, 1)):
             raise ValueError("Repetition indices must start at 1 and follow array order")
         summary = self.summary
@@ -445,6 +469,19 @@ class FormSet(StrictModel):
                 or summary.partial_count != sum(rep.status == "partial" for rep in self.repetitions)
                 or summary.unclear_count != sum(rep.status == "unclear" for rep in self.repetitions)):
             raise ValueError("Summary counts must match repetition statuses")
+        if mode == "hold":
+            if (self.repetitions or summary.hold_ms is None or summary.in_band_ms is None
+                    or summary.in_band_ms > summary.hold_ms):
+                raise ValueError("Holds require hold durations and no repetitions")
+        elif summary.hold_ms is not None or summary.in_band_ms is not None:
+            raise ValueError("Hold durations require a hold exercise")
+        if not legacy:
+            cycle_fields = {"index", "status", "reasons", "start_ms", "bottom_ms", "end_ms", "descent_time_ms", "ascent_time_ms", "checks"}
+            count_fields = {"repetition_count", "partial_count", "unclear_count", "hold_ms", "in_band_ms"}
+            if (summary.model_dump(exclude=count_fields, exclude_none=True)
+                    or any(rep.model_dump(exclude=cycle_fields, exclude_none=True) for rep in self.repetitions)):
+                raise ValueError("Squat measurements require a squat exercise")
+            return self
         if (complete and summary.worst_repetition not in {rep.index for rep in complete}
                 or not complete and summary.worst_repetition is not None):
             raise ValueError("Worst repetition must reference a complete repetition, if any")
@@ -1022,12 +1059,22 @@ def create_app(db_path=None):
             created_at = now_iso()
             cursor = db.execute(
                 "INSERT INTO form_sets(athlete_id, created_at, metrics, client_id) VALUES (?, ?, ?, ?)",
-                (athlete["id"], created_at, body.model_dump_json(exclude={"client_id"}), body.client_id))
+                (athlete["id"], created_at, body.model_dump_json(exclude={"client_id"}, exclude_unset=True), body.client_id))
             form_id = cursor.lastrowid
             audit(db, athlete["id"], "form_logged", form_id)
             emit(athlete_viewers(db, athlete), {"type": "form", "id": form_id, "athlete_id": athlete["id"],
                                               "club_id": athlete["club_id"], "at": created_at})
         return JSONResponse(status_code=201, content={"id": form_id, "created_at": created_at})
+
+    @app.get("/api/form/exercises")
+    def list_form_exercises(user=Depends(current_user)):
+        if FORM_EXERCISES is None:
+            raise HTTPException(503, "Form exercise catalogue is unavailable")
+        fields = ("id", "name_bg", "name_en", "mode", "sided", "view")
+        check_fields = ("key", "label_bg", "label_en", "unit")
+        return [{**{field: row[field] for field in fields},
+                 "checks": [{field: check[field] for field in check_fields} for check in row["checks"]]}
+                for row in FORM_EXERCISES.values()]
 
     @app.get("/api/form")
     def list_form_sets(athlete_id: Annotated[int | None, Query(gt=0, le=2**63 - 1)] = None,
@@ -1115,8 +1162,10 @@ def create_app(db_path=None):
         athlete = athlete_access(db, user, athlete_id)
         output = io.StringIO(newline="")
         writer = csv.writer(output)
+        hold_fields = ("hold_ms", "in_band_ms")
         fields = ["id", "athlete_id", "athlete_name", "created_at", "client_id", "exercise", "side", "view",
-                  "fps", "quality", *FormSummary.model_fields, "warnings", "repetitions"]
+                  "fps", "quality", *(key for key in FormSummary.model_fields if key not in hold_fields),
+                  "warnings", "repetitions", "mode", "source", *hold_fields]
         writer.writerow(fields)
         for row in athlete_form_sets(db, athlete_id):
             row.update(row.pop("summary"), athlete_name=athlete["name"])

@@ -59,7 +59,7 @@ def test_form_roles_and_paged_history(api, auth, monkeypatch):
 
 
 @pytest.mark.parametrize("section, field, value", [
-    (None, "exercise", "lunge"), (None, "exercise", "single_leg_squat"), (None, "side", "L"),
+    (None, "exercise", "unknown"), (None, "exercise", "single_leg_squat"), (None, "side", "L"),
     (None, "view", "auto"), (None, "fps", 481), (None, "fps", 0), (None, "fps", "30"),
     (None, "quality", 1.01), (None, "video", "unused"),
     (None, "warnings", ["low_visibility"] * 4), (None, "warnings", ["unknown"]),
