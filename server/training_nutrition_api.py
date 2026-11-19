@@ -5,7 +5,7 @@ is the main module (its auth, scope, audit and event helpers are reused, never c
 """
 
 import csv
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import io
 import json
@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from . import coaching as co
 from . import training_nutrition as tn
 from .weight_trend import daily_trend
+from .input_bounds import Offset, SQLITE_MAX, SqlitePath
 
 FOODS_CSV = Path(__file__).with_name("data") / "foods.csv"
 MEALS = ("breakfast", "lunch", "dinner", "snack")
@@ -177,13 +178,13 @@ class ExerciseBody(StrictModel):
     name: str = Field(min_length=1, max_length=100)
     kind: Literal["strength", "plyometric", "mobility", "conditioning"]
     lower_body: bool = False
-    club_id: int | None = Field(default=None, gt=0)
+    club_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
     _name = field_validator("name")(stripped)
 
 
 class PlanItem(StrictModel):
     weekday: int = Field(ge=0, le=6)
-    exercise_id: int = Field(gt=0)
+    exercise_id: int = Field(gt=0, le=SQLITE_MAX)
     sets: int = Field(ge=1, le=20)
     reps: int = Field(ge=1, le=100)
     reps_max: int | None = Field(default=None, ge=1, le=100)
@@ -199,8 +200,8 @@ class PlanItem(StrictModel):
 
 class PlanBody(StrictModel):
     title: str = Field(min_length=1, max_length=100)
-    group_id: int | None = Field(default=None, gt=0)
-    athlete_id: int | None = Field(default=None, gt=0)
+    group_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
+    athlete_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
     starts_on: str = Field(min_length=10, max_length=10)
     weeks: int = Field(default=4, ge=1, le=52)
     notes: str = Field(default="", max_length=1000)
@@ -217,12 +218,12 @@ class PlanBody(StrictModel):
 
 class SetLog(StrictModel):
     day: str = Field(min_length=10, max_length=10)
-    exercise_id: int = Field(gt=0)
+    exercise_id: int = Field(gt=0, le=SQLITE_MAX)
     set_no: int = Field(ge=1, le=50)
     reps: int = Field(ge=1, le=200)
     load_kg: float | None = Field(default=None, ge=0, le=1000)
     rpe: float | None = Field(default=None, ge=0, le=10)
-    plan_id: int | None = Field(default=None, gt=0)
+    plan_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
     client_id: str | None = Field(default=None, min_length=1, max_length=128)
     _day = field_validator("day")(iso_day)
 
@@ -235,14 +236,14 @@ class CustomFood(StrictModel):
     carbs_g: float = Field(ge=0, le=100)
     fat_g: float = Field(ge=0, le=100)
     fibre_g: float = Field(default=0, ge=0, le=100)
-    club_id: int | None = Field(default=None, gt=0)
+    club_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
     _name = field_validator("name_bg")(stripped)
 
 
 class FoodLog(StrictModel):
     day: str = Field(min_length=10, max_length=10)
     meal: Literal["breakfast", "lunch", "dinner", "snack"]
-    food_id: int = Field(gt=0)
+    food_id: int = Field(gt=0, le=SQLITE_MAX)
     grams: float = Field(gt=0, le=5000)
     client_id: str | None = Field(default=None, min_length=1, max_length=128)
     _day = field_validator("day")(iso_day)
@@ -383,7 +384,7 @@ def install(app, h):
     # --- profile ---
 
     @app.patch("/api/users/{target_id}/profile")
-    def set_profile(target_id: int, body: Profile, user=Depends(current_user), db=Depends(get_db)):
+    def set_profile(target_id: SqlitePath, body: Profile, user=Depends(current_user), db=Depends(get_db)):
         target = h.managed_user(db, user, target_id)
         if target["role"] != "athlete":
             raise HTTPException(422, "The profile applies to athletes only")
@@ -395,7 +396,7 @@ def install(app, h):
     # --- exercises ---
 
     @app.get("/api/exercises")
-    def list_exercises(club_id: Annotated[int | None, Query(gt=0)] = None,
+    def list_exercises(club_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
                        user=Depends(current_user), db=Depends(get_db)):
         if user["role"] != "admin":
             club_id = user["club_id"]
@@ -417,7 +418,7 @@ def install(app, h):
                 "lower_body": body.lower_body}
 
     @app.delete("/api/exercises/{exercise_id}", status_code=204)
-    def delete_exercise(exercise_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def delete_exercise(exercise_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         row = db.execute("SELECT club_id FROM exercises WHERE id = ?", (exercise_id,)).fetchone()
         if row is None or (user["role"] == "coach" and row["club_id"] != user["club_id"]):
@@ -432,7 +433,7 @@ def install(app, h):
     # --- plans ---
 
     @app.get("/api/plans")
-    def list_plans(club_id: Annotated[int | None, Query(gt=0)] = None,
+    def list_plans(club_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
                    user=Depends(current_user), db=Depends(get_db)):
         if user["role"] != "admin":
             club_id = user["club_id"]
@@ -460,11 +461,11 @@ def install(app, h):
         return plan_json(db, db.execute("SELECT * FROM plans WHERE id = ?", (cursor.lastrowid,)).fetchone())
 
     @app.get("/api/plans/{plan_id}")
-    def get_plan(plan_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def get_plan(plan_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         return plan_json(db, scoped_plan(db, user, plan_id))
 
     @app.put("/api/plans/{plan_id}", dependencies=[Depends(current_user)])
-    def replace_plan(plan_id: int, body: PlanBody, request: Request, db=Depends(get_db)):
+    def replace_plan(plan_id: SqlitePath, body: PlanBody, request: Request, db=Depends(get_db)):
         with h.authorized_write(db, request) as (user, emit):
             return edit_plan(plan_id, body, user, db, emit)
 
@@ -485,7 +486,7 @@ def install(app, h):
         return plan_json(db, db.execute("SELECT * FROM plans WHERE id = ?", (plan_id,)).fetchone())
 
     @app.delete("/api/plans/{plan_id}", status_code=204)
-    def delete_plan(plan_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def delete_plan(plan_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         scoped_plan(db, user, plan_id)
         db.execute("DELETE FROM plans WHERE id = ?", (plan_id,))
@@ -531,11 +532,11 @@ def install(app, h):
             db.execute("SELECT * FROM set_logs WHERE id = ?", (cursor.lastrowid,)).fetchone()))
 
     @app.get("/api/set-logs")
-    def list_set_logs(athlete_id: Annotated[int | None, Query(gt=0)] = None,
+    def list_set_logs(athlete_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
                       from_: Annotated[str | None, Query(alias="from")] = None,
                       to: Annotated[str | None, Query()] = None,
                       limit: Annotated[int, Query(ge=1, le=500)] = 100,
-                      offset: Annotated[int, Query(ge=0)] = 0,
+                      offset: Offset = 0,
                       user=Depends(current_user), db=Depends(get_db)):
         athlete = target_athlete(db, user, athlete_id)
         return [set_row(r) for r in db.execute(
@@ -544,7 +545,7 @@ def install(app, h):
             (athlete["id"], from_, from_, to, to, limit, offset))]
 
     @app.delete("/api/set-logs/{log_id}", status_code=204)
-    def delete_set_log(log_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def delete_set_log(log_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "athlete")
         if db.execute("DELETE FROM set_logs WHERE id = ? AND athlete_id = ?", (log_id, user["id"])).rowcount == 0:
             raise HTTPException(404, "Set not found")
@@ -554,7 +555,7 @@ def install(app, h):
     # --- training summary: weekly volume and progression suggestions ---
 
     @app.get("/api/athletes/{athlete_id}/training")
-    def training_summary(athlete_id: int, weeks: Annotated[int, Query(ge=1, le=26)] = 4,
+    def training_summary(athlete_id: SqlitePath, weeks: Annotated[int, Query(ge=1, le=26)] = 4,
                          user=Depends(current_user), db=Depends(get_db)):
         athlete = h.athlete_access(db, user, athlete_id)
         today = utc_today()
@@ -609,7 +610,7 @@ def install(app, h):
     @app.get("/api/foods")
     def list_foods(q: Annotated[str | None, Query(max_length=100)] = None,
                    limit: Annotated[int, Query(ge=1, le=500)] = 50,
-                   offset: Annotated[int, Query(ge=0)] = 0,
+                   offset: Offset = 0,
                    user=Depends(current_user), db=Depends(get_db)):
         clause, params = visible_food_sql(user)
         like = None
@@ -640,7 +641,7 @@ def install(app, h):
         return food_row(db.execute("SELECT * FROM foods WHERE id = ?", (cursor.lastrowid,)).fetchone())
 
     @app.delete("/api/foods/{food_id}", status_code=204)
-    def delete_food(food_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def delete_food(food_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         row = db.execute("SELECT * FROM foods WHERE id = ?", (food_id,)).fetchone()
         mine = row is not None and row["club_id"] is not None and (
             row["owner_id"] == user["id"] if user["role"] == "athlete"
@@ -703,18 +704,18 @@ def install(app, h):
             db, user["id"], "AND food_logs.id = ?", (cursor.lastrowid,))[0])
 
     @app.get("/api/food-logs")
-    def list_food_logs(athlete_id: Annotated[int | None, Query(gt=0)] = None,
+    def list_food_logs(athlete_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
                        from_: Annotated[str | None, Query(alias="from")] = None,
                        to: Annotated[str | None, Query()] = None,
                        limit: Annotated[int, Query(ge=1, le=500)] = 100,
-                       offset: Annotated[int, Query(ge=0)] = 0,
+                       offset: Offset = 0,
                        user=Depends(current_user), db=Depends(get_db)):
         athlete = target_athlete(db, user, athlete_id)
         return food_log_rows(db, athlete["id"], "AND (? IS NULL OR food_logs.day >= ?) AND (? IS NULL OR food_logs.day <= ?)",
                              (from_, from_, to, to), " LIMIT ? OFFSET ?", (limit, offset))
 
     @app.delete("/api/food-logs/{log_id}", status_code=204)
-    def delete_food_log(log_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def delete_food_log(log_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "athlete")
         if db.execute("DELETE FROM food_logs WHERE id = ? AND athlete_id = ?", (log_id, user["id"])).rowcount == 0:
             raise HTTPException(404, "Meal entry not found")
@@ -761,7 +762,7 @@ def install(app, h):
         return rows, daily_trend(rows)
 
     @app.get("/api/athletes/{athlete_id}/weights")
-    def athlete_weights(athlete_id: int, from_: Annotated[str | None, Query(alias="from")] = None,
+    def athlete_weights(athlete_id: SqlitePath, from_: Annotated[str | None, Query(alias="from")] = None,
                         to: Annotated[str | None, Query()] = None,
                         user=Depends(current_user), db=Depends(get_db)):
         h.athlete_access(db, user, athlete_id)
@@ -796,7 +797,7 @@ def install(app, h):
         return estimate
 
     @app.get("/api/athletes/{athlete_id}/nutrition/estimate")
-    def nutrition_estimate(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def nutrition_estimate(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         h.athlete_access(db, user, athlete_id)
         return {"athlete_id": athlete_id, **rounded(estimate_for(db, athlete_id, utc_today())),
                 "note": "An estimate from your own logs, not a measurement. Numbers to discuss with your coach."}
@@ -815,11 +816,11 @@ def install(app, h):
                 "note": "Numbers to discuss with your coach. The protein range is shown, not prescribed."}
 
     @app.get("/api/athletes/{athlete_id}/nutrition/target")
-    def get_target(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def get_target(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         return target_json(db, h.athlete_access(db, user, athlete_id))
 
     @app.put("/api/athletes/{athlete_id}/nutrition/target", dependencies=[Depends(current_user)])
-    def put_target(athlete_id: int, body: Target, request: Request, db=Depends(get_db)):
+    def put_target(athlete_id: SqlitePath, body: Target, request: Request, db=Depends(get_db)):
         with h.authorized_write(db, request) as (user, emit):
             return save_target(athlete_id, body, user, db, emit)
 
@@ -843,14 +844,15 @@ def install(app, h):
         return target_json(db, athlete)
 
     @app.get("/api/athletes/{athlete_id}/nutrition/summary")
-    def nutrition_summary(athlete_id: int, day: Annotated[str | None, Query()] = None,
+    def nutrition_summary(athlete_id: SqlitePath, day: Annotated[str | None, Query()] = None,
                           user=Depends(current_user), db=Depends(get_db)):
         athlete = h.athlete_access(db, user, athlete_id)
         try:
             day = iso_day(day) if day else utc_today().isoformat()
         except ValueError:
             raise HTTPException(422, "day must be YYYY-MM-DD") from None
-        first = (datetime.strptime(day, "%Y-%m-%d").date() - timedelta(days=6)).isoformat()
+        requested_day = date.fromisoformat(day)
+        first = (requested_day - timedelta(days=min(6, requested_day.toordinal() - 1))).isoformat()
         keys = ("kcal", "protein_g", "carbs_g", "fat_g", "fibre_g")
         totals = {key: 0.0 for key in keys}
         by_meal = {meal: 0.0 for meal in MEALS}
@@ -937,7 +939,7 @@ def install(app, h):
                 "note": "Recommended targets still pass through the under-18 and 1500 kcal guardrails."}
 
     @app.get("/api/athletes/{athlete_id}/nutrition/expenditure")
-    def nutrition_expenditure(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def nutrition_expenditure(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         athlete = h.athlete_access(db, user, athlete_id)
         program = program_row(db, athlete_id)
         if program is None:
@@ -949,11 +951,11 @@ def install(app, h):
                 "note": "Adaptive expenditure: 14-day energy balance over complete diary days and the weight trend."}
 
     @app.get("/api/athletes/{athlete_id}/nutrition/program")
-    def get_program(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def get_program(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         return program_view(db, h.athlete_access(db, user, athlete_id))
 
     @app.put("/api/athletes/{athlete_id}/nutrition/program", dependencies=[Depends(current_user)])
-    def set_program(athlete_id: int, body: Program, request: Request, db=Depends(get_db)):
+    def set_program(athlete_id: SqlitePath, body: Program, request: Request, db=Depends(get_db)):
         with h.authorized_write(db, request) as (user, emit):
             return save_program(athlete_id, body, user, db, emit)
 
@@ -1051,7 +1053,7 @@ def install(app, h):
             "Content-Disposition": f'attachment; filename="athlete-{athlete["id"]}-{kind}.csv"'})
 
     @app.get("/api/athletes/{athlete_id}/training.csv")
-    def training_csv(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def training_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = h.athlete_access(db, user, athlete_id)
         rows = [{**dict(r), "athlete_name": athlete["name"]} for r in db.execute(
@@ -1061,7 +1063,7 @@ def install(app, h):
             "id", "athlete_id", "athlete_name", "day", "exercise", "set_no", "reps", "load_kg", "rpe", "plan_id"], rows)
 
     @app.get("/api/athletes/{athlete_id}/nutrition.csv")
-    def nutrition_csv(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def nutrition_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = h.athlete_access(db, user, athlete_id)
         rows = [{**r, "athlete_name": athlete["name"]} for r in reversed(food_log_rows(db, athlete_id))]
@@ -1070,7 +1072,7 @@ def install(app, h):
             "protein_g", "carbs_g", "fat_g", "fibre_g"], rows)
 
     @app.get("/api/athletes/{athlete_id}/weights.csv")
-    def weights_csv(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def weights_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = h.athlete_access(db, user, athlete_id)
         rows, trend = weight_series(db, athlete_id)

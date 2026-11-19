@@ -33,3 +33,29 @@ def test_writes_check_committed_consent(api, auth, kind):
     assert response.status_code == 403, response.text
 
 
+@pytest.mark.parametrize("path", ["/api/athletes/9223372036854775808/summary",
+                                  "/api/jumps?athlete_id=9223372036854775808",
+                                  "/api/athletes?offset=9223372036854775808",
+                                  "/api/foods?offset=9223372036854775808"])
+def test_sqlite_integer_overflow_is_a_validation_error(api, auth, path):
+    client, _ = api
+    response = client.get(path, headers=auth("admin"))
+    assert response.status_code == 422, response.text
+    assert {"loc", "msg", "type"} == set(response.json()["detail"][0])
+
+
+def test_sqlite_integer_overflow_in_body_is_a_validation_error(api, auth):
+    client, _ = api
+    response = client.post("/api/jumps", headers=auth("athlete1"), json={**METRICS, "session_id": 2**63})
+    assert response.status_code == 422, response.text
+
+
+def test_nutrition_summary_handles_earliest_calendar_day(api, auth):
+    client, path = api
+    athlete = user_id(path, "athlete1")
+    response = client.get(f"/api/athletes/{athlete}/nutrition/summary", params={"day": "0001-01-01"},
+                          headers=auth("athlete1"))
+    assert response.status_code == 200, response.text
+    assert response.json()["weekly_average"]["window"] == ["0001-01-01", "0001-01-01"]
+
+

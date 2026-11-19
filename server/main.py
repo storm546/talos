@@ -28,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from . import assistant_api, training_nutrition_api
+from .input_bounds import Offset, SQLITE_MAX, SqliteInt, SqlitePath
 
 
 def database_path():
@@ -230,7 +231,7 @@ class NewUser(Login):
     password: str = Field(min_length=8, max_length=1024)
     name: str = Field(min_length=1, max_length=100)
     role: Literal["admin", "coach", "athlete"]
-    club_id: int | None = Field(default=None, gt=0)
+    club_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
 
     @field_validator("name")
     @classmethod
@@ -263,7 +264,7 @@ class NewClub(StrictModel):
 
 class NewGroup(StrictModel):
     name: str = Field(min_length=1, max_length=80)
-    club_id: int | None = Field(default=None, gt=0)
+    club_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
 
     _name = field_validator("name")(NewUser.valid_name.__func__)
 
@@ -275,7 +276,7 @@ class RenameGroup(StrictModel):
 
 
 class GroupMembers(StrictModel):
-    athlete_ids: list[int] = Field(max_length=500)
+    athlete_ids: list[SqliteInt] = Field(max_length=500)
 
 
 class SessionBody(StrictModel):
@@ -285,7 +286,7 @@ class SessionBody(StrictModel):
     test: Literal["cmj", "drop_jump"]
     trials: int = Field(default=3, ge=1, le=5)
     notes: str = Field(default="", max_length=1000)
-    group_id: int | None = Field(default=None, gt=0)
+    group_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
     cancelled: bool = False
 
     @field_validator("title")
@@ -324,10 +325,10 @@ class Checkin(StrictModel):
 
 
 class CommentBody(StrictModel):
-    athlete_id: int = Field(gt=0)
+    athlete_id: int = Field(gt=0, le=SQLITE_MAX)
     body: str = Field(min_length=1, max_length=1000)
-    jump_id: int | None = Field(default=None, gt=0)
-    session_id: int | None = Field(default=None, gt=0)
+    jump_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
+    session_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
 
     @field_validator("body")
     @classmethod
@@ -356,7 +357,7 @@ class Jump(StrictModel):
     flexion_asymmetry_pct: float | None = Field(ge=0, le=100)
     quality: float = Field(ge=0, le=1)
     warnings: list[Literal["low_fps", "low_visibility", "no_flight_detected", "uncertain_timing", "single_leg_view", "manual_edges"]] = Field(max_length=6)
-    session_id: int | None = Field(default=None, gt=0)
+    session_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
     client_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
@@ -915,7 +916,7 @@ def create_app(db_path=None):
 
     @app.get("/api/athletes")
     def athletes(limit: Annotated[int, Query(ge=1, le=500)] = 100,
-                 offset: Annotated[int, Query(ge=0)] = 0, user=Depends(current_user), db=Depends(get_db)):
+                 offset: Offset = 0, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         rows = db.execute(
             "SELECT users.id, users.name, users.club_id, users.active, users.consent_recorded, "
@@ -981,9 +982,9 @@ def create_app(db_path=None):
         return JSONResponse(status_code=201, content={"id": jump_id, "created_at": created_at})
 
     @app.get("/api/jumps")
-    def jumps(athlete_id: Annotated[int | None, Query(gt=0)] = None,
+    def jumps(athlete_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
               limit: Annotated[int, Query(ge=1, le=500)] = 100,
-              offset: Annotated[int, Query(ge=0)] = 0, user=Depends(current_user), db=Depends(get_db)):
+              offset: Offset = 0, user=Depends(current_user), db=Depends(get_db)):
         if user["role"] == "athlete":
             if athlete_id is not None and athlete_id != user["id"]:
                 raise HTTPException(403, "Athletes can read their own data only")
@@ -1054,7 +1055,7 @@ def create_app(db_path=None):
         db.commit()
 
     @app.patch("/api/users/{target_id}/consent")
-    def set_consent(target_id: int, body: Consent, user=Depends(current_user), db=Depends(get_db)):
+    def set_consent(target_id: SqlitePath, body: Consent, user=Depends(current_user), db=Depends(get_db)):
         target = managed_user(db, user, target_id)
         if target["role"] != "athlete":
             raise HTTPException(422, "Consent applies to athletes only")
@@ -1066,7 +1067,7 @@ def create_app(db_path=None):
         return {"consent_recorded": body.consent_recorded, "consent_by": body.consent_by, "consent_at": at}
 
     @app.get("/api/athletes/{athlete_id}/summary")
-    def athlete_summary(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def athlete_summary(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         athlete_access(db, user, athlete_id)
         return {"athlete_id": athlete_id, **summary(jump_rows(db, athlete_id))}
 
@@ -1090,7 +1091,7 @@ def create_app(db_path=None):
         return JSONResponse(result, headers={"Content-Disposition": 'attachment; filename="jumpscan-data.json"'})
 
     @app.get("/api/athletes/{athlete_id}/export.csv")
-    def export_csv(athlete_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def export_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = athlete_access(db, user, athlete_id)
         output = io.StringIO(newline="")
@@ -1141,7 +1142,7 @@ def create_app(db_path=None):
 
     @app.get("/api/users")
     def users(limit: Annotated[int, Query(ge=1, le=500)] = 100,
-              offset: Annotated[int, Query(ge=0)] = 0, user=Depends(current_user), db=Depends(get_db)):
+              offset: Offset = 0, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         rows = db.execute("SELECT * FROM users WHERE (? = 'admin' OR club_id = ?) ORDER BY name, id LIMIT ? OFFSET ?",
                           (user["role"], user["club_id"], limit, offset))
@@ -1149,7 +1150,7 @@ def create_app(db_path=None):
                  "under_18": bool(row["under_18"]), **consent_fields(row)} for row in rows]
 
     @app.patch("/api/users/{target_id}")
-    def user_status(target_id: int, body: UserStatus, user=Depends(current_user), db=Depends(get_db)):
+    def user_status(target_id: SqlitePath, body: UserStatus, user=Depends(current_user), db=Depends(get_db)):
         managed_user(db, user, target_id)
         if not body.active and user["id"] == target_id:
             raise HTTPException(403, "You cannot deactivate yourself")
@@ -1161,7 +1162,7 @@ def create_app(db_path=None):
         return {"id": target_id, "active": body.active}
 
     @app.post("/api/users/{target_id}/password", status_code=204)
-    def reset_password(target_id: int, body: ResetPassword, user=Depends(current_user), db=Depends(get_db)):
+    def reset_password(target_id: SqlitePath, body: ResetPassword, user=Depends(current_user), db=Depends(get_db)):
         managed_user(db, user, target_id)
         salt = secrets.token_bytes(16)
         hashed = password_hash(body.password, salt)
@@ -1172,7 +1173,7 @@ def create_app(db_path=None):
 
     @app.get("/api/audit")
     def audit_log(limit: Annotated[int, Query(ge=1, le=500)] = 100,
-                  offset: Annotated[int, Query(ge=0)] = 0, user=Depends(current_user), db=Depends(get_db)):
+                  offset: Offset = 0, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin")
         # The actor's email makes the log readable without a second lookup; deleted users leave it null.
         return [{**dict(row), "detail": json.loads(row["detail"])} for row in db.execute(
@@ -1180,7 +1181,7 @@ def create_app(db_path=None):
             "ORDER BY audit.id DESC LIMIT ? OFFSET ?", (limit, offset))]
 
     @app.get("/api/groups")
-    def list_groups(club_id: Annotated[int | None, Query(gt=0)] = None,
+    def list_groups(club_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
                     user=Depends(current_user), db=Depends(get_db)):
         if user["role"] == "admin":
             rows = db.execute("SELECT * FROM groups WHERE (? IS NULL OR club_id = ?) ORDER BY name, id",
@@ -1222,7 +1223,7 @@ def create_app(db_path=None):
         return {"id": cursor.lastrowid, "club_id": club_id, "name": body.name}
 
     @app.patch("/api/groups/{group_id}")
-    def rename_group(group_id: int, body: RenameGroup, user=Depends(current_user), db=Depends(get_db)):
+    def rename_group(group_id: SqlitePath, body: RenameGroup, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         group = scoped_group(db, user, group_id)
         if user["role"] == "coach" and group["club_id"] != user["club_id"]:
@@ -1236,7 +1237,7 @@ def create_app(db_path=None):
         return {"id": group_id, "club_id": group["club_id"], "name": body.name}
 
     @app.put("/api/groups/{group_id}/members")
-    def set_group_members(group_id: int, body: GroupMembers, user=Depends(current_user), db=Depends(get_db)):
+    def set_group_members(group_id: SqlitePath, body: GroupMembers, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         group = scoped_group(db, user, group_id)
         unique = list(dict.fromkeys(body.athlete_ids))
@@ -1253,7 +1254,7 @@ def create_app(db_path=None):
         return {"id": group_id, "athlete_ids": unique}
 
     @app.delete("/api/groups/{group_id}", status_code=204)
-    def delete_group(group_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def delete_group(group_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         scoped_group(db, user, group_id)
         # Sessions of the group become club-wide; memberships are dropped.
@@ -1267,7 +1268,7 @@ def create_app(db_path=None):
     def list_sessions(from_: Annotated[str | None, Query(alias="from")] = None,
                       to: Annotated[str | None, Query()] = None,
                       limit: Annotated[int, Query(ge=1, le=500)] = 100,
-                      offset: Annotated[int, Query(ge=0)] = 0,
+                      offset: Offset = 0,
                       user=Depends(current_user), db=Depends(get_db)):
         if user["role"] == "admin":
             clause, params = "1", ()
@@ -1328,7 +1329,7 @@ def create_app(db_path=None):
         return {**dict(session), "jump_count": 0}
 
     @app.patch("/api/sessions/{session_id}", dependencies=[Depends(current_user)])
-    def edit_session(session_id: int, body: SessionBody, request: Request, db=Depends(get_db)):
+    def edit_session(session_id: SqlitePath, body: SessionBody, request: Request, db=Depends(get_db)):
         with authorized_write(db, request) as (user, emit):
             return update_session(session_id, body, user, db, emit)
 
@@ -1352,7 +1353,7 @@ def create_app(db_path=None):
         return dict(session)
 
     @app.get("/api/sessions/{session_id}/report")
-    def session_report(session_id: int, user=Depends(current_user), db=Depends(get_db)):
+    def session_report(session_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         session = scoped_session(db, user, session_id)
         require_role(user, "admin", "coach", "athlete")
         if user["role"] == "athlete" and user["id"] not in session_athletes(db, session):
@@ -1461,7 +1462,7 @@ def create_app(db_path=None):
                                                          **body.model_dump()})
 
     @app.get("/api/checkins")
-    def list_checkins(athlete_id: Annotated[int | None, Query(gt=0)] = None,
+    def list_checkins(athlete_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
                       from_: Annotated[str | None, Query(alias="from")] = None,
                       to: Annotated[str | None, Query()] = None,
                       user=Depends(current_user), db=Depends(get_db)):
@@ -1493,7 +1494,7 @@ def create_app(db_path=None):
             "SELECT * FROM checkins WHERE " + clause + " ORDER BY day DESC, id DESC", params)]
 
     @app.get("/api/checkins/team")
-    def team_checkins(day: Annotated[str | None, Query()] = None, club_id: Annotated[int | None, Query(gt=0)] = None,
+    def team_checkins(day: Annotated[str | None, Query()] = None, club_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
                       user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         day = day if day is not None else datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -1574,9 +1575,9 @@ def create_app(db_path=None):
                 "created_at": now, "read_at": None}
 
     @app.get("/api/comments")
-    def list_comments(athlete_id: Annotated[int, Query(gt=0)],
+    def list_comments(athlete_id: Annotated[int, Query(gt=0, le=SQLITE_MAX)],
                       limit: Annotated[int, Query(ge=1, le=500)] = 100,
-                      offset: Annotated[int, Query(ge=0)] = 0,
+                      offset: Offset = 0,
                       user=Depends(current_user), db=Depends(get_db)):
         if user["role"] == "athlete" and user["id"] != athlete_id:
             raise HTTPException(403, "Athletes can read their own thread only")
