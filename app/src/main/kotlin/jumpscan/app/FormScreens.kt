@@ -83,7 +83,7 @@ internal fun MainActivity.formHome(message: String? = null) {
     layout(getString(R.string.form_title), "form")
     message?.let { notice(it, caution = true) }
     hero(getString(R.string.ui_form_hero), getString(R.string.form_modes_guide),
-        getString(R.string.ui_form_eyebrow, FormExercises.all.size)).also { panel ->
+        getString(R.string.ui_form_eyebrow, FormExercises.offered.size)).also { panel ->
         val links = row(panel)
         if (token().isNotEmpty()) button(getString(R.string.ui_form_history), parent = links) { techniqueHistory() }
             .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(12) }
@@ -94,7 +94,7 @@ internal fun MainActivity.formHome(message: String? = null) {
     val replay = BuildConfig.DEBUG && File(filesDir, LIVE_REPLAY_FILE).isFile
     if (replay) text(getString(R.string.ui_replay_hint), 13)
     for (group in formGroups) {
-        val members = FormExercises.all.filter { formGroup(it.id) == group }
+        val members = FormExercises.offered.filter { formGroup(it.id) == group }
         if (members.isEmpty()) continue
         section(group.label).setPadding(0, dp(20), 0, 0)
         members.forEach { exerciseCard(it, group.icon, replay) }

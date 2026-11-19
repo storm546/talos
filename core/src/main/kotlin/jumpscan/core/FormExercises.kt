@@ -11,8 +11,11 @@ data class FormSignal(val metric: String, val up: Double, val down: Double, val 
     val gates: List<FormBand>, val peakAtTop: Boolean, val legacy: Boolean, val depthMin: Double?,
     val openFlexion: Double?, val minPhaseMs: Long)
 
+/** [hidden] exercises stay in the catalogue (old sets still parse and upload) but are not offered;
+ *  [hiddenReason] records the benchmark result that kept them out. */
 data class FormExercise(val id: String, val nameBg: String, val nameEn: String, val mode: String,
-    val sided: Boolean, val view: String, val signal: FormSignal, val checks: List<FormCheck>) {
+    val sided: Boolean, val view: String, val signal: FormSignal, val checks: List<FormCheck>,
+    val hidden: Boolean = false, val hiddenReason: String? = null) {
     fun validateSide(side: String?) {
         require(if (sided) side == "L" || side == "R" else side == null) { "invalid exercise side" }
     }
@@ -38,9 +41,11 @@ object FormExercises {
                     val check = entryCheck as Map<*, *>
                     FormCheck(check.string("key"), check.string("label_bg"), check.string("label_en"), check.string("unit"),
                         check.string("cue_bg"), check.string("cue_en"), band(check))
-                })
+                }, row["hidden"] == true, row["hidden_reason"] as? String)
         }
     }
+    /** The exercises the app offers. */
+    val offered: List<FormExercise> by lazy { all.filter { !it.hidden } }
     private val byId by lazy { all.associateBy { it.id } }
     operator fun get(id: String): FormExercise = requireNotNull(byId[id]) { "unknown form exercise: $id" }
     private fun Map<*, *>.string(key: String) = get(key) as String

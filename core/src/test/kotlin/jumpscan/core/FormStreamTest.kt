@@ -71,6 +71,12 @@ class FormStreamTest {
     }
 
     @Test
+    fun hiddenExercisesKeepAReasonAndAreNotOffered() {
+        for (entry in FormExercises.all) assertEquals(entry.hidden, !entry.hiddenReason.isNullOrBlank(), entry.id)
+        assertEquals(FormExercises.all.filter { !it.hidden }, FormExercises.offered)
+    }
+
+    @Test
     fun liveCadenceWithDroppedAndLowVisibilityFramesKeepsSquatCount() {
         // Recorded at about 30 fps; live delivers frames irregularly (about 15 per s, some intervals doubled)
         // and loses a joint now and then. Neither may split a repetition into unclear halves.

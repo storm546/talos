@@ -36,7 +36,7 @@
     <string name="ui_server_summary">Exact details from the server</string>
     <string name="ui_form_hero">Coach your technique</string>
     <string name="ui_form_eyebrow">%1$d EXERCISES · LIVE OR FROM VIDEO</string>
-    <string name="ui_form_validated_note">Only the squat has been checked against hand counts, on a few clips. The other exercises are still experimental.</string>
+    <string name="ui_form_validated_note">Exercises are offered here only after their repetition counts match hand counts on held-out test videos: exact in at least 9 of 10 sets at live frame rates. None has passed yet. The squat was exact in 2 of 3 test sets. Your earlier sets stay in Technique history.</string>
     <string name="ui_replay_hint">Debug build: press and hold Live to replay the test recording.</string>
     <string name="ui_group_legs">Legs</string>
     <string name="ui_group_hinge">Hinge and hips</string>
