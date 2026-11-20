@@ -5,6 +5,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Typeface
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.TotalCaptureResult
 import android.media.AudioManager
 import android.media.MediaMetadataRetriever
 import android.media.ToneGenerator
@@ -24,6 +27,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -44,6 +49,7 @@ class LiveFormActivity : ComponentActivity() {
     private lateinit var exercise: FormExercise
     private var side: String? = null
     private var replay = false
+    private val phoneTrial by lazy { intent.getIntExtra("phone_trial", 0).takeIf { it in 21..23 }?.let { PhoneTrial(it) } }
     private val appLocale get() = resources.configuration.locales[0]
     private val bg get() = appLocale.language == "bg"
     private val worker = Executors.newSingleThreadScheduledExecutor()
@@ -74,9 +80,7 @@ class LiveFormActivity : ComponentActivity() {
     private var voiceNoticeShown = false
     private var voiceSettingsOpened = false
     private var countTone: ToneGenerator? = null
-    private var firstResultAt = 0L
-    private var lastResultAt = 0L
-    private val latencyMs = mutableListOf<Long>()
+    @Volatile private var timing: RunTiming? = null
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted && running) openFeed() else if (!granted) { banner.setText(R.string.form_camera_permission); tone(Tone.WARNING) }
     }
@@ -206,8 +210,8 @@ class LiveFormActivity : ComponentActivity() {
         val ticket = ++generation
         worker.execute {
             try {
-                val cameraFeed = CameraFormFeed(applicationContext, worker, { bitmap, frame, latency ->
-                    runOnUiThread { if (ticket == generation && running) onFrame(bitmap, frame, latency) }
+                val cameraFeed = CameraFormFeed(applicationContext, worker, { bitmap, frame, latency, run ->
+                    runOnUiThread { if (ticket == generation && running) onFrame(bitmap, frame, latency, run) }
                 }, { runOnUiThread { if (ticket == generation) failed() } })
                 feed?.close()
                 feed = cameraFeed
@@ -217,6 +221,7 @@ class LiveFormActivity : ComponentActivity() {
         }
     }
 
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
     private fun bindCamera(ticket: Int, cameraFeed: CameraFormFeed) {
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
@@ -225,12 +230,18 @@ class LiveFormActivity : ComponentActivity() {
                 val cameraProvider = future.get()
                 provider = cameraProvider
                 mirror = cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
-                val analyzer = ImageAnalysis.Builder().setTargetRotation(Surface.ROTATION_0)
+                val builder = ImageAnalysis.Builder().setTargetRotation(Surface.ROTATION_0)
                     .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                Camera2Interop.Extender(builder).setSessionCaptureCallback(object : CameraCaptureSession.CaptureCallback() {
+                    override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+                        if (ticket == generation) timing?.capture()
+                    }
+                })
+                val analyzer = builder.build()
                 analysis = analyzer
                 analyzer.setAnalyzer(worker) { image ->
-                    try { cameraFeed.camera(image) }
+                    try { cameraFeed.camera(image, timing) }
                     catch (_: RuntimeException) { runOnUiThread { if (ticket == generation) failed() } }
                 }
                 cameraProvider.bindToLifecycle(this, if (mirror) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA, analyzer)
@@ -251,17 +262,20 @@ class LiveFormActivity : ComponentActivity() {
             if (!running || ticket != generation) return
             val now = SystemClock.elapsedRealtime()
             val start = replayStart
+            val run = timing.takeIf { start != 0L }
             val position = if (start == 0L) 0L else ((now - start) / 50) * 50
             if (position >= duration) {
-                runOnUiThread { if (ticket == generation && stream != null) finishSet() }
+                runOnUiThread { if (ticket == generation && run === timing) finishSet(limitMs = duration) }
                 return
             }
             try {
                 if ((!previewed || start != 0L) && position != lastVideoMs && cameraFeed.isReady()) {
                     // MediaPipe accepts only ARGB_8888; the retriever may return RGB_565.
+                    val started = SystemClock.elapsedRealtimeNanos()
                     val bitmap = video.getScaledFrameAtTime(position * 1000, MediaMetadataRetriever.OPTION_CLOSEST,
                         (width * scale).toInt(), (height * scale).toInt())?.copy(Bitmap.Config.ARGB_8888, false)
-                    if (bitmap != null && cameraFeed.submit(bitmap, now)) {
+                    if (bitmap != null) run?.decoded(SystemClock.elapsedRealtimeNanos() - started)
+                    if (bitmap != null && cameraFeed.submit(bitmap, now, run)) {
                         previewed = true
                         lastVideoMs = if (start == 0L) -1 else position
                     }
@@ -275,7 +289,7 @@ class LiveFormActivity : ComponentActivity() {
         next()
     }
 
-    private fun onFrame(bitmap: Bitmap, frame: Frame, latency: Long) {
+    private fun onFrame(bitmap: Bitmap, frame: Frame, latency: Long, run: RunTiming?) {
         preview.show(bitmap, frame, mirror)
         aspect = bitmap.width.toFloat() / bitmap.height
         val inFrame = formInFrame(frame)
@@ -305,14 +319,11 @@ class LiveFormActivity : ComponentActivity() {
             })
             return
         }
+        if (run == null || run !== timing) return
         if (setStarted < 0) setStarted = frame.tMs
+        run.analysed(latency)
         active.feed(frame.copy(tMs = frame.tMs - setStarted))
         showProgress(active.progress)
-        if (BuildConfig.DEBUG) {
-            lastResultAt = SystemClock.elapsedRealtime()
-            if (latencyMs.isEmpty()) firstResultAt = lastResultAt
-            latencyMs += latency
-        }
         val key = if (inFrame) active.progress.cue else "tracking_gap"
         val message = cue(key)
         banner.text = message
@@ -331,32 +342,36 @@ class LiveFormActivity : ComponentActivity() {
         stream = FormStream(exercise.id, side, aspect)
         setStarted = -1
         spokenCount = 0; spokenCue = null; feedbackAt = Long.MIN_VALUE / 2
-        latencyMs.clear()
+        timing = RunTiming(applicationContext, if (replay) "form_replay" else "form_live", "lite", phoneTrial)
         action.setText(R.string.form_stop)
         banner.setText(R.string.form_begin)
         tone(Tone.GOOD)
         if (replay) replayStart = SystemClock.elapsedRealtime()
     }
 
-    private fun finishSet() {
+    private fun finishSet(status: String = "ok", limitMs: Long = Long.MAX_VALUE) {
         val active = stream ?: return
+        val run = checkNotNull(timing)
+        timing = null
+        run.clipMs = minOf(run.elapsedMs, limitMs)
         stream = null
         replayStart = 0L
+        if (status != "ok") {
+            run.save(status)
+            action.setText(R.string.form_start)
+            showProgress(FormProgress())
+            return
+        }
         val metrics = try { active.finish().copy(mode = exercise.mode, source = "live") }
         catch (_: IllegalArgumentException) {
+            run.save("error")
             action.setText(R.string.form_start)
             showProgress(FormProgress())
             Toast.makeText(this, R.string.too_few_clear_frames, Toast.LENGTH_LONG).show()
             return
         }
-        if (BuildConfig.DEBUG && latencyMs.isNotEmpty()) {
-            val elapsed = lastResultAt - firstResultAt
-            val sorted = latencyMs.sorted()
-            val rate = if (elapsed > 0) (sorted.size - 1) * 1000.0 / elapsed else 0.0
-            android.util.Log.i("JumpScanForm", "replay=$replay model=lite-cpu callbacks=${sorted.size} elapsedMs=$elapsed " +
-                "callbackFps=$rate meanMs=${sorted.average()} p95Ms=${sorted[(sorted.size * .95).toInt().coerceAtMost(sorted.lastIndex)]} " +
-                "complete=${metrics.summary.repetitionCount} partial=${metrics.summary.partialCount} unclear=${metrics.summary.unclearCount}")
-        }
+        if (exercise.mode == "reps") run.appReps = metrics.summary.repetitionCount
+        run.save("ok")
         val payload = if (exercise.signal.legacy) metrics.copy(repetitions = metrics.repetitions.map { rep ->
             if (rep.status == "unclear") rep else rep.copy(checks = mapOf("knee_flexion_peak" to rep.depth,
                 "knee_alignment" to listOfNotNull(rep.fppaL, rep.fppaR).maxOrNull()))
@@ -427,7 +442,7 @@ class LiveFormActivity : ComponentActivity() {
     }
 
     private fun failed() {
-        if (stream != null) finishSet()
+        if (stream != null) finishSet("error")
         action.isEnabled = false
         banner.setText(R.string.form_camera_error)
         tone(Tone.WARNING)
@@ -436,7 +451,7 @@ class LiveFormActivity : ComponentActivity() {
     override fun onStop() {
         running = false
         generation++
-        if (stream != null && !isFinishing) finishSet()
+        if (stream != null) finishSet(if (isFinishing || phoneTrial != null) "cancelled" else "ok")
         analysis?.let { analyzer -> analyzer.clearAnalyzer(); provider?.unbind(analyzer) }
         analysis = null
         calibration.clear()

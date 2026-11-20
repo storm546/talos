@@ -2,6 +2,7 @@ package jumpscan.app
 
 import android.app.Activity
 import android.app.Instrumentation
+import android.content.ContextWrapper
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
@@ -31,12 +32,40 @@ class AppChecks : Instrumentation() {
             featureChecks()
             previewChecks()
             numberChecks()
-            output.putString("stream", "Club parsing, check-in validation, feature routing and ordering, queue migration, retry identity, isolation, durability, preview and number-format checks passed.\n")
+            diagnosticChecks()
+            output.putString("stream", "Club parsing, check-in validation, feature routing and ordering, queue migration, retry identity, isolation, durability, preview, number-format and diagnostic checks passed.\n")
             finish(Activity.RESULT_OK, output)
         } catch (e: Throwable) {
             output.putString("stream", "App checks failed: ${e.stackTraceToString()}\n")
             finish(Activity.RESULT_CANCELED, output)
         }
+    }
+
+    private fun diagnosticChecks() {
+        check(p95Ms(emptyList()) == null && p95Ms((20 downTo 1).map { it * 1_000_000L }) == 19.0)
+        val at30 = JSONObject().put("kind", "jump").put("status", "no_flight").put("clip_fps", 29.97)
+            .put("trial", 11).put("trial_target_fps", 60)
+        check(!at30.completedJump())
+        check(at30.put("trial_target_fps", 30).completedJump())
+        check(PhoneTrial(5).view == "front" && PhoneTrial(6).view == "side" && PhoneTrial(16).plannedFps == 60)
+        val csv = diagnosticsCsv(listOf(at30.put("device_model", "=Model, \"test\"")))
+        check("\"'=Model, \"\"test\"\"\"" in csv && ",29.970," in csv && csv.endsWith("\r\n"))
+        val isolated = object : ContextWrapper(targetContext) {
+            override fun getSharedPreferences(name: String, mode: Int) = super.getSharedPreferences("$name-checks", mode)
+            override fun getCacheDir() = File(super.getCacheDir(), "diagnostic-checks")
+        }
+        val log = DiagnosticLog(isolated)
+        log.clear()
+        try {
+            repeat(201) { index -> log.append(JSONObject().put("index", index)) }
+            val restored = DiagnosticLog(isolated)
+            check(restored.read().size == 200 && restored.read().first().getInt("index") == 1)
+            restored.append(JSONObject().put("trial", 21).put("status", "ok").put("app_reps", 4))
+            restored.saveCount(21, 5)
+            restored.saveCount(21, 9)
+            check(log.read().last().getInt("human_reps") == 5)
+        } finally { log.clear() }
+        check(log.read().isEmpty())
     }
 
     private fun featureChecks() {
