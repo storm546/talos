@@ -1,0 +1,11 @@
+<resources>
+    <string name="appearance">Изглед</string>
+    <string name="appearance_value">Изглед · %1$s</string>
+    <string name="dark_mode">Графит</string>
+    <string name="light_mode">Хартия</string>
+    <string name="system_mode">Според устройството</string>
+    <string name="repeat_live">Серия на живо · %1$s</string>
+    <string name="need_email">Въведете имейл адреса си.</string>
+    <string name="need_password">Въведете паролата си.</string>
+    <string name="height_trace">Височина на скока · см</string>
+</resources>

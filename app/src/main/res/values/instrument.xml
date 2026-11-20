@@ -1,0 +1,11 @@
+<resources>
+    <string name="appearance">Appearance</string>
+    <string name="appearance_value">Appearance · %1$s</string>
+    <string name="dark_mode">Graphite</string>
+    <string name="light_mode">Paper</string>
+    <string name="system_mode">Use device setting</string>
+    <string name="repeat_live">Live set · %1$s</string>
+    <string name="need_email">Enter your email address.</string>
+    <string name="need_password">Enter your password.</string>
+    <string name="height_trace">Jump height · cm</string>
+</resources>

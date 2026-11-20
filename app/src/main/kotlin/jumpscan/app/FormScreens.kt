@@ -45,7 +45,7 @@ internal fun validateFormFields(body: JSONObject) {
 
 internal fun FormExercise.label(bg: Boolean) = if (bg) nameBg else nameEn
 
-private fun MainActivity.formLabel(choice: FormChoice): String {
+internal fun MainActivity.formLabel(choice: FormChoice): String {
     val name = FormExercises[choice.exercise].label(locale.language == "bg")
     return when (choice.side) {
         "L" -> getString(R.string.form_named_side, name, getString(R.string.form_left))
@@ -133,7 +133,11 @@ private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, repl
         mark()
     }
     val actions = row(panel, 4)
-    fun choose() { formChoice = FormChoice(exercise.id, side) }
+    fun choose() {
+            formChoice = FormChoice(exercise.id, side)
+            getSharedPreferences("account", android.content.Context.MODE_PRIVATE).edit()
+                .putString("exercise", exercise.id).putString("exercise_side", side).apply()
+        }
     button(getString(R.string.ui_live), primary = true, parent = actions) { choose(); openLiveForm(false) }.apply {
         layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10) }
         contentDescription = getString(R.string.ui_live_for, exercise.label(locale.language == "bg"))

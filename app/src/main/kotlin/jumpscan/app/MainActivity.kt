@@ -53,6 +53,7 @@ class MainActivity : Activity() {
     private var test = "cmj"
     internal lateinit var page: LinearLayout
         private set
+    private var previousTab = -1
     private var screen = "login"
     private var progress: ProgressBar? = null
     private var progressText: TextView? = null
@@ -77,6 +78,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        test = prefs.getString("jump_test", "cmj") ?: "cmj"
+        formChoice = FormChoice(prefs.getString("exercise", "squat") ?: "squat", prefs.getString("exercise_side", null))
         val retained = lastNonConfigurationInstance as? RetainedResult
         if (retained != null) { analysis = retained.analysis; uploadedId = retained.uploadedId; test = retained.test; queuedId = retained.queuedId; edits = retained.edits; clientId = retained.clientId; selectedSession = retained.selectedSession; resultSession = retained.resultSession }
         lastForm = retained?.form
@@ -86,6 +89,7 @@ class MainActivity : Activity() {
             pendingTrial = PhoneTrial(it, savedInstanceState.getInt("phone_fps").takeIf { fps -> fps > 0 })
         }
         if (savedInstanceState?.getString("screen") == "diagnostics" || pendingTrial != null) diagnostics()
+        else if (savedInstanceState?.getString("screen") == "profile") profile()
         else if (lastForm != null && retained?.screen == "form_result") formResult(lastForm!!.metrics, lastForm)
         else if (analysis != null && retained?.screen in listOf("frames", "result")) { if (edits != null) frameEditor() else result() } else if (!openVideo(intent)) {
             if (token().isEmpty()) login() else home()
@@ -150,7 +154,19 @@ class MainActivity : Activity() {
         }
         scroll.addView(page)
         // Target 35 draws edge-to-edge. Keep controls outside system bars and the keyboard.
-        scroll.setOnApplyWindowInsetsListener { view, insets ->
+        val shell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(getColor(R.color.paper))
+            addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+        val tabs = listOf(UiTile(R.string.ui_today, "home") { home() }, UiTile(R.string.ui_technique, "form") { formHome() },
+            UiTile(R.string.ui_profile, "profile") { profile() })
+        val selected = listOf("home", "form", "profile").indexOf(name)
+        if (selected >= 0) {
+            shell.addView(navigation(tabs, selected, previousTab))
+            previousTab = selected
+        }
+        shell.setOnApplyWindowInsetsListener { view, insets ->
             if (Build.VERSION.SDK_INT >= 30) {
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
                 view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -161,9 +177,9 @@ class MainActivity : Activity() {
             }
             insets
         }
-        setContentView(scroll)
+        setContentView(shell)
         page.arrive()
-        scroll.requestApplyInsets()
+        shell.requestApplyInsets()
         text(getString(R.string.brand), 13, ink).apply {
             instrumentType(numeric = true)
             letterSpacing = .1f
@@ -225,8 +241,7 @@ class MainActivity : Activity() {
 
     internal fun login(message: String? = null, showServer: Boolean = false, server: String = base()) {
         layout(getString(R.string.sign_in), "login")
-        hero(R.string.ui_workbench, R.string.privacy)
-        text(getString(R.string.login_intro))
+        text(getString(R.string.login_intro), 17)
         if (message != null) notice(message, caution = true)
         val email = field(getString(R.string.email), type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
         val password = field(getString(R.string.password), type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
@@ -235,13 +250,17 @@ class MainActivity : Activity() {
         lateinit var url: EditText
         button(getString(R.string.sign_in), primary = true) {
             val address = try { serverUrl(url.text.toString()) } catch (e: IOException) {
-                Toast.makeText(this, errorMessage(e), Toast.LENGTH_LONG).show()
+                connection.visibility = View.VISIBLE
+                url.error = errorMessage(e)
+                url.requestFocus()
                 return@button
             }
             val emailValue = email.text.toString().trim()
             val passwordValue = password.text.toString()
             if (emailValue.isBlank() || passwordValue.isBlank()) {
-                Toast.makeText(this, getString(R.string.credentials_required), Toast.LENGTH_LONG).show()
+                val field = if (emailValue.isBlank()) email else password
+                field.error = getString(if (emailValue.isBlank()) R.string.need_email else R.string.need_password)
+                field.requestFocus()
                 return@button
             }
             password.text.clear()
@@ -291,7 +310,7 @@ class MainActivity : Activity() {
     }
 
     internal fun home(message: String? = null) {
-        layout(getString(R.string.home), "home")
+        layout(getString(R.string.ui_today), "home")
         val signedIn = token().isNotEmpty()
         val name = prefs.getString("name", "").orEmpty()
         val day = localDate(todayLocal(), locale)
@@ -312,7 +331,8 @@ class MainActivity : Activity() {
                 minHeight = dp(48)
                 isChecked = test == value
                 isEnabled = selectedSession == null
-                setOnClickListener { test = value }
+                segment(inverse = true)
+                setOnClickListener { test = value; prefs.edit().putString("jump_test", value).apply() }
             }, RadioGroup.LayoutParams(0, -2, 1f))
         }
         jump.addView(types)
@@ -320,14 +340,15 @@ class MainActivity : Activity() {
         button(getString(R.string.pick_video), parent = jump) {
             filmingGuide { pickJumpVideo() }
         }
-        section(R.string.ui_tools).setPadding(0, dp(14), 0, dp(3))
+        button(getString(R.string.repeat_live, formLabel(formChoice))) { openLiveForm(false) }.apply {
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            compoundDrawablePadding = dp(12)
+            setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("form", green), null, null, null)
+        }
         if (signedIn) {
-            tiles(UiTile(R.string.ui_technique, "form") { formHome() }, UiTile(R.string.history, "history") { history() },
-                UiTile(R.string.ui_club, "club") { clubHome() }, UiTile(R.string.checkin_title, "checkin") { checkin() },
-                UiTile(R.string.ui_profile, "profile") { profile() })
-            button(getString(R.string.ui_more)) { more() }
-        } else {
-            tiles(UiTile(R.string.ui_technique, "form") { formHome() }, UiTile(R.string.ui_profile, "profile") { profile() })
+            section(R.string.ui_tools).setPadding(0, dp(16), 0, dp(4))
+            tiles(UiTile(R.string.history, "history") { history() }, UiTile(R.string.ui_club, "club") { clubHome() },
+                UiTile(R.string.checkin_title, "checkin") { checkin() }, UiTile(R.string.ui_more, "more") { more() })
         }
         if (analysis != null) button(getString(R.string.last_result)) { result() }
         if (signedIn) pendingControls()
@@ -353,6 +374,7 @@ class MainActivity : Activity() {
                 text(base(), 14, parent = it)
             }
         }
+        appearance()
         button(getString(R.string.diagnostics)) { diagnostics() }
         if (token().isNotEmpty()) {
             pendingControls()
@@ -478,6 +500,7 @@ class MainActivity : Activity() {
                     id = View.generateViewId(); text = score.toString(); tag = score
                     setTextColor(ink); buttonTintList = ColorStateList.valueOf(green)
                     minHeight = dp(48); setPadding(0, 0, 0, 0)
+                    segment()
                     contentDescription = getString(label) + ": " + score
                     isChecked = score == (saved?.optInt(keys[index], 3) ?: 3)
                 }, RadioGroup.LayoutParams(0, -2, 1f))
