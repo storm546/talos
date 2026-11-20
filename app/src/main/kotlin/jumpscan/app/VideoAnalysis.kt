@@ -29,7 +29,7 @@ import kotlin.math.roundToInt
 
 internal data class Analysis(val landing: JumpAnalyzer.Analysis, val truncated: Boolean,
     val preview: Bitmap, val previewUnclear: Boolean, val frames: List<Frame>, val timesUs: List<Long>,
-    val uri: Uri, val aspect: Float, val clipMs: Long?) {
+    val uri: Uri, val aspect: Float, val clipMs: Long?, val launchImage: Bitmap?) {
     val metrics get() = landing.metrics
     val contactFound get() = landing.contactMs != null
 }
@@ -79,14 +79,15 @@ internal fun applyEdges(context: Context, analysis: Analysis, takeoffMs: Long, l
         val frame = analysis.frames.first { it.tMs == landingMs }
         val preview = try { landingPreview(raw, frame) } finally { raw.recycle() }
         status = "ok"
-        return analysis.copy(landing = landing, preview = preview, previewUnclear = unclearPreview(frame))
+        return analysis.copy(landing = landing, preview = preview, previewUnclear = unclearPreview(frame),
+            launchImage = framePreview(context, analysis, analysis.timesUs.indexOfFirst { it / 1000 == takeoffMs }))
     } finally { timing.save(status) }
 }
 
 internal fun analyzeVideo(context: Context, uri: Uri, test: String, mode: String = "full", trial: PhoneTrial? = null,
-    captureFps: Int? = null,
+    captureFps: Int? = null, scan: ((Bitmap, Frame, Float) -> Unit)? = null,
     progress: (Int) -> Unit): Analysis =
-    withVideoPose(context, uri, mode, 10_000L, trial, progress, captureFps) { retriever, frames, timesUs, aspect, truncated, timing ->
+    withVideoPose(context, uri, mode, 10_000L, trial, progress, captureFps, scan) { retriever, frames, timesUs, aspect, truncated, timing ->
         val result = try { JumpAnalyzer.analyzeWithLanding(frames, test, aspect) }
             catch (_: IllegalArgumentException) { throw AppError(R.string.too_few_clear_frames) }
         val landing = if (captureFps == null) result else result.copy(metrics = result.metrics.copy(fps = timing.clipFps!!))
@@ -98,12 +99,18 @@ internal fun analyzeVideo(context: Context, uri: Uri, test: String, mode: String
             android.util.Log.d("JumpScan", "Metrics ${landing.metrics.toJson()} contactMs=${landing.contactMs} previewMs=${previewFrame.tMs}")
             File(context.filesDir, "metrics.json").writeText(landing.metrics.toJson())
         }
-        Analysis(landing, truncated, preview, unclearPreview(previewFrame), frames, timesUs, uri, aspect, timing.clipMs)
+        val launchImage = landing.takeoffMs?.let { at ->
+            val index = timesUs.indexOfFirst { it / 1000 == at }
+            if (index < 0) null else videoFrame(retriever, timesUs, index, aspect).let { image ->
+                try { landingPreview(image, frames.first { it.tMs == at }) } finally { image.recycle() }
+            }
+        }
+        Analysis(landing, truncated, preview, unclearPreview(previewFrame), frames, timesUs, uri, aspect, timing.clipMs, launchImage)
     }
 
-internal fun analyzeFormVideo(context: Context, uri: Uri, choice: FormChoice, trial: PhoneTrial? = null,
+internal fun analyzeFormVideo(context: Context, uri: Uri, choice: FormChoice, trial: PhoneTrial? = null, scan: ((Bitmap, Frame, Float) -> Unit)? = null,
     progress: (Int) -> Unit): FormMetrics =
-    withVideoPose(context, uri, "form", 60_000L, trial, progress) { _, frames, _, aspect, _, _ ->
+    withVideoPose(context, uri, "form", 60_000L, trial, progress, scan = scan) { _, frames, _, aspect, _, _ ->
         try { FormAnalyzer.analyze(frames, choice.exercise, choice.side, aspect) }
         catch (_: IllegalArgumentException) { throw AppError(R.string.too_few_clear_frames) }
     }
@@ -142,7 +149,7 @@ internal fun checkedCaptureRate(timesUs: List<Long>, durationUs: Long, target: I
 }
 
 private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: Long, trial: PhoneTrial?, progress: (Int) -> Unit,
-    captureFps: Int? = null,
+    captureFps: Int? = null, scan: ((Bitmap, Frame, Float) -> Unit)? = null,
     finish: (MediaMetadataRetriever, List<Frame>, List<Long>, Float, Boolean, RunTiming) -> T): T {
     val replay = BuildConfig.DEBUG && mode == "replay"
     val kind = if (mode == "form") "form_recorded" else if (replay) "jump_replay" else "jump"
@@ -211,6 +218,7 @@ private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: L
                 val frames = ArrayList<Frame>(samples.size)
                 val absent = List(33) { Landmark(0f, 0f, 0f, 0f) }
                 var foundPerson = false
+                var lastPreview = -1000L
                 for ((index, timeUs) in samples.withIndex()) {
                     if (Thread.currentThread().isInterrupted) throw InterruptedException()
                     val bitmap = timing.decode { decode(timeUs, 720) }
@@ -230,6 +238,13 @@ private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: L
                                     pose.map { Landmark(it.x(), it.y(), it.z(), it.visibility().orElse(0f)) },
                                     world.map { Landmark(it.x(), it.y(), it.z(), it.visibility().orElse(0f)) })
                             } else Frame(timeUs / 1000, absent, absent)
+                            val now = SystemClock.elapsedRealtime()
+                            if (scan != null && now - lastPreview >= 160) {
+                                val factor = minOf(1f, 320f / max(bitmap.width, bitmap.height))
+                                val small = Bitmap.createScaledBitmap(bitmap, max(1, (bitmap.width*factor).roundToInt()), max(1, (bitmap.height*factor).roundToInt()), true)
+                                scan(if (small === bitmap) bitmap.copy(Bitmap.Config.ARGB_8888, false) else small, frames.last(), (index+1f)/samples.size)
+                                lastPreview = now
+                            }
                         } finally { image.close() }
                     } finally { bitmap.recycle() }
                     progress((index + 1) * 100 / samples.size)

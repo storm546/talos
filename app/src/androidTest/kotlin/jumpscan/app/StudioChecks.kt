@@ -76,7 +76,7 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             val sets = JSONArray(api(server, "/api/form?limit=20", token = login.getString("token")))
             val set = sets.getJSONObject(0)
             test.runOnMainSync { host.formResult(set, FormResult(set)) }; shot("set-summary", "form_result")
-            test.runOnMainSync { open("history") }; shot("history")
+            record("history-rulers") { test.runOnMainSync { open("history") }; shot("history") }
             test.runOnMainSync { host.trainingHome() }; shot("training")
             test.runOnMainSync { host.nutritionHome() }; shot("nutrition")
             test.runOnMainSync { open("clubHome") }; shot("club")
@@ -89,13 +89,10 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             test.runOnMainSync { host.diagnostics() }; shot("guided-phone-test", "diagnostics")
             test.runOnMainSync { (host.page.parent as android.widget.ScrollView).fullScroll(View.FOCUS_DOWN) }
             shot("diagnostics")
-            test.runOnMainSync {
-                host.work(host.getString(R.string.analysing), { Thread.sleep(7500) }, { host.home() }, { host.home(it) })
-                (MainActivity::class.java.getDeclaredField("progress").apply { isAccessible = true }.get(host) as Dial).show(37)
-            }; shot("analysis", "busy")
+            test.runOnMainSync { buttons(host.page).firstOrNull { it.text == host.getString(R.string.diag_clear) }?.performClick() }
+            shot("diagnostic-actions", "diagnostics")
         } finally {
             test.runOnMainSync { host.finish() }
-            account.edit().clear().commit()
         }
     }
 }

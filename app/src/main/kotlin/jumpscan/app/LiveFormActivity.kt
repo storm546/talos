@@ -76,6 +76,8 @@ class LiveFormActivity : ComponentActivity() {
     @Volatile private var generation = 0
     @Volatile private var replayStart = 0L
     private lateinit var preview: LiveFormPreview
+    private var targetButton: RepTarget? = null
+    private var repTarget = 8
     private lateinit var counter: TextView
     private lateinit var subcount: TextView
     private lateinit var banner: TextView
@@ -171,6 +173,16 @@ class LiveFormActivity : ComponentActivity() {
         header.addView(voice, LinearLayout.LayoutParams(-1, -2))
         if (exercise.mode == "reps") {
             val settings = getSharedPreferences("live-form", MODE_PRIVATE)
+            val options = listOf(5, 8, 12)
+            repTarget = settings.getInt("target", 8).takeIf { it in options } ?: 8
+            targetButton = RepTarget(this).also { target ->
+                styleButton(target, false); target.setPadding(dp(42), 0, dp(12), 0); target.isAllCaps = false
+                target.text = getString(R.string.flight_target, repTarget)
+                target.setOnClickListener {
+                    repTarget = options[(options.indexOf(repTarget)+1)%options.size]
+                    settings.edit().putInt("target", repTarget).apply(); target.text = getString(R.string.flight_target, repTarget)
+                }; header.addView(target, LinearLayout.LayoutParams(-1, dp(48)))
+            }
             cuesMuted = settings.getBoolean("mute-technique", false)
             header.addView(Switch(this).apply {
                 setText(R.string.form_mute_technique)
@@ -363,6 +375,14 @@ class LiveFormActivity : ComponentActivity() {
         val key = if (!inFrame) "tracking_gap" else progress.cue.takeIf { it == "ready_position" || it == "hold_position" }
         val terminalCue = events.filterIsInstance<FormEvent.End>().map { cues.record(faults(it.repetition)) }.lastOrNull()
             .takeUnless { cuesMuted }
+        val fault = progress.cue?.let { value -> exercise.checks.any { it.key == value } } == true ||
+            events.filterIsInstance<FormEvent.End>().lastOrNull()?.let { faults(it.repetition).isNotEmpty() } == true
+        preview.jointColor = when {
+            !inFrame || progress.cue in listOf("ready_position", "hold_position", "tracking_gap") -> android.graphics.Color.WHITE
+            fault -> 0xffffc04a.toInt()
+            else -> getColor(R.color.signal)
+        }
+        preview.invalidate()
         if (terminalCue != null) {
             banner.text = cue(terminalCue)
             tone(Tone.WARNING)
@@ -429,9 +449,10 @@ class LiveFormActivity : ComponentActivity() {
             val digits = String.format(appLocale, "%d", progress.complete)
             if (counter.text.toString() != digits) {
                 counter.text = digits
-                if (progress.complete > 0) counter.bump()
+                if (progress.complete > 0) { counter.bump(); counter.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK) }
             }
             val counts = getString(R.string.form_counts, progress.complete, progress.partial, progress.unclear)
+            targetButton?.apply { fraction = (progress.complete.toFloat()/repTarget).coerceIn(0f, 1f); isClickable = stream == null; invalidate() }
             subcount.text = if (stream == null) counts else getString(R.string.form_provisional_count, counts)
         }
     }

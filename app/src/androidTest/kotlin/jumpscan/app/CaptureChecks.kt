@@ -163,8 +163,28 @@ internal class CaptureChecks(private val test: Instrumentation) {
 
         val result = analyzeVideo(context, clip(60), "cmj", "replay") {}
         val prefs = context.getSharedPreferences("account", 0)
-        prefs.edit().putString("server", "http://10.0.2.2:18767").putString("token", "capture-fixture").apply()
+        if (studio == null) prefs.edit().putString("server", "http://10.0.2.2:18767").putString("token", "capture-fixture").apply()
         val main = launch(MainActivity::class.java)
+        if (studio != null) {
+            fun scan(view: android.view.View): LiveFormPreview? {
+                if (view is LiveFormPreview) return view
+                if (view is android.view.ViewGroup) for (index in 0 until view.childCount) scan(view.getChildAt(index))?.let { return it }
+                return null
+            }
+            fun awaitState(timeout: Long, predicate: () -> Boolean) {
+                val end = SystemClock.uptimeMillis() + timeout
+                while (SystemClock.uptimeMillis() < end) {
+                    var ready = false; test.runOnMainSync { ready = predicate() }; if (ready) return
+                    SystemClock.sleep(100)
+                }; error("Timed out waiting for analysed frames")
+            }
+            test.runOnMainSync { call(main, "startAnalysis", clip(30), "full", null, null) }
+            awaitState(90000) { (scan(main.page)?.scanFraction ?: -1f) >= 0 }
+            movie("analysis-scan") { shot("analysis") }
+            awaitState(150000) { field(main, "screen").get(main) == "result" }
+            checkNotNull(FlightStrip.read(prefs.getString("flight_strip", null)))
+            movie("today-flight") { test.runOnMainSync { main.home() } }; shot("today-measured")
+        }
         movie("digit-roll") {
             test.runOnMainSync {
                 field(main, "analysis").set(main, result)

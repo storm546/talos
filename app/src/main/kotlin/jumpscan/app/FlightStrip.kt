@@ -75,15 +75,18 @@ internal class FlightView(context: Context, private val flight: FlightStrip?) : 
     init {
         contentDescription = listOfNotNull(heading, flight?.let { values.last() + " " + unit }, caption).joinToString(". ")
         isFocusable = true
-        setOnClickListener { replay() }
+        setOnClickListener { replay(true) }
     }
-    private fun replay() {
+    private fun replay(tactile: Boolean = false) {
         motion?.cancel()
         if (!ValueAnimator.areAnimatorsEnabled()) { phase = 1f; invalidate(); return }
         motion = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = ((flight?.durationMs ?: 550L) * 3).coerceIn(900, 2400)
             interpolator = LinearInterpolator()
-            addUpdateListener { phase = it.animatedFraction; invalidate() }; start()
+            addUpdateListener {
+                if (tactile && flight != null && phase < 1f && it.animatedFraction == 1f) performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                phase = it.animatedFraction; invalidate()
+            }; start()
         }
     }
     override fun onAttachedToWindow() { super.onAttachedToWindow(); replay() }

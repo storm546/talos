@@ -139,6 +139,10 @@ class MainActivity : Activity() {
         else "https://jumpscan.stormlabs.cloud").orEmpty()
     internal fun athleteId() = prefs.getLong("user_id", 0)
 
+    private fun wordmark(parent: LinearLayout) = parent.addView(ImageView(this).apply {
+        setImageResource(R.drawable.flight_wordmark); contentDescription = getString(R.string.brand)
+    }, LinearLayout.LayoutParams(dp(112), dp(26)))
+
     internal fun layout(title: String, name: String) {
         screen = name
         progress = null
@@ -193,20 +197,8 @@ class MainActivity : Activity() {
                     null, shape(Color.TRANSPARENT, 0))
                 setOnClickListener { onBackPressed() }
             }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(6) })
-            text(getString(R.string.brand), 13, ink, header).apply {
-                instrumentType(numeric = true)
-                letterSpacing = .1f
-                compoundDrawablePadding = dp(8)
-                setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("index", green), null, null, null)
-            }
-        } else {
-            text(getString(R.string.brand), 13, ink).apply {
-                instrumentType(numeric = true)
-                letterSpacing = .1f
-                compoundDrawablePadding = dp(8)
-                setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("index", green), null, null, null)
-            }
-        }
+            wordmark(header)
+        } else wordmark(page)
         text(title, 40).apply {
             instrumentType(display = true)
             setPadding(0, dp(9), 0, dp(6))
@@ -726,7 +718,8 @@ class MainActivity : Activity() {
 
     private fun startRecordedForm(uri: Uri, choice: FormChoice, trial: PhoneTrial? = null) {
         val expectedGeneration = generation + 1
-        work(getString(R.string.analysing), { analyzeFormVideo(this, uri, choice, trial) { value ->
+        val scan = LiveFormPreview(this)
+        work(getString(R.string.analysing), { analyzeFormVideo(this, uri, choice, trial, scanFeed(scan, expectedGeneration)) { value ->
             runOnUiThread {
                 if (!isDestroyed && generation == expectedGeneration) {
                     progress?.show(value)
@@ -737,7 +730,13 @@ class MainActivity : Activity() {
             val result = FormResult(JSONObject(metrics.toJson()))
             lastForm = result
             if (trial != null) diagnostics() else formResult(result.metrics, result)
-        }, { if (trial != null) diagnostics(it) else formHome(it) }, phoneTest = trial != null)
+        }, { if (trial != null) diagnostics(it) else formHome(it) }, phoneTest = trial != null, scan = scan)
+    }
+
+    private fun scanFeed(view: LiveFormPreview, ticket: Int): (android.graphics.Bitmap, jumpscan.core.Frame, Float) -> Unit = { image, frame, fraction ->
+        runOnUiThread { if (generation == ticket && !isDestroyed && view.isAttachedToWindow) {
+            view.scanFraction = fraction; view.jointColor = getColor(R.color.signal); view.show(image, frame, false)
+        } else image.recycle() }
     }
 
     private fun startAnalysis(uri: Uri, mode: String = "full", trial: PhoneTrial? = null, captureFps: Int? = null) {
@@ -749,21 +748,36 @@ class MainActivity : Activity() {
         resultSession = if (trial == null) selectedSession else null
         val expectedGeneration = generation + 1
         val jumpTest = if (trial == null) test else "cmj"
-        work(getString(R.string.analysing), { analyzeVideo(this, uri, jumpTest, mode, trial, captureFps) { value ->
+        val scan = LiveFormPreview(this)
+        work(getString(R.string.analysing), { analyzeVideo(this, uri, jumpTest, mode, trial, captureFps, scanFeed(scan, expectedGeneration)) { value ->
             runOnUiThread {
                 if (screen == "busy" && !isDestroyed && generation == expectedGeneration) {
                     progress?.show(value)
                     progressText?.text = getString(R.string.progress, value)
                 }
             }
-        } }, { analysis = it; if (trial == null) { rememberFlight(it); result() } else diagnostics() },
-            { if (trial == null) home(it) else diagnostics(it) }, phoneTest = trial != null)
-        progress?.show(0)
+        } }, { analysis = it; if (trial == null) {
+            rememberFlight(it)
+            if (it.launchImage != null && it.contactFound && android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                scan.visibility = View.GONE; edgePair(it, scan.parent as LinearLayout)
+                page.postDelayed({ if (generation == expectedGeneration && screen == "busy" && !isDestroyed) result() }, 750)
+            } else result()
+        } else diagnostics() }, { if (trial == null) home(it) else diagnostics(it) }, phoneTest = trial != null, scan = scan)
         text(getString(R.string.first_ten), 14)
     }
 
     private fun rememberFlight(run: Analysis) {
         FlightStrip.from(run)?.let { prefs.edit().putString("flight_strip", it.encode()).apply() }
+    }
+
+    private fun edgePair(run: Analysis, parent: LinearLayout) {
+        val launch = run.launchImage ?: return
+        val strip = row(parent)
+        listOf(Triple(launch, R.string.flight_takeoff, run.landing.takeoffMs), Triple(run.preview, R.string.landing_frame, run.landing.contactMs)).forEachIndexed { index, (image, name, time) ->
+            val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; strip.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
+            cell.addView(ImageView(this).apply { setImageBitmap(image); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(-1, dp(94)))
+            text(getString(name) + " · " + time + " " + getString(R.string.ui_ms), 13, parent = cell); cell.arrive(index*75L)
+        }
     }
 
     private fun result(message: String? = null) {
@@ -784,6 +798,7 @@ class MainActivity : Activity() {
             }
         }
         text(if (current.metrics.test == "cmj") getString(R.string.cmj) else getString(R.string.drop_jump), 14)
+        if (current.contactFound) edgePair(current, page)
         if (hasFlight) {
             jumpHighlights(metrics, uploadedId, clientId)
             metricWarnings(metrics)
@@ -1268,13 +1283,14 @@ class MainActivity : Activity() {
     }
 
     internal fun <T> work(title: String, action: () -> T, success: (T) -> Unit, failure: (String) -> Unit,
-        phoneTest: Boolean = false) {
+        phoneTest: Boolean = false, scan: LiveFormPreview? = null) {
         task?.cancel(true)
         val currentGeneration = ++generation
         layout(title, "busy")
         guiding = phoneTest
         val stage = card()
-        progress = Dial(this).also { stage.addView(it, LinearLayout.LayoutParams(-1, dp(136))) }
+        if (scan != null) stage.addView(scan, LinearLayout.LayoutParams(-1, dp(280)))
+        else progress = Dial(this).also { stage.addView(it, LinearLayout.LayoutParams(-1, dp(136))) }
         progressText = text(getString(R.string.please_wait), 14, parent = stage).apply { gravity = Gravity.CENTER }
         button(getString(R.string.cancel)) { leaveWork() }
         task = executor.submit {
