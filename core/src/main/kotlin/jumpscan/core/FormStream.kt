@@ -16,14 +16,14 @@ data class FormProgress(val complete: Int = 0, val partial: Int = 0, val unclear
 class FormStream(exercise: String, private val side: String?, private val aspect: Float,
     private val view: JumpAnalyzer.View = JumpAnalyzer.View.AUTO) {
     private val entry = FormExercises[exercise].also { it.validateSide(side) }
-    private val signal = entry.signal
+    private var signal = entry.signal
     private val legacyFrames = mutableListOf<Frame>()
     private val reps = mutableListOf<FormRepetition>()
-    private val sample = ArrayDeque<Double>(3)
     private val orientation = mutableListOf<Frame>()
-    private val direction = if (signal.down > signal.up) 1 else -1
+    private val direction get() = if (signal.down > signal.up) 1 else -1
     private val isHold = entry.mode == "hold"
     private var sideView = if (view == JumpAnalyzer.View.AUTO) null else view == JumpAnalyzer.View.SIDE
+        set(value) { field = value; if (value == false) entry.signalFront?.let { signal = it } }
     private var selected = if (side == "R") 1 else 0
     private var first = -1L
     private var last = -1L
@@ -36,9 +36,20 @@ class FormStream(exercise: String, private val side: String?, private val aspect
     private var lastGate = false
     private var lastBand = false
     private var gapStart: Long? = null
-    private var rest: Long? = null
-    private var restValue = 0.0
-    private var cycle: Cycle? = null
+    /** One repetition tracker per counted limb: a single one fed with the averaged signal, or one per side when the
+     *  catalogue counts each limb (limbs = "each") and both are in view. */
+    private inner class Limb {
+        val sample = ArrayDeque<Double>(3)
+        var rest: Long? = null
+        var restValue = 0.0
+        var cycle: Cycle? = null
+        fun clear() { cycle = null; rest = null; sample.clear() }
+    }
+    private val limbs = listOf(Limb(), Limb())
+    private val cycle get() = limbs.firstNotNullOfOrNull { it.cycle }
+    /** Completed or partial repetitions per limb, to merge one movement seen on both sides. */
+    private val limbReps = mutableListOf<Pair<Int, LongRange>>()
+    private val eachLimb get() = signal.eachLimb && side == null && sideView == false
     private var legacyTick = Long.MIN_VALUE / 2
     private var legacyReported = 0
     private var finished: FormMetrics? = null
@@ -128,6 +139,8 @@ class FormStream(exercise: String, private val side: String?, private val aspect
         if (lastValid >= 0 && time - lastValid > MAX_GAP_MS) lost(lastValid, events)
         val left = FormGeometry(frame, aspect, 0)
         val right = FormGeometry(frame, aspect, 1)
+        val signalSides = if (signal.minVisibility == JumpAnalyzer.MIN_VISIBILITY) listOf(left, right)
+            else listOf(FormGeometry(frame, aspect, 0, signal.minVisibility), FormGeometry(frame, aspect, 1, signal.minVisibility))
         fun confidence(geometry: FormGeometry) = geometry.required(signal.metric).minOf {
             it.visibility.takeIf(Float::isFinite)?.coerceIn(0f, 1f) ?: 0f
         }
@@ -135,14 +148,16 @@ class FormStream(exercise: String, private val side: String?, private val aspect
             selected = if (confidence(left) >= confidence(right)) 0 else 1
         }
         val geometry = if (side != null || sideView == true) listOf(if (selected == 0) left else right) else listOf(left, right)
-        fun measure(metric: String, check: Boolean = false): Double? {
+        val signalGeometry = if (side != null || sideView == true) listOf(signalSides[selected]) else signalSides
+        fun measure(metric: String, check: Boolean = false, from: List<FormGeometry> = geometry): Double? {
             if (metric == "fppa" && sideView == true) return null
-            val values = geometry.mapNotNull { it.measure(metric) }
-            if (values.isEmpty() || (!check && values.size < geometry.size)) return null
+            val values = from.mapNotNull { it.measure(metric) }
+            if (values.isEmpty() || (!check && values.size < from.size)) return null
             return if (metric == "fppa") values.maxOrNull() else values.average()
         }
         quality += geometry.map(::confidence).average()
-        val raw = measure(signal.metric)
+        val raws = if (eachLimb) signalGeometry.map { it.measure(signal.metric) } else listOf(measure(signal.metric, from = signalGeometry))
+        val raw = raws.filterNotNull().takeIf { it.isNotEmpty() }?.average()
         // A dropped or low-visibility frame is skipped; only an unobserved stretch longer than MAX_GAP_MS
         // since the last usable frame interrupts the repetition or hold.
         if (raw == null) { previous = time; return }
@@ -150,7 +165,7 @@ class FormStream(exercise: String, private val side: String?, private val aspect
         fun offBand(values: Map<String, Double?>) = entry.checks.firstOrNull { check ->
             values[check.key]?.let { !check.band.contains(it) } == true
         }?.key
-        val gates = signal.gates.map { measure(it.metric) }
+        val gates = signal.gates.map { measure(it.metric, from = signalGeometry) }
         val gated = signal.gates.zip(gates).all { (band, value) -> band.contains(value) }
         if (gates.any { it == null }) { previous = time; return }
         usable++
@@ -173,42 +188,50 @@ class FormStream(exercise: String, private val side: String?, private val aspect
             reset()
             setCue("ready_position", events)
         } else {
-            if (sample.size == 3) sample.removeFirst()
-            sample.addLast(raw * direction)
-            val value = sample.sorted()[sample.size / 2]
+            raws.forEachIndexed { index, limbRaw -> if (limbRaw != null) step(limbs[index], index, time, limbRaw, checks, events, ::offBand) }
+        }
+        previous = time
+    }
+
+    private fun step(limb: Limb, index: Int, time: Long, raw: Double, checks: Map<String, Double?>,
+        events: MutableList<FormEvent>, offBand: (Map<String, Double?>) -> String?) {
+        run {
+            if (limb.sample.size == 3) limb.sample.removeFirst()
+            limb.sample.addLast(raw * direction)
+            val value = limb.sample.sorted()[limb.sample.size / 2]
             if (value <= signal.up * direction) {
-                cycle?.let { active ->
+                limb.cycle?.let { active ->
                     val reason = when {
                         active.open -> "incomplete_start"
                         active.extreme - active.start < signal.minPhaseMs || time - active.extreme < signal.minPhaseMs -> "too_fast"
                         else -> null
                     }
-                    if (reason != null) unclear(active.start, time, reason, events)
+                    if (reason != null) { if (counted(index, active.start, time)) unclear(active.start, time, reason, events) }
                     else {
                         val full = active.peak >= signal.down * direction && active.peak - active.base >= signal.minRange
                         val reasons = if (full) emptyList() else listOf("below_min_depth")
                         if (!active.turned) events += FormEvent.Extremum(active.extreme, signal.peakAtTop)
-                        record(FormRepetition(reps.size + 1, if (full) "complete" else "partial", reasons, active.start,
+                        if (counted(index, active.start, time)) record(FormRepetition(reps.size + 1, if (full) "complete" else "partial", reasons, active.start,
                             active.extreme, time, null, null, null, null, null, null, active.extreme - active.start,
                             time - active.extreme, null, active.checks), events)
                         setCue(if (full) offBand(active.checks) else "below_min_depth", events)
                     }
                 }
-                cycle = null
-                rest = time
-                restValue = value
+                limb.cycle = null
+                limb.rest = time
+                limb.restValue = value
                 if (progress.cue in listOf("tracking_gap", "ready_position")) setCue(null, events)
             } else {
                 val rise = value - signal.up * direction
                 val epsilon = abs(signal.up - signal.down) * 0.22
-                if (cycle == null && rise >= epsilon) {
-                    val start = rest
-                    cycle = Cycle(start ?: time, start == null, if (start == null) signal.up * direction else restValue,
+                if (limb.cycle == null && rise >= epsilon) {
+                    val start = limb.rest
+                    limb.cycle = Cycle(start ?: time, start == null, if (start == null) signal.up * direction else limb.restValue,
                         value, time, checks)
                     events += FormEvent.Start(start ?: time)
                     setCue(null, events)
                 }
-                cycle?.let { active ->
+                limb.cycle?.let { active ->
                     if (value > active.peak) {
                         active.peak = value; active.extreme = time; active.checks = checks
                     } else if (!active.turned && active.peak - value >= epsilon) {
@@ -219,7 +242,17 @@ class FormStream(exercise: String, private val side: String?, private val aspect
                 }
             }
         }
-        previous = time
+    }
+
+    /** True unless the other limb already recorded a repetition overlapping at least half of this one (both arms
+     *  or legs moving together are one repetition; alternating limbs count separately). */
+    private fun counted(index: Int, start: Long, end: Long): Boolean {
+        if (!eachLimb) return true
+        val span = (end - start).coerceAtLeast(1)
+        val same = limbReps.any { (other, range) -> other != index &&
+            minOf(end, range.last) - maxOf(start, range.first) >= minOf(span, range.last - range.first) / 2 }
+        if (!same) limbReps += index to (start..end)
+        return !same
     }
 
     private fun setCue(key: String?, events: MutableList<FormEvent>) {
@@ -229,7 +262,7 @@ class FormStream(exercise: String, private val side: String?, private val aspect
         }
     }
 
-    private fun reset() { cycle = null; rest = null; sample.clear(); lastGate = false; lastBand = false }
+    private fun reset() { limbs.forEach { it.clear() }; lastGate = false; lastBand = false }
 
     private fun lost(time: Long, events: MutableList<FormEvent>) {
         trackingLost = true
@@ -269,7 +302,8 @@ class FormStream(exercise: String, private val side: String?, private val aspect
         require(usable >= JumpAnalyzer.MIN_USABLE_FRAMES) { "need at least ${JumpAnalyzer.MIN_USABLE_FRAMES} visible form frames" }
         val events = mutableListOf<FormEvent>()
         closeGap(last, events)
-        cycle?.let { unclear(it.start, last, if (it.open) "incomplete_start" else "incomplete_end", events) }
+        limbs.forEachIndexed { index, limb -> limb.cycle?.let {
+            if (counted(index, it.start, last)) unclear(it.start, last, if (it.open) "incomplete_start" else "incomplete_end", events) } }
         val summary = FormSummary(progress.complete, progress.partial, progress.unclear, null, null, null, null, null,
             null, null, null, null, null, progress.holdMs.takeIf { isHold }, progress.inBandMs.takeIf { isHold })
         return FormMetrics(entry.id, side, if (sideView == true) "side" else "front", (count - 1) * 1000.0 / (last - first),

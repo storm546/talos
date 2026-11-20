@@ -71,6 +71,30 @@ class FormStreamTest {
     }
 
     @Test
+    fun eachLimbCountsAlternatingArmsSeparatelyAndBothArmsTogetherOnce() {
+        val (rest, full) = ranges.getValue("biceps_curl")
+        fun frame(left: Double, right: Double, time: Long): Frame {
+            val l = geometry("biceps_curl", left, time)
+            val r = geometry("biceps_curl", right, time)
+            val points = l.landmarks.mapIndexed { index, point -> if (index >= 12 && index % 2 == 0) r.landmarks[index] else point }
+            return Frame(time, points, points)
+        }
+        val frames = buildList {
+            fun cycle(left: Boolean, right: Boolean) {
+                val values = List(12) { rest } + List(12) { rest + (full - rest) * (it + 1) / 12 } + List(4) { full } +
+                    List(12) { rest + (full - rest) * (11 - it) / 12 } + List(10) { rest }
+                for (value in values) add(frame(if (left) value else rest, if (right) value else rest, size * 50L))
+            }
+            cycle(left = true, right = false); cycle(left = false, right = true); cycle(left = true, right = true)
+        }
+        val stream = FormStream("biceps_curl", null, 1f, JumpAnalyzer.View.FRONT)
+        frames.forEach { stream.feed(it) }
+        val result = stream.finish()
+        assertEquals(3, result.summary.repetitionCount)
+        assertEquals(0, result.summary.unclearCount)
+    }
+
+    @Test
     fun experimentalExercisesExplainWhyInBothLanguages() {
         for (entry in FormExercises.all) {
             assertEquals(entry.experimental, !entry.reasonEn.isNullOrBlank(), entry.id)
