@@ -889,3 +889,99 @@ Full per-source and per-view tables, the index and the scripts are in `/root/jum
 - `results2-final.csv`, `results2-start.csv`, `results2-baseline.csv`;
 - `INDEX.csv`;
 - `countix/`, `mmfit/`.
+
+## 2026-11-20 (round 3): Countix edges, failure analysis, plank in-band time
+
+### Countix edge repetitions
+
+Countix sets already run exactly from `repetition_start` to `repetition_end`. Three ways of treating the
+mid-cycle movements at the two edges were compared on the training clips only:
+- complete repetitions only;
+- one boundary observation per edge counted (`any`, the rule since round 2);
+- an edge counted only if it lasts at least half the set's typical repetition (`half`).
+
+`any` was best on training clips for every Countix exercise, so it stays. For example, push-up live went from 9%
+(complete only) to 45% (`half`) and 59% (`any`). The rule is in `score.py` (`EDGE`, default `any`).
+
+Held-out live exact, complete-only versus the `any` rule:
+
+| Exercise | Countix sets | Complete only | `any` | MM-Fit sets | MM-Fit | Hand sets | Hand |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| squat | 4 | 25% | 100% | 15 | 100% | 3 | 67% |
+| push_up | 12 | 33% | 33% | 15 | 73% | – | – |
+| jumping_jack | 16 | 44% | 69% | 12 | 50% | – | – |
+| lunge | 21 | 10% | 33% | 15 | 80% | – | – |
+
+### Failure analysis (training sets only)
+
+More MM-Fit training data: every set of the training sessions w01-w04 and w19 is now used for lateral raise,
+curls, push-up, jumping jack, lunge and overhead press, not just the first set of each.
+
+- **Overhead press.** Seated presses often stop short of full lockout in the image (2D elbow angle 140-150
+  degrees at the top). The completion threshold moves from 155 to 140 degrees.
+  - Train: live 8 to 11 of 11, recorded 8 to 9 of 12.
+  - Held-out: live 25% to 67%, recorded 0% to 75%, no set off by more than one. **Shipped.**
+- **Jumping jack.** The rest band (0.65) and the completion threshold (0.75 torso widths) cut off MM-Fit jumps
+  that open to 0.8-0.9.
+  - Train: 0.45 / 0.70 with range 0.3 raised live from 11 to 18 of 28.
+  - Held-out: exact fell from 61% to 57% (mean error 1.29 to 1.07). **Not shipped.**
+- **Lunge.** Rest at 150 degrees.
+  - Train: live 30 to 32, recorded 23 to 25.
+  - Held-out: live 53% to 58%, recorded 22% to 19%. **Not shipped** (mixed, the same call as round 2).
+- **Biceps curl.** The two training sets that missed half their repetitions were filmed at an angle the view
+  detector called "side", which turned per-limb counting off.
+  - Counting each limb in any view fixed them on train (10 to 12 of 12).
+  - Held-out unchanged at 62%. **Not shipped**, by the improvement rule.
+- **Lateral raise.** Some athletes rest their arms at 45-55 degrees and never reach the 35-degree rest band.
+  - A relative mode (rest is the lowest point since the last repetition; a repetition ends after 65% of its own
+    range is undone) helped the recorded path on train but not the live one. **Not taken further.**
+- **Pull-up.** Tested rest 120-145 degrees and top 90-110 degrees. None beat the current 130/100 on train.
+- **Push-up.**
+  - The MM-Fit failures are sets whose diagonal camera the view detector calls "side". The frontal signal,
+    which is perfect on the sets detected as front, is then not used.
+  - A lower frontal rest band gained 1 training set.
+  - Nothing was shipped.
+
+The relative mode and the any-view per-limb option were removed again, since neither is used. The engine code is
+the same as in round 2.
+
+### Plank in-band time
+
+Each plank segment was labelled "in band" for its whole hold when the body is visibly straight on the frames. One
+segment with an ambiguous hip line was left unlabelled. This is a visual judgement, not a measured 158-degree line.
+
+| Path | Held-out in-band within max(1 s, 10%) |
+|---|---|
+| live 15 fps | 8 of 9 |
+| recorded | 5 of 8 (1 refused) |
+
+This fails the bar. The measured body line sits at 150-165 degrees on visibly straight planks and differs by up to
+10 degrees between the left and right sides, so in-band time flickers around the 158-degree threshold. Hold time
+stays validated; in-band time is not. Changing the 158-degree technique threshold to fit coarse visual labels was
+not done.
+
+### Wall sit, side plank, learned model
+
+- **Wall sit and side plank.** The downloaded material holds 9 people each, mostly one hold per video. The person
+  split would give about 3 test sets, below the 8 the bar needs, so no labels were made.
+- **Learned per-frame phase signal.** Skipped. MM-Fit and Countix give only spans and counts, not per-frame phase.
+  Training labels would have to come from the threshold engine itself, so a learned model could not clearly beat
+  it on independent ground truth.
+
+### Results (held-out, now)
+
+| Exercise | Sets / people | Live exact | Live off by >1 | Recorded exact | Status |
+|---|---|---:|---:|---:|---|
+| squat | 22 / 12 | 95.5% | 0 | 95.5% | validated |
+| plank, hold time | 9 / 3 | 100% | 0 | 89% | validated |
+| plank, in-band time | 9 / 3 | 89% | – | 63% | not validated |
+| lateral_raise | 12 / 4 | 75% | 3 | 67% | experimental |
+| overhead_press | 12 / 4 | 67% | 0 | 75% | experimental |
+| biceps_curl | 13 / 5 | 62% | 1 | 54% | experimental |
+| jumping_jack | 28 / 18 | 61% | 7 | 61% | experimental |
+| pull_up | 17 / 17 | 59% | 1 | 41% | experimental |
+| push_up | 27 / 17 | 56% | 8 | 56% | experimental |
+| lunge | 36 / 25 | 53% | 13 | 22% | experimental |
+| bent_over_row | 15 / 5 | 0% | 15 | 0% | experimental |
+
+Tables are in `/root/jumpscan/logs/reps/`: `results3-final.csv`, `results3-start.csv` and `results3-baseline.csv`.

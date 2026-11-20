@@ -416,19 +416,19 @@ than 300 ms adds no time (shorter low-visibility or dropped-frame stretches are 
 provisional until `finish`. Depth is peak knee flexion (side: image plane; front: world), FPPA is measured
 at deepest flexion (front only), asymmetry uses both legs, and hips below knees is available from the side.
 
-Validated status (benchmark of 20 November 2026, hand counts, Countix and MM-Fit; see `core/VALIDATION.md`):
+Validated status (benchmark of 20 November 2026, round 3; hand counts, Countix and MM-Fit; see `core/VALIDATION.md`):
 - **Squat** is validated: held-out live 15 fps, 21 of 22 sets exact, 12 people, none off by more than one, no
   unclear repetitions.
-- **Plank** is validated for hold time: 9 of 9 held-out sets within max(1 s, 10%), 3 people. In-band time is not
-  benchmarked.
+- **Plank** is validated for hold time: 9 of 9 held-out sets within max(1 s, 10%), 3 people. In-band time is
+  not validated (8 of 9 held-out sets live, below the bar).
 - **Experimental**, with their held-out exact rates:
   - lateral raise 75% of 12;
+  - overhead press 67% of 12;
   - biceps curl 62% of 13;
   - jumping jack 61% of 28;
   - pull-up 59% of 17;
   - push-up 56% of 27;
   - lunge 53% of 36;
-  - overhead press 25% of 12;
   - bent-over row 0% of 15;
   - glute bridge, which has 2 counted sets;
   - the other 9 entries, which have no counted or timed test videos.
