@@ -436,10 +436,13 @@ async function load(view=state.view) {
     if (target) {
       const id = target.id;
       const day = state.nutritionDay || apiDay();
-      const [nutSummary, weightsData, expenditure, program, nutTarget, foodLogs] = await Promise.all([
-        api('/api/athletes/' + id + '/nutrition/summary?day=' + day), api('/api/athletes/' + id + '/weights'),
-        api('/api/athletes/' + id + '/nutrition/expenditure'), api('/api/athletes/' + id + '/nutrition/program'),
-        api('/api/athletes/' + id + '/nutrition/target'), api('/api/food-logs?athlete_id=' + id + '&limit=500')]);
+      const nutrition = '/api/athletes/' + id + '/nutrition/';
+      const [nutSummary, weightsData, foodLogs] = await Promise.all([
+        api(nutrition + 'summary?day=' + day), api('/api/athletes/' + id + '/weights'),
+        api('/api/food-logs?athlete_id=' + id + '&limit=500')]);
+      const expenditure = await api(nutrition + 'expenditure');
+      const program = await api(nutrition + 'program');
+      const nutTarget = await api(nutrition + 'target');
       data = {nutSummary, weightsData, expenditure, program, nutTarget, foodLogs, nutritionDay:day};
     } else data = {nutSummary:null, weightsData:null, expenditure:null, program:null, nutTarget:null, foodLogs:[]};
   }
@@ -492,6 +495,8 @@ function teamOverview(content) {
       item.append(node('span', row.name), node('span', t(row.checkin ? 'recorded' : 'missing'), 'badge' + (row.checkin ? '' : ' pending')));
       list.append(item);
     }
+    const missing = records.filter(row => !row.checkin);
+    if (missing.length) checkin.append(node('p', t('missing') + ': ' + missing.map(row => row.name).join(', ')));
     checkin.append(details('checkins', list));
   }
   const session = overviewCard(t('lastSession'), state.lastSession?.title,
@@ -603,6 +608,13 @@ function consentEditor(athlete) {
 }
 function team(content) {
   content.append(overviewHero(t(state.user.role === 'admin' ? 'adminDesk' : 'coachDesk'), t('team'), date(apiDay())));
+  const hero = content.querySelector('.overview-hero');
+  if (state.todayCheckins.length) {
+    const strip = node('div', null, 'attendance-strip');
+    strip.setAttribute('aria-hidden', 'true');
+    for (const row of state.todayCheckins.slice(0, 32)) strip.append(node('i', null, row.checkin ? 'present' : 'absent'));
+    hero.append(strip);
+  }
   teamOverview(content);
   content.append(node('h2', t('roster')), node('p', t('changeNote'), 'muted'));
   if(state.consent)content.append(consentEditor(state.consent));
