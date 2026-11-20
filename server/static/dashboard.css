@@ -163,3 +163,13 @@ svg polyline {stroke-linecap:round;stroke-linejoin:round}
 .attendance-strip {display:flex;gap:4px;margin-top:14px;max-width:160px;height:7px}
 .attendance-strip i {width:12px;border-radius:1px;background:var(--hero-muted)}
 .attendance-strip .present {background:#98d7c8}.attendance-strip .absent {background:transparent;border:1px solid var(--hero-muted)}
+
+.card-glyph::before,.nav-glyph::before,.brand-mark::before {content:"";display:block;width:20px;height:20px;background:currentColor;mask:url(instruments.svg) var(--symbol,0) center/160px 20px no-repeat}
+.icon-index { --symbol:0px }
+.icon-club { --symbol:-20px }
+.icon-checkin { --symbol:-40px }
+.icon-history { --symbol:-60px }
+.icon-training { --symbol:-80px }
+.icon-profile { --symbol:-100px }
+.icon-home { --symbol:-120px }
+.icon-more { --symbol:-140px }

@@ -467,7 +467,7 @@ function overviewHero(label, title, description) {
 }
 function overviewCard(label, value, detail, icon, valueStyle = 'big-value') {
   const card = node('section', null, 'overview-card');
-  const glyph = node('span', icon, 'card-glyph'); glyph.setAttribute('aria-hidden', 'true');
+  const glyph = node('span', null, 'card-glyph icon-' + icon); glyph.setAttribute('aria-hidden', 'true');
   card.append(glyph, node('h2', label));
   if (value && value !== '—') card.append(node('p', value, valueStyle));
   if (detail) card.append(node('p', detail, 'muted'));
@@ -487,7 +487,7 @@ function teamOverview(content) {
   const due = (state.lastReport?.athletes || []).filter(row => row.trials_done < row.trials);
   const increased = state.athletes.filter(athlete => athlete.active && athlete.changes.flexion_asymmetry_pct.change_absolute >= .05);
   const cards = node('div', null, 'overview-grid team-overview');
-  const checkin = overviewCard(t('checkedToday'), format(checked.length) + ' / ' + format(records.length), '', '✓');
+  const checkin = overviewCard(t('checkedToday'), format(checked.length) + ' / ' + format(records.length), '', 'checkin');
   if (records.length) {
     const list = document.createElement('ul'); list.className = 'status-list';
     for (const row of records) {
@@ -500,9 +500,9 @@ function teamOverview(content) {
     checkin.append(details('checkins', list));
   }
   const session = overviewCard(t('lastSession'), state.lastSession?.title,
-    state.lastSession ? dateTime(state.lastSession.starts_at) : t('noCompletedSession'), '◷', 'card-subject');
+    state.lastSession ? dateTime(state.lastSession.starts_at) : t('noCompletedSession'), 'club', 'card-subject');
   const testing = overviewCard(t('testingDue'), state.lastReport ? format(due.length) : '—',
-    state.lastReport ? t(due.length ? 'sessionRemaining' : 'noneDue') : t('noCompletedSession'), '↗');
+    state.lastReport ? t(due.length ? 'sessionRemaining' : 'noneDue') : t('noCompletedSession'), 'index');
   for (const row of due) {
     const athlete = state.athletes.find(item => item.id === row.athlete_id);
     if (athlete) {
@@ -512,7 +512,7 @@ function teamOverview(content) {
     }
   }
   const flags = overviewCard(t('compare'), null,
-    increased.length ? t('increasedAsymmetry') + format(increased.length) : t('noIncrease'), '≋');
+    increased.length ? t('increasedAsymmetry') + format(increased.length) : t('noIncrease'), 'history');
   for (const athlete of increased) {
     const link = athleteLink(athlete, athlete.name);
     link.append(node('span', change(athlete.changes.flexion_asymmetry_pct.change_absolute, 'flexion_asymmetry_pct'), 'change-unit'));
@@ -527,20 +527,20 @@ function today(content) {
   const grid = node('div', null, 'overview-grid today-grid');
   const saved = state.checkins[0];
   const checkin = overviewCard(t('checkinToday'), saved ? wellbeingSum(saved) + '\u00a0/\u00a025' : null,
-    t(saved ? 'checkinTotal' : 'openAppCheckin'), '✓');
+    t(saved ? 'checkinTotal' : 'openAppCheckin'), 'checkin');
   const day = apiDay();
   const weekday = (new Date(day + 'T00:00:00Z').getUTCDay() + 6) % 7;
   const scheduled = state.plansData.filter(plan => {
     const distance = (Date.parse(day) - Date.parse(plan.starts_on)) / 86400000;
     return distance >= 0 && distance < plan.weeks * 7 && plan.items.some(item => item.weekday === weekday);
   });
-  const training = overviewCard(t('todayPlan'), scheduled[0]?.title, scheduled.length ? '' : t('todayRest'), '≋', 'card-subject');
+  const training = overviewCard(t('todayPlan'), scheduled[0]?.title, scheduled.length ? '' : t('todayRest'), 'history', 'card-subject');
   for (const plan of scheduled) for (const item of plan.items.filter(item => item.weekday === weekday)) {
     training.append(node('p', item.exercise + ' · ' + item.sets + ' × ' + item.reps +
       (item.reps_max > item.reps ? '–' + item.reps_max : ''), 'muted'));
   }
   const jump = state.jumps[0];
-  const jumpCard = overviewCard(t('latestJump'), jump ? t(jump.test) : null, jump ? dateTime(jump.created_at) : t('noData'), '↗', 'card-subject');
+  const jumpCard = overviewCard(t('latestJump'), jump ? t(jump.test) : null, jump ? dateTime(jump.created_at) : t('noData'), 'index', 'card-subject');
   if (jump && (!jump.flight_time_ms || jump.warnings.includes('no_flight_detected'))) {
     jumpCard.append(node('p', t('no_flight_detected'), 'muted'));
   } else if (jump) for (const [field, label] of [['jump_height_cm','height'], ['flight_time_ms','flight'],
@@ -1553,7 +1553,7 @@ function formSetCard(set) {
   if (mode === 'hold') {
     const metrics = node('div', null, 'overview-grid');
     for (const [label, value] of [['holdTime', set.hold_ms ?? s.hold_ms], ['inBand', set.in_band_ms ?? s.in_band_ms]]) {
-      metrics.append(overviewCard(t(label), value == null ? '—' : format(value / 1000), '', '◷'));
+      metrics.append(overviewCard(t(label), value == null ? '—' : format(value / 1000), '', 'club'));
     }
     wrap.append(metrics);
   } else wrap.append(node('p', t('repsCount') + ': ' + (s.repetition_count ?? '—') + ' · ' + t('partialCount') + ': ' +
@@ -1663,19 +1663,21 @@ function render(focusSelector=null) {
   $('session').append(button('signOut',async()=>{await api('/api/auth/logout',{method:'POST'});loadVersion++;signedOut();message('');}));
   const nav=node('nav', null, 'main-nav');nav.setAttribute('aria-label',t('overview'));
   const own = state.user.role === 'athlete';
-  const views=own?[['today','overview','↗'],['sessionsMine','mySessions','◷'],['checkins','myCheckins','✓']]:[
-    ['team','team','↗'],['plans','plans','≋'],['groups','groups','◉'],['sessions','sessions','◷'],['wellbeing','wellbeingView','✓'],
-    ['users','users','◎'],...(state.user.role==='admin'?[['clubs','clubs','◇'],['audit','audit','≡']]:[])];
+  const views=own?[['today','overview','index'],['sessionsMine','mySessions','club'],['checkins','myCheckins','checkin']]:[
+    ['team','team','index'],['plans','plans','training'],['groups','groups','home'],['sessions','sessions','club'],['wellbeing','wellbeingView','checkin'],
+    ['users','users','profile'],...(state.user.role==='admin'?[['clubs','clubs','club'],['audit','audit','more']]:[])];
   const athleteTab = ['history','training','nutrition','form'].includes(state.view);
   for (const [view,key,icon] of views) {
     const control = button(key, () => load(view));
-    const glyph = node('span', icon, 'nav-glyph'); glyph.setAttribute('aria-hidden', 'true'); control.prepend(glyph);
+    const glyph = node('span', null, 'nav-glyph icon-' + icon); glyph.setAttribute('aria-hidden', 'true'); control.prepend(glyph);
     if (state.view === view) control.setAttribute('aria-current', 'page');
     else if (athleteTab && view === (own ? 'today' : 'team')) control.setAttribute('aria-current', 'true');
     nav.append(control);
   }
   content.append(nav);
   const view = node('div', null, 'view');
+  if (content.dataset.previousView !== state.view) view.classList.add('enter');
+  content.dataset.previousView = state.view;
   content.append(view);
   ({today,team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans})[state.view](view);
   setLive(state.live);
