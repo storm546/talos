@@ -86,9 +86,8 @@ def init_db(path):
                 expires_at REAL NOT NULL
             );
             CREATE TABLE IF NOT EXISTS login_failures (
-                email TEXT NOT NULL, failed_at REAL NOT NULL
+                email TEXT NOT NULL, address TEXT NOT NULL, failed_at REAL NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS failures_email ON login_failures(email, failed_at);
             CREATE TABLE IF NOT EXISTS address_failures (
                 address TEXT NOT NULL, failed_at REAL NOT NULL
             );
@@ -168,6 +167,11 @@ def init_db(path):
             );
             CREATE INDEX IF NOT EXISTS comments_athlete ON comments(athlete_id, id);
         """)
+        if not any(row["name"] == "address" for row in db.execute("PRAGMA table_info(login_failures)")):
+            db.execute("ALTER TABLE login_failures ADD COLUMN address TEXT NOT NULL DEFAULT ''")
+            db.execute("DELETE FROM login_failures WHERE address = ''")
+        db.execute("DROP INDEX IF EXISTS failures_email")
+        db.execute("CREATE INDEX IF NOT EXISTS failures_email_address ON login_failures(email, address, failed_at)")
         columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
         for name, declaration in {
             "active": "INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1))",
@@ -901,15 +905,15 @@ def create_app(db_path=None):
         db.execute("DELETE FROM login_failures WHERE failed_at <= ?", (now - 900,))
         db.execute("DELETE FROM address_failures WHERE failed_at <= ?", (now - 900,))
         failures = db.execute(
-            "SELECT COUNT(*) FROM login_failures WHERE email = ? AND failed_at > ?",
-            (body.email, now - 900)).fetchone()[0]
+            "SELECT COUNT(*) FROM login_failures WHERE email = ? AND address = ? AND failed_at > ?",
+            (body.email, address, now - 900)).fetchone()[0]
         address_failures = db.execute(
             "SELECT COUNT(*) FROM address_failures WHERE address = ? AND failed_at > ?",
             (address, now - 900)).fetchone()[0]
         db.commit()
         if failures >= 5 or address_failures >= 30:
             audit(db, None, "login_failure", body.email,
-                  {"reason": "rate_limit", "scope": "address" if failures < 5 else "email"})
+                  {"reason": "rate_limit", "scope": "address" if failures < 5 else "email_address"})
             db.commit()
             raise HTTPException(429, "Too many failed logins; try again later", headers={"Retry-After": "900"})
         user = db.execute("SELECT * FROM users WHERE email = ?", (body.email,)).fetchone()
@@ -919,26 +923,27 @@ def create_app(db_path=None):
         now = time.time()
         db.execute("BEGIN IMMEDIATE")
         failures = db.execute(
-            "SELECT COUNT(*) FROM login_failures WHERE email = ? AND failed_at > ?", (body.email, now - 900),
+            "SELECT COUNT(*) FROM login_failures WHERE email = ? AND address = ? AND failed_at > ?",
+            (body.email, address, now - 900),
         ).fetchone()[0]
         address_failures = db.execute(
             "SELECT COUNT(*) FROM address_failures WHERE address = ? AND failed_at > ?",
             (address, now - 900)).fetchone()[0]
         if failures >= 5 or address_failures >= 30:
             audit(db, None, "login_failure", body.email,
-                  {"reason": "rate_limit", "scope": "address" if failures < 5 else "email"})
+                  {"reason": "rate_limit", "scope": "address" if failures < 5 else "email_address"})
             db.commit()
             raise HTTPException(429, "Too many failed logins; try again later", headers={"Retry-After": "900"})
         # Read again under the lock: a reset or deactivation during scrypt must win.
         fresh = db.execute("SELECT * FROM users WHERE email = ?", (body.email,)).fetchone()
         if (not matches or fresh is None or not fresh["active"] or
                 fresh["password_hash"] != expected):
-            db.execute("INSERT INTO login_failures(email, failed_at) VALUES (?, ?)", (body.email, now))
+            db.execute("INSERT INTO login_failures(email, address, failed_at) VALUES (?, ?, ?)", (body.email, address, now))
             db.execute("INSERT INTO address_failures(address, failed_at) VALUES (?, ?)", (address, now))
             audit(db, None, "login_failure", body.email)
             db.commit()
             raise HTTPException(401, "Invalid email or password")
-        db.execute("DELETE FROM login_failures WHERE email = ?", (body.email,))
+        db.execute("DELETE FROM login_failures WHERE email = ? AND address = ?", (body.email, address))
         token = secrets.token_urlsafe(32)
         db.execute("INSERT INTO tokens(token_hash, user_id, expires_at) VALUES (?, ?, ?)",
                    (token_hash(token), user["id"], now + 30 * 86400))
@@ -1057,6 +1062,34 @@ def create_app(db_path=None):
         return [{**json.loads(row["metrics"]), "id": row["id"], "athlete_id": row["athlete_id"],
                  "created_at": row["created_at"], "session_id": row["session_id"],
                  "client_id": row["client_id"]} for row in rows]
+
+    @app.get("/api/jumps/baseline")
+    def jump_baseline(test: Literal["cmj", "drop_jump"], user=Depends(current_user), db=Depends(get_db),
+                      before_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
+                      exclude_client_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None):
+        if user["role"] != "athlete":
+            raise HTTPException(403, "Athlete account required")
+        cutoff = ()
+        if before_id is not None:
+            jump = db.execute("SELECT created_at, id FROM jumps WHERE athlete_id = ? AND id = ?",
+                              (user["id"], before_id)).fetchone()
+            if jump is None:
+                raise HTTPException(404, "Jump not found")
+            cutoff = tuple(jump)
+        rows = db.execute(
+            "SELECT metrics FROM jumps WHERE athlete_id = ? AND json_extract(metrics, '$.test') = ? "
+            "AND json_extract(metrics, '$.flight_time_ms') > 0 AND client_id IS NOT ? "
+            "AND NOT EXISTS (SELECT 1 FROM json_each(metrics, '$.warnings') "
+            "WHERE value = 'no_flight_detected') "
+            + ("AND (created_at, id) < (?, ?) " if cutoff else "")
+            + "ORDER BY created_at, id LIMIT 3",
+            (user["id"], test, exclude_client_id or "", *cutoff),
+        ).fetchall()
+        if len(rows) != 3:
+            return {}
+        metrics = [json.loads(row["metrics"]) for row in rows]
+        keys = ("jump_height_cm", "flight_time_ms", "knee_flexion_peak_l", "knee_flexion_peak_r", "flexion_asymmetry_pct")
+        return {key: median(row[key] for row in metrics) for key in keys if all(row.get(key) is not None for row in metrics)}
 
     @app.post("/api/form", status_code=201, dependencies=[Depends(current_user)])
     def add_form_set(body: FormSet, request: Request, db=Depends(get_db)):

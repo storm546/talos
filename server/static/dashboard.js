@@ -1,105 +1,105 @@
 'use strict';
 const dictionary = {
   bg: {
-    language:'Език', title:'Механика на приземяването', intro:'Историята на отбора и промяната спрямо личните базови стойности.',
+    language:'Език', title:'Анализ на скокове и приземяване', intro:'Историята на отбора и промяната спрямо първите скокове на всеки спортист.',
     signIn:'Вход', signOut:'Изход', email:'Имейл', password:'Парола', name:'Име', role:'Роля', club:'Клуб',
     admin:'Администратор', coach:'Треньор', athlete:'Спортист', team:'Отбор', users:'Потребители', clubs:'Клубове', audit:'Дневник',
     ownHistory:'Моите скокове', loading:'Зареждане…', error:'Заявката не бе изпълнена. Проверете данните и опитайте отново.',
     expired:'Сесията изтече. Влезте отново.', invalidLogin:'Невалиден имейл или парола.', rateLimit:'Твърде много опити. Опитайте след 15 минути.',
     forbidden:'Нямате достъп до това действие.', notFound:'Записът не е намерен.', conflict:'Този запис вече съществува.',
     badInput:'Проверете полетата. Паролата трябва да е поне 8 знака.', saved:'Промените са запазени.',
-    jumps:'Скокове', lastJump:'Последен скок', ratio:'Отношение колене/глезени', peakMean:'Средно пиково сгъване (°)',
-    asymmetry:'Асиметрия (%)', consent:'Съгласие', recorded:'Записано', missing:'Липсва', record:'Запиши',
+    jumps:'Скокове', lastJump:'Последен скок', ratio:'Разстояние между коленете спрямо глезените', peakMean:'Средно максимално сгъване (°)',
+    asymmetry:'Разлика между коленете (%)', consent:'Съгласие', recorded:'Записано', missing:'Липсва', record:'Запишете',
     consentBy:'Кой дава съгласие (например име на родител)', consentNote:'Запишете само вече получено съгласие.',
-    saveConsent:'Запиши съгласие', revokeConsent:'Оттегли съгласие', cancel:'Отказ', addAthlete:'Добави спортист',
-    createUser:'Създай потребител', createClub:'Създай клуб', create:'Създай', changeNote:'Промяна: медиана на последните 3 скока спрямо медианата на първите 3. Стрелките показват посока, а не оценка.',
-    baseline:'Базови стойности', provisional:'Базовите стойности са предварителни: нужни са поне 3 скока.',
-    history:'История на скоковете', back:'Към отбора', date:'Дата', test:'Тест', fps:'Кадри/сек', flight:'Време на полет (ms)',
-    height:'Височина (cm)', contactL:'Сгъване при контакт Л (°)', contactR:'Сгъване при контакт Д (°)',
-    peakL:'Пиково сгъване Л (°)', peakR:'Пиково сгъване Д (°)', fppaL:'Ъгъл в челната равнина Л (°)', fppaR:'Ъгъл в челната равнина Д (°)',
-    quality:'Видимост', warnings:'Предупреждения', none:'Няма', cmj:'Скок с предварително приклякане', drop_jump:'Скок от платформа с отскок',
-    manual_edges:'кадрите са избрани ръчно', low_fps:'Ниска кадрова честота', low_visibility:'Слаба видимост', no_flight_detected:'Не е отчетен полет', uncertain_timing:'Несигурно време на полета', single_leg_view:'Страничен изглед: измерен е само по-добре видимият крак',
-    flexion:'Пиково сгъване на коленете (°)', chartNote:'От най-стария към най-новия скок. Пунктираните линии са базовите стойности.',
+    saveConsent:'Запишете съгласие', revokeConsent:'Оттеглете съгласие', cancel:'Отказ', addAthlete:'Добавете спортист',
+    createUser:'Създайте потребител', createClub:'Създайте клуб', create:'Създайте', changeNote:'Сравнени са средните по големина стойности от последните и първите три скока. Стрелките показват посока, не оценка.',
+    baseline:'Сравнение с първите скокове', provisional:'Нужни са поне три скока за надеждно лично сравнение.',
+    history:'История на скоковете', back:'Към отбора', date:'Дата', test:'Тест', fps:'Кадри/сек', flight:'Време във въздуха (мс)',
+    height:'Височина (см)', contactL:'Сгъване при контакт Л (°)', contactR:'Сгъване при контакт Д (°)',
+    peakL:'Максимално сгъване Л (°)', peakR:'Максимално сгъване Д (°)', fppaL:'Ъгъл в челната равнина Л (°)', fppaR:'Ъгъл в челната равнина Д (°)',
+    quality:'Видимост', warnings:'Предупреждения', none:'Няма', cmj:'Скок от място с приклякане', drop_jump:'Стъпване от платформа и веднага скок',
+    manual_edges:'кадрите са избрани ръчно', low_fps:'Ниска кадрова честота', low_visibility:'Слаба видимост', no_flight_detected:'Отскокът и приземяването не са потвърдени', uncertain_timing:'Несигурно време на полета', single_leg_view:'Страничен изглед: измерен е само по-добре видимият крак',
+    flexion:'Максимално сгъване на коленете (°)', chartNote:'От най-стария към най-новия скок. Пунктираните линии са базовите стойности.',
     legs:'Ляво: плътна линия и кръгчета · Дясно: точкова линия и квадратчета', noData:'Още няма скокове. Качете първия скок от приложението след записване на съгласие.',
-    noAthletes:'Няма спортисти. Добавете първия спортист от формуляра по-долу.', csv:'Изтегли CSV', export:'Изтегли моите данни (JSON)',
-    delete:'Изтрий моите скокове', deleteNote:'Всички ваши скокове ще бъдат изтрити окончателно. Профилът ви остава.',
-    confirmDelete:'Потвърди изтриването', deleted:'Скоковете са изтрити.', active:'Активен', inactive:'Неактивен', status:'Състояние',
-    deactivate:'Деактивирай', reactivate:'Активирай', resetPassword:'Нова парола', newPassword:'Нова парола (поне 8 знака)',
+    noAthletes:'Няма спортисти. Добавете първия спортист от формуляра по-долу.', csv:'Изтеглете таблица', export:'Изтеглете данните си',
+    delete:'Изтрийте моите скокове', deleteNote:'Всички Ваши скокове ще бъдат изтрити окончателно. Профилът Ви остава.',
+    confirmDelete:'Потвърдете изтриването', deleted:'Скоковете са изтрити.', active:'Активен', inactive:'Неактивен', status:'Състояние',
+    deactivate:'Деактивирайте', reactivate:'Активирайте', resetPassword:'Нова парола', newPassword:'Нова парола (поне 8 знака)',
     passwordNote:'Всички текущи сесии на потребителя ще бъдат прекратени.', actions:'Действия', action:'Действие', target:'Обект', actor:'Извършител', detail:'Подробности',
     previous:'Предишни', next:'Следващи', noRows:'Няма записи.', guideTitle:'Как да четем числата',
-    guide:'Стойностите са приблизителни оценки от една камера на телефон. Следете промяната спрямо личните базови стойности при сходни условия на заснемане. Това са числа за обсъждане с треньор. Видеото остава на телефона.',
+    guide:'Стойностите са приблизителни оценки от една камера на телефон. Ако отношението е под 1, коленете са по-близо едно до друго от глезените. Следете промяната спрямо първите скокове на всеки спортист при сходни условия на заснемане. Видеото остава на телефона.',
     login_success:'Успешен вход', login_failure:'Неуспешен вход', user_created:'Създаден потребител', consent_changed:'Променено съгласие',
     user_activated:'Активиран потребител', user_deactivated:'Деактивиран потребител', password_reset:'Сменена парола',
-    csv_export:'CSV експорт', json_export:'JSON експорт', data_deleted:'Изтрити скокове', club_created:'Създаден клуб',
-    firstJump:'Първи скок', baselineValue:'Базова стойност', latest:'Последна стойност', recent:'Медиана на последните 3', absolute:'Промяна', percent:'Промяна (%)', metric:'Показател',
+    csv_export:'Изнесена таблица', json_export:'Изнесени данни', data_deleted:'Изтрити скокове', club_created:'Създаден клуб',
+    firstJump:'Първи скок', baselineValue:'Първи три скока', latest:'Последна стойност', recent:'Средно по големина от последните три скока', absolute:'Промяна', percent:'Промяна (%)', metric:'Показател',
     groups:'Групи', sessions:'Сесии', wellbeingView:'Самочувствие', checkins:'Отбелязвания',
     liveOn:'на живо', liveOff:'връзката прекъсна', liveConnecting:'свързване…',
-    groupName:'Име на групата', addGroup:'Добави група', createGroup:'Създай група', renameGroup:'Преименувай', group:'Група',
-    deleteGroup:'Изтрий', members:'Членове', chooseMembers:'Избери членове', saveMembers:'Запиши членове',
+    groupName:'Име на групата', addGroup:'Добавете група', createGroup:'Създайте група', renameGroup:'Преименувайте', group:'Група',
+    deleteGroup:'Изтрийте', members:'Членове', chooseMembers:'Изберете членове', saveMembers:'Запишете членове',
     confirmDeleteGroup:'Изтриването на групата ще превърне нейните сесии в сесии за целия клуб. Това не може да се отмени.',
-    deleteGroupConfirm:'Да, изтрий', noGroups:'Няма групи. Създайте първата група.', wholeClub:'Целият клуб',
+    deleteGroupConfirm:'Да, изтрийте', noGroups:'Няма групи. Създайте първата група.', wholeClub:'Целият клуб',
     sessionTitle:'Заглавие', startsAt:'Начало', place:'Място', trials:'Опити', notes:'Бележки',
-    addSession:'Добави сесия', createSession:'Създай сесия', editSession:'Редактирай', saveSession:'Запиши сесия',
-    cancelSession:'Откажи', restoreSession:'Възстанови',
+    addSession:'Добавете сесия', createSession:'Създайте сесия', editSession:'Редактирайте', saveSession:'Запишете сесия',
+    cancelSession:'Откажете', restoreSession:'Възстановете',
     calendar:'Календар (.ics)', upcoming:'Предстоящи', pastSession:'Минала', cancelled:'Отказана', cancelledBadge:'Отказана',
     report:'Доклад', trialsDone:'Изпълнени', trials:'Опити', warningsCount:'Предупреждения', reportTrials:'опит',
     sessionNote:'Сесиите са подредени по начална дата. Отказаните сесии се показват в миналите.',
     noSessions:'Няма сесии.', day:'Дата', wellbeing:'Самочувствие (5–25)', load:'Натоварване', belowUsual:'под обичайното',
     sleep:'Сън', fatigue:'Свежест', soreness:'Мускулна болка', stress:'Напрежение', mood:'Настроение', items:'Петте показателя',
-    trainingMinutes:'Минути', rpe:'Усилие (RPE)', noCheckins:'Няма отбелязвания за този ден.',
-    feedback:'Бележки от треньора', writeComment:'Напишете коментар', comment:'Коментар', send:'Изпрати',
-    referTo:'За кой скок или сесия', aboutJump:'за скок', aboutSession:'за сесия', reply:'Отговори',
+    trainingMinutes:'Минути', rpe:'Усещане за усилие (0–10)', noCheckins:'Няма отбелязвания за този ден.',
+    feedback:'Бележки от треньора', writeComment:'Напишете коментар', comment:'Коментар', send:'Изпратете',
+    referTo:'За кой скок или сесия', aboutJump:'за скок', aboutSession:'за сесия', reply:'Отговорете',
     wellbeingChart:'Самочувствие и натоварване', loadLegend:'Точки: самочувствие · квадратчета: натоварване',
     mySessions:'Моите сесии', myCheckins:'Моите отбелязвания', noJumpRef:'Без връзка', noSessionRef:'Без сесия',
-    saveCheckin:'Запиши отбелязването', checkinNote:'Оценките са от 1 до 5, където 5 е най-добре. Пишете как се чувствате днес.',
+    saveCheckin:'Запишете отбелязването', checkinNote:'Оценките са от 1 до 5, където 5 е най-добре. Пишете как се чувствате днес.',
     training:'Тренировки', nutrition:'Хранене', formView:'Техника', plans:'Планове', exercisesTitle:'Упражнения',
-    assistant:'AI помощник', sectionLinks:'Раздели', selectAthleteFirst:'Изберете състезател от „Отбор".',
+    assistant:'Помощник с изкуствен интелект', sectionLinks:'Раздели', selectAthleteFirst:'Изберете състезател от „Отбор“.',
     weekdays:['Пон','Вт','Ср','Чет','Пет','Съб','Нед'],
     assignedPlan:'Назначен план', weekday:'Ден', exercise:'Упражнение', setsCol:'Серии', repsRange:'Повторения',
-    loadKg:'Тежест (кг)', rpeTarget:'Целеви RPE', setHistory:'Дневник на сериите', setNo:'Серия №', repsDone:'Повторения',
+    loadKg:'Тежест (кг)', rpeTarget:'Целево усилие (0–10)', setHistory:'Дневник на сериите', setNo:'Серия №', repsDone:'Повторения',
     progressionTitle:'Предложение за прогресия', suggestion:'Предложение', planned:'Планирано',
-    increase:'Увеличи', decrease:'Намали', keep:'Запази', suggestedLoad:'Предложена тежест', fromLoad:'От',
+    increase:'Увеличение', decrease:'Намаление', keep:'Без промяна', suggestedLoad:'Предложена тежест', fromLoad:'От',
     top_of_range_twice:'Горна граница два пъти', below_range_twice:'Под долната граница два пъти',
     need_two_sessions:'Нужни са две тренировки', no_change:'Без промяна',
     weeklyVolume:'Седмичен обем', weekCol:'Седмица', volumeKg:'Обем (кг)', unloadedSets:'Серии без тежест',
-    sessionLoadCol:'Натоварване (RPE)', trainingNote:'Предложенията не се прилагат автоматично. Обсъдете ги с треньора.',
+    sessionLoadCol:'Тренировъчно натоварване', trainingNote:'Предложенията не се прилагат автоматично. Обсъдете ги с треньора.',
     noTraining:'Още няма тренировъчни данни.', noPlan:'Няма назначен план.', noPlans:'Няма планове.',
-    noExercises:'Няма упражнения.', addPlan:'Добави план', createPlan:'Създай план', editPlan:'Редактирай',
-    deletePlan:'Изтрий', savePlan:'Запиши план', assignTo:'Назначи на', startsOn:'Начална дата', weeksCol:'Седмици',
-    addItem:'Добави ред', removeItem:'Премахни', addExercise:'Добави упражнение', kind:'Вид', lowerBody:'Долна част',
+    noExercises:'Няма упражнения.', addPlan:'Добавете план', createPlan:'Създайте план', editPlan:'Редактирайте',
+    deletePlan:'Изтрийте', savePlan:'Запишете план', assignTo:'Назначете на', startsOn:'Начална дата', weeksCol:'Седмици',
+    addItem:'Добавете ред', removeItem:'Премахнете', addExercise:'Добавете упражнение', kind:'Вид', lowerBody:'Долна част',
     strength:'Сила', plyometric:'Плиометрия', mobility:'Подвижност', conditioning:'Кондиция', confirmDeletePlan:'Да изтрия ли плана?',
     foodLog:'Хранителен дневник', meal:'Хранене', breakfast:'Закуска', lunch:'Обяд', dinner:'Вечеря', snack:'Междинно',
     food:'Храна', grams:'Грамове', kcal:'Калории', protein:'Белтъчини (г)', carbs:'Въглехидрати (г)', fat:'Мазнини (г)',
     fibre:'Фибри (г)', dailyTotals:'Общо за деня', nutritionTarget:'Дневна цел', remaining:'Остава', perMeal:'По хранения',
     weeklyAverage:'Средно за 7 дни', bodyweight:'Телесно тегло', trendLine:'Тренд', weightKg:'Тегло (кг)',
-    expenditure:'Разход на енергия', expenditureNote:'Адаптивна оценка от вашите записи, не измерване.',
+    expenditure:'Разход на енергия', expenditureNote:'Адаптивна оценка от Вашите записи, не измерване.',
     programTitle:'Програма', goal:'Цел', maintain:'Поддържане', lose:'Сваляне', gain:'Качване', rate:'Темп (кг/седмица)',
     recommended:'Препоръчано', appliedBadge:'Приложено', notAppliedBadge:'Не е приложено', estimateKcal:'Оценен разход',
-    proteinRange:'Препоръчан белтък', setTarget:'Задай цел', setProgram:'Задай цел и темп', dayComplete:'Отбележи деня завършен',
+    proteinRange:'Препоръчан белтък', setTarget:'Задайте цел', setProgram:'Задайте цел и темп', dayComplete:'Отбележете деня завършен',
     under18:'Под 18 г.', noProgram:'Няма програма. Задайте цел и темп.', notEnoughData:'Недостатъчно записи за оценка.',
-    guardrailNote:'Препоръката не минава правилата (под 18 г. или под 1500 kcal) и не е записана — обсъдете с треньора.',
-    nutritionNote:'Числата са за обсъждане с треньора, не са предписание.', noNutrition:'Още няма данни за хранене.',
+    guardrailNote:'Препоръката не минава правилата (под 18 г. или под 1500 ккал) и не е записана — обсъдете с треньора.',
+    nutritionNote:'Обсъдете тези стойности с треньора си.', noNutrition:'Още няма данни за хранене.',
     formHistoryTitle:'История на техниката', squat:'Клек', single_leg_squat:'Клек на един крак', repetition:'Повторение',
     depth:'Дълбочина (°)', fppa:'Ъгъл в челната равнина (°)', repStatus:'Състояние', complete:'Пълно', partial:'Частично',
     unclear:'Неясно', repsCount:'Повторения', partialCount:'Частични', unclearCount:'Неясни', worstRep:'Най-слабо',
     side:'Страна', viewLabel:'Изглед', front:'Отпред', sideView:'Отстрани', unclear_reps:'Неясни повторения',
     hipBelowKnee:'Таз под коляното', noForm:'Още няма записи на техника.', formWarnNote:'Частичните и неясните повторения се броят отделно.',
-    assistantIntro:'Питайте за тренировки, хранене и тестове. Всяка промяна се потвърждава от вас.',
-    assistantPlaceholder:'Напишете съобщение…', messageLabel:'Съобщение', ask:'Питай', assistantReply:'Отговор',
-    proposalTitle:'Предложени действия', proposalNote:'Нищо не се записва, докато не потвърдите.', confirm:'Потвърди',
-    assistantUnavailable:'AI помощникът не е наличен в момента. Опитайте по-късно.', assistantApplied:'Действията са приложени.',
+    assistantIntro:'Питайте за тренировки, хранене и тестове. Всяка промяна се потвърждава от Вас.',
+    assistantPlaceholder:'Напишете съобщение…', messageLabel:'Съобщение', ask:'Попитайте', assistantReply:'Отговор',
+    proposalTitle:'Предложени действия', proposalNote:'Нищо не се записва, докато не потвърдите.', confirm:'Потвърдете',
+    assistantUnavailable:'Помощникът с изкуствен интелект не е наличен в момента. Опитайте по-късно.', assistantApplied:'Действията са приложени.',
     proposalGone:'Предложението е използвано или изтекло.', assistantError:'Помощникът не успя да отговори.'
   },
   en: {
-    language:'Language', title:'Landing mechanics', intro:'Your team’s history and change against each athlete’s own baseline.',
+    language:'Language', title:'Jump and landing analysis', intro:'See how each athlete’s results have changed since their first jumps.',
     signIn:'Sign in', signOut:'Sign out', email:'Email', password:'Password', name:'Name', role:'Role', club:'Club',
     admin:'Admin', coach:'Coach', athlete:'Athlete', team:'Team', users:'Users', clubs:'Clubs', audit:'Audit log',
     ownHistory:'My jumps', loading:'Loading…', error:'Request failed. Check your entries and try again.',
     expired:'Your session expired. Sign in again.', invalidLogin:'Invalid email or password.', rateLimit:'Too many attempts. Try again in 15 minutes.',
     forbidden:'You do not have access to this action.', notFound:'Record not found.', conflict:'This record already exists.',
     badInput:'Check your entries. Passwords need at least 8 characters.', saved:'Changes saved.',
-    jumps:'Jumps', lastJump:'Last jump', ratio:'Knee / ankle', peakMean:'Mean peak flexion (°)',
-    asymmetry:'Asymmetry (%)', consent:'Consent', recorded:'Recorded', missing:'Missing', record:'Record',
+    jumps:'Jumps', lastJump:'Last jump', ratio:'Knee spacing compared with ankle spacing', peakMean:'Average deepest knee bend (°)',
+    asymmetry:'Difference between knees (%)', consent:'Consent', recorded:'Recorded', missing:'Missing', record:'Record',
     consentBy:'Who gave consent (for example, a parent’s name)', consentNote:'Record consent only after it has been obtained.',
     saveConsent:'Record consent', revokeConsent:'Withdraw consent', cancel:'Cancel', addAthlete:'Add athlete',
     createUser:'Create user', createClub:'Create club', create:'Create', changeNote:'Change: median of the last 3 jumps against the first 3. Arrows show direction, not a rating.',
@@ -117,7 +117,7 @@ const dictionary = {
     deactivate:'Deactivate', reactivate:'Reactivate', resetPassword:'Reset password', newPassword:'New password (at least 8 characters)',
     passwordNote:'All current sessions for this user will end.', actions:'Actions', action:'Action', target:'Target', actor:'Actor', detail:'Detail',
     previous:'Previous', next:'Next', noRows:'No records.', guideTitle:'How to read these numbers',
-    guide:'Values are estimates from one phone camera. Follow change against the athlete’s own baseline under similar filming conditions. These are numbers to discuss with a coach. Video stays on the phone.',
+    guide:'Values are estimates from one phone camera. A ratio below 1 means the knees are closer together than the ankles. Compare with the athlete’s first jumps filmed under similar conditions. Video stays on the phone.',
     login_success:'Successful login', login_failure:'Failed login', user_created:'User created', consent_changed:'Consent changed',
     user_activated:'User activated', user_deactivated:'User deactivated', password_reset:'Password reset',
     csv_export:'CSV export', json_export:'JSON export', data_deleted:'Jumps deleted', club_created:'Club created',
@@ -167,8 +167,8 @@ const dictionary = {
     recommended:'Recommended', appliedBadge:'Applied', notAppliedBadge:'Not applied', estimateKcal:'Estimated expenditure',
     proteinRange:'Protein range', setTarget:'Set target', setProgram:'Set goal and rate', dayComplete:'Mark day complete',
     under18:'Under 18', noProgram:'No program yet. Set a goal and weekly rate.', notEnoughData:'Not enough logged data for an estimate.',
-    guardrailNote:'The recommendation does not pass the guardrails (under 18, or below 1500 kcal) and was not saved — ask your coach.',
-    nutritionNote:'Numbers to discuss with your coach, not a prescription.', noNutrition:'No nutrition data yet.',
+    guardrailNote:'The recommendation was not saved (under 18 or below 1,500 kcal). Discuss it with your coach.',
+    nutritionNote:'Use these numbers to start a conversation with your coach.', noNutrition:'No nutrition data yet.',
     formHistoryTitle:'Form history', squat:'Squat', single_leg_squat:'Single-leg squat', repetition:'Repetition',
     depth:'Depth (°)', fppa:'Frontal angle (°)', repStatus:'Status', complete:'Complete', partial:'Partial',
     unclear:'Unclear', repsCount:'Reps', partialCount:'Partial', unclearCount:'Unclear', worstRep:'Worst',
@@ -183,32 +183,36 @@ const dictionary = {
 };
 const $ = id => document.getElementById(id);
 Object.assign(dictionary.bg, {
-  today:'Днес', overview:'Преглед', coachDesk:'Пулт на треньора', athleteDesk:'Денят на спортиста', adminDesk:'Преглед на клубовете',
+  today:'Днес', overview:'Преглед', coachDesk:'Работно табло на треньора', athleteDesk:'Табло на спортиста', adminDesk:'Преглед на клубовете',
   roster:'Списък на спортистите', checkedToday:'Отбелязали се днес', uncheckedToday:'Без отбелязване днес', todayDone:'Отбелязването е записано',
   testingDue:'За довършване', sessionRemaining:'Не са изпълнили всички опити в последната сесия.', noneDue:'Всички опити са изпълнени.',
-  lastSession:'Последна сесия', noCompletedSession:'Още няма проведена сесия.', compare:'Спрямо базовата стойност',
-  increasedAsymmetry:'С по-висока асиметрия спрямо базовата стойност', noIncrease:'Няма отчетено увеличение на асиметрията.',
+  lastSession:'Последна сесия', noCompletedSession:'Още няма проведена сесия.', compare:'Промяна при приземяване',
+  increasedAsymmetry:'По-голяма разлика между коленете спрямо първите скокове. Спортисти: ',
+  noIncrease:'Няма отчетено увеличение на разликата между коленете.', percentagePoints:'процентни пункта',
   todayPlan:'Днешен план', todayRest:'Няма планирани упражнения за днес.', latestJump:'Последен скок',
-  dashboardIntro:'Проследявай скоковете, техниката и тренировките на едно място.', theme:'Смени темата',
+  dashboardIntro:'Проследявайте скоковете, техниката и тренировките на едно място.', theme:'Сменете темата',
   themeDark:'Тъмна тема', themeLight:'Светла тема', holdTime:'Време на задържане (сек)', inBand:'Време в диапазона (сек)',
   sourceLive:'На живо', sourceVideo:'Запис', sideLeft:'Ляво', sideRight:'Дясно',
-  noTargetShort:'Няма зададена цел', openAppCheckin:'Можеш да се отбележиш в приложението JumpScan.',
+  noTargetShort:'Няма зададена цел', openAppCheckin:'Отбележете как се чувствате в приложението JumpScan.',
   mealBreakdown:'Подробности за храненията', kcalUnit:'ккал', gramUnit:'г', descentMs:'Спускане (мс)', ascentMs:'Изправяне (мс)',
-  checkinToday:'Дневна оценка'
+  checkinToday:'Как сте днес?', checkinTotal:'Общо за сън, свежест, мускулен комфорт, спокойствие и настроение.',
+  attemptsOf:' от ', effortShort:'усилие'
 });
 Object.assign(dictionary.en, {
   today:'Today', overview:'Overview', coachDesk:'Coach workspace', athleteDesk:'Athlete workspace', adminDesk:'Club overview',
   roster:'Athlete roster', checkedToday:'Checked in today', uncheckedToday:'Not checked in today', todayDone:'Check-in saved',
   testingDue:'Testing to finish', sessionRemaining:'Still have attempts left from the last session.', noneDue:'All attempts are complete.',
-  lastSession:'Last session', noCompletedSession:'No past sessions yet.', compare:'Against baseline',
-  increasedAsymmetry:'Higher asymmetry against baseline', noIncrease:'No increase in asymmetry recorded.',
+  lastSession:'Last session', noCompletedSession:'No past sessions yet.', compare:'Change in landing',
+  increasedAsymmetry:'The knees bend less evenly than on the first jumps. Athletes: ',
+  noIncrease:'No increase in the difference between knees.', percentagePoints:'percentage points',
   todayPlan:'Today’s plan', todayRest:'Nothing scheduled for today.', latestJump:'Latest jump',
   dashboardIntro:'Track jumps, technique and training in one place.', theme:'Switch theme',
   themeDark:'Dark theme', themeLight:'Light theme', holdTime:'Hold time (s)', inBand:'Time in range (s)',
   sourceLive:'Live', sourceVideo:'Video', sideLeft:'Left', sideRight:'Right',
   noTargetShort:'No target set', openAppCheckin:'Use the JumpScan app to check in.',
   mealBreakdown:'Meal breakdown', kcalUnit:'kcal', gramUnit:'g', descentMs:'Descent (ms)', ascentMs:'Ascent (ms)',
-  checkinToday:'Check-in'
+  checkinToday:'How you feel today', checkinTotal:'Total for sleep, freshness, muscle comfort, calm and mood.',
+  attemptsOf:' of ', effortShort:'effort'
 });
 const state = {language:'bg', token:null, user:null, view:'team', athletes:[], users:[], clubs:[], audit:[], offset:0, selected:null, jumps:[], summary:null, sort:'name', ascending:true, consent:null, reset:null, deleting:false, groups:[], groupEdit:null, membersEdit:null, sessions:[], sessionEdit:null, sessionReport:null, wellbeing:[], wellbeingDay:null, checkins:[], sessionsMine:[], comments:[], live:'idle', liveGeneration:0,
   training:null, setLogs:[], exercises:[], plansData:[], nutritionDay:null, nutSummary:null, weightsData:null,
@@ -219,15 +223,14 @@ const locale = () => state.language === 'bg' ? 'bg-BG' : 'en-GB';
 // Shown precision follows what a 30-60 fps phone clip can resolve: whole ms, tenths of a degree or cm.
 const DIGITS = {flight_time_ms:0, fps:0, knee_ankle_ratio:2, quality:2};
 const format = (value, key) => value == null ? '—' : new Intl.NumberFormat(locale(), {maximumFractionDigits:DIGITS[key] ?? 1}).format(value);
-const date = value => value ? new Date(value.length === 10 ? value + 'T12:00:00' : value).toLocaleDateString(locale()) : '—';
-// No seconds: dashboards show date + hour:minute in the viewer's own time zone.
-const dateTime = value => value ? new Date(value).toLocaleString(locale(), {year:'numeric', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+const date = value => value ? new Date(value.length === 10 ? value + 'T12:00:00' : value)
+  .toLocaleDateString(locale(), {year:'numeric', month:'2-digit', day:'2-digit'}).replace(/\s*г\.+$/, '') : '—';
+const time = value => new Date(value).toLocaleTimeString(locale(), {hour:'2-digit', minute:'2-digit'});
+const dateTime = value => value ? date(value) + ', ' + time(value) : '—';
 // Two-line date for session tables: date above a small time, so the column stays narrow.
 function sessionWhen(iso) {
-  const d = new Date(iso);
   const cell = node('td', null, 'nowrap');
-  cell.append(document.createTextNode(d.toLocaleDateString(locale())),
-    node('br'), node('small', d.toLocaleTimeString(locale(), {hour:'2-digit', minute:'2-digit'})));
+  cell.append(document.createTextNode(date(iso)), node('br'), node('small', time(iso)));
   return cell;
 }
 function apiDay() {
@@ -454,10 +457,11 @@ function overviewHero(label, title, description) {
   hero.append(node('p', label, 'eyebrow'), heading(title, description));
   return hero;
 }
-function overviewCard(label, value, detail, icon) {
+function overviewCard(label, value, detail, icon, valueStyle = 'big-value') {
   const card = node('section', null, 'overview-card');
   const glyph = node('span', icon, 'card-glyph'); glyph.setAttribute('aria-hidden', 'true');
-  card.append(glyph, node('h2', label), node('p', value, 'big-value'));
+  card.append(glyph, node('h2', label));
+  if (value && value !== '—') card.append(node('p', value, valueStyle));
   if (detail) card.append(node('p', detail, 'muted'));
   return card;
 }
@@ -473,7 +477,7 @@ function teamOverview(content) {
   const records = state.todayCheckins;
   const checked = records.filter(record => record.checkin);
   const due = (state.lastReport?.athletes || []).filter(row => row.trials_done < row.trials);
-  const increased = state.athletes.filter(athlete => athlete.active && athlete.changes.flexion_asymmetry_pct.change_absolute > 0);
+  const increased = state.athletes.filter(athlete => athlete.active && athlete.changes.flexion_asymmetry_pct.change_absolute >= .05);
   const cards = node('div', null, 'overview-grid team-overview');
   const checkin = overviewCard(t('checkedToday'), format(checked.length) + ' / ' + format(records.length), '', '✓');
   if (records.length) {
@@ -485,17 +489,25 @@ function teamOverview(content) {
     }
     checkin.append(details('checkins', list));
   }
-  const session = overviewCard(t('lastSession'), state.lastSession?.title || '—',
-    state.lastSession ? dateTime(state.lastSession.starts_at) : t('noCompletedSession'), '◷');
+  const session = overviewCard(t('lastSession'), state.lastSession?.title,
+    state.lastSession ? dateTime(state.lastSession.starts_at) : t('noCompletedSession'), '◷', 'card-subject');
   const testing = overviewCard(t('testingDue'), state.lastReport ? format(due.length) : '—',
     state.lastReport ? t(due.length ? 'sessionRemaining' : 'noneDue') : t('noCompletedSession'), '↗');
   for (const row of due) {
     const athlete = state.athletes.find(item => item.id === row.athlete_id);
-    if (athlete) testing.append(athleteLink(athlete, athlete.name + ' · ' + row.trials_done + '/' + row.trials));
+    if (athlete) {
+      const link = athleteLink(athlete, athlete.name);
+      link.append(node('span', row.trials_done + t('attemptsOf') + row.trials + ' ' + t('trials').toLocaleLowerCase(locale()), 'change-unit'));
+      testing.append(link);
+    }
   }
-  const flags = overviewCard(t('compare'), format(increased.length), t(increased.length ? 'increasedAsymmetry' : 'noIncrease'), '≋');
-  for (const athlete of increased) flags.append(athleteLink(athlete, athlete.name + ' · +' +
-    format(athlete.changes.flexion_asymmetry_pct.change_absolute) + ' ' + (state.language === 'bg' ? 'пр. п.' : 'pp')));
+  const flags = overviewCard(t('compare'), null,
+    increased.length ? t('increasedAsymmetry') + format(increased.length) : t('noIncrease'), '≋');
+  for (const athlete of increased) {
+    const link = athleteLink(athlete, athlete.name);
+    link.append(node('span', change(athlete.changes.flexion_asymmetry_pct.change_absolute, 'flexion_asymmetry_pct'), 'change-unit'));
+    flags.append(link);
+  }
   cards.append(checkin, session, testing, flags);
   content.append(cards);
 }
@@ -504,22 +516,24 @@ function today(content) {
   athleteSubnav(content, 'today');
   const grid = node('div', null, 'overview-grid today-grid');
   const saved = state.checkins[0];
-  const checkin = overviewCard(t('checkinToday'), saved ? wellbeingSum(saved) + ' / 25' : '—',
-    t(saved ? 'todayDone' : 'openAppCheckin'), '✓');
+  const checkin = overviewCard(t('checkinToday'), saved ? wellbeingSum(saved) + '\u00a0/\u00a025' : null,
+    t(saved ? 'checkinTotal' : 'openAppCheckin'), '✓');
   const day = apiDay();
   const weekday = (new Date(day + 'T00:00:00Z').getUTCDay() + 6) % 7;
   const scheduled = state.plansData.filter(plan => {
     const distance = (Date.parse(day) - Date.parse(plan.starts_on)) / 86400000;
     return distance >= 0 && distance < plan.weeks * 7 && plan.items.some(item => item.weekday === weekday);
   });
-  const training = overviewCard(t('todayPlan'), scheduled[0]?.title || '—', scheduled.length ? '' : t('todayRest'), '≋');
+  const training = overviewCard(t('todayPlan'), scheduled[0]?.title, scheduled.length ? '' : t('todayRest'), '≋', 'card-subject');
   for (const plan of scheduled) for (const item of plan.items.filter(item => item.weekday === weekday)) {
     training.append(node('p', item.exercise + ' · ' + item.sets + ' × ' + item.reps +
       (item.reps_max > item.reps ? '–' + item.reps_max : ''), 'muted'));
   }
   const jump = state.jumps[0];
-  const jumpCard = overviewCard(t('latestJump'), jump ? t(jump.test) : '—', jump ? dateTime(jump.created_at) : t('noData'), '↗');
-  if (jump) for (const [field, label] of [['jump_height_cm','height'], ['flight_time_ms','flight'],
+  const jumpCard = overviewCard(t('latestJump'), jump ? t(jump.test) : null, jump ? dateTime(jump.created_at) : t('noData'), '↗', 'card-subject');
+  if (jump && (!jump.flight_time_ms || jump.warnings.includes('no_flight_detected'))) {
+    jumpCard.append(node('p', t('no_flight_detected'), 'muted'));
+  } else if (jump) for (const [field, label] of [['jump_height_cm','height'], ['flight_time_ms','flight'],
     ['flexion_asymmetry_pct','asymmetry']]) {
     const metric = state.summary.metrics[field];
     const row = node('div', null, 'stat-line');
@@ -565,7 +579,13 @@ function userForm(athleteOnly=false) {
     await api('/api/users',{method:'POST',body:JSON.stringify(body)});await load();message('saved');
   });return form;
 }
-function change(value, key) {return value == null ? '—' : (value>0?'↑ ':value<0?'↓ ':'')+format(Math.abs(value), key);}
+function change(value, key) {
+  if (value == null) return '—';
+  const magnitude = format(Math.abs(value), key);
+  if (key === 'flexion_asymmetry_pct') return (magnitude === '0' ? '' : value > 0 ? '+' : '−') +
+    magnitude + '\u00a0' + t('percentagePoints').replace(' ', '\u00a0');
+  return (magnitude === '0' ? '' : value > 0 ? '↑ ' : '↓ ') + magnitude;
+}
 function consentEditor(athlete) {
   const wrap=node('section',null,'inline-panel');wrap.append(node('h2',t('consent')+' · '+athlete.name),node('p',t('consentNote')));
   const form=node('form');field(form,'consentBy','consent_by','text',athlete.consent_by || '').id='consent-by';
@@ -670,7 +690,8 @@ function history(content) {
     const baselines=table(['metric','baselineValue','latest','recent','absolute','percent'],t('baseline'));
     for(const [key,label]of [['knee_ankle_ratio','ratio'],['knee_flexion_peak_mean','peakMean'],['flexion_asymmetry_pct','asymmetry']]){
       const metric=state.summary.metrics[key];const row=node('tr');row.append(node('td',t(label)));
-      for(const field of ['baseline','latest','last_three_median','change_absolute','change_percent'])row.append(node('td',format(metric[field],field==='change_percent'?null:key),'num'));baselines.body.append(row);
+    for(const field of ['baseline','latest','last_three_median','change_absolute','change_percent'])row.append(node('td',
+      field==='change_absolute' ? change(metric[field],key) : format(metric[field],field==='change_percent'?null:key),'num'));baselines.body.append(row);
     }content.append(details('baseline',baselines.wrap));
     const grid=table(historyColumns.map(([,label])=>label),t('history'));
     [...grid.head.children].slice(2, -1).forEach(cell => { cell.className = 'num'; });
@@ -841,7 +862,11 @@ function sessions(content) {
     const report = state.sessionReport;
     const panel = node('section', null, 'inline-panel report-panel');
     const head = node('div', null, 'inline-actions');
-    head.append(node('h2', t('report')), button('cancel', () => { state.sessionReport = null; render(); }));
+    const title = state.sessions.find(session => session.id === report.session_id)?.title;
+    const heading = node('h2', title ? t('report') + ': ' + title : t('report'));
+    heading.id = 'session-report-title';
+    heading.tabIndex = -1;
+    head.append(heading, button('cancel', () => { state.sessionReport = null; render(); }));
     panel.append(head);
     panel.append(reportGrid(report));
     content.append(panel);
@@ -870,7 +895,7 @@ function sessionTable(rows, staff) {
     if (staff) {
       const cell = node('td'); const actions = node('div', null, 'cell-actions');
       actions.append(button('editSession', () => { state.sessionEdit = row; state.sessionReport = null; render('#session-title'); }));
-      actions.append(button('report', async () => { const report = await api('/api/sessions/'+row.id+'/report'); state.sessionReport = report; render('#calendar-download'); }));
+      actions.append(button('report', async () => { state.sessionReport = await api('/api/sessions/'+row.id+'/report'); render('#session-report-title'); }));
       actions.append(button(row.cancelled ? 'restoreSession' : 'cancelSession', async () => { await api('/api/sessions/'+row.id, {method:'PATCH', body:JSON.stringify(cancelFrom(row))}); await load(); message('saved'); }));
       cell.append(actions); tr.append(cell);
     }
@@ -1179,7 +1204,7 @@ function progressionTable(rows) {
     tr.append(node('td', r.exercise || exerciseName(r.exercise_id)));
     const p = r.planned;
     const reps = p.reps_max && p.reps_max !== p.reps ? p.reps + '–' + p.reps_max : String(p.reps);
-    tr.append(node('td', p.sets + '×' + reps + (p.rpe_target != null ? ' @RPE ' + format(p.rpe_target, 'rpe_target') : '')));
+    tr.append(node('td', p.sets + '×' + reps + (p.rpe_target != null ? ' · ' + t('effortShort') + ' ' + format(p.rpe_target, 'rpe_target') : '')));
     const cell = node('td');
     cell.append(node('span', t(r.action), 'badge' + (r.action === 'decrease' ? ' pending' : '')));
     cell.append(document.createTextNode(' · ' + t(r.reason)));
@@ -1613,7 +1638,7 @@ function render(focusSelector=null) {
   document.body.classList.toggle('authenticated', Boolean(state.user));
   $('assistant')?.replaceChildren();
   if(!state.user){
-    content.append(overviewHero('JUMPSCAN / PERFORMANCE',t('title'),t('dashboardIntro')));const panel=node('section',null,'login');panel.append(node('h2',t('signIn')));
+    content.append(overviewHero('JumpScan',t('title'),t('dashboardIntro')));const panel=node('section',null,'login');panel.append(node('h2',t('signIn')));
     const form=node('form');form.id='login-form';const email=field(form,'email','email','email');email.id='email';email.autocomplete='username';const password=field(form,'password','password','password');password.id='password';password.minLength=1;password.autocomplete='current-password';
     submit(form,'signIn',async data=>{message('loading');const result=await api('/api/auth/login',{method:'POST',body:JSON.stringify(Object.fromEntries(data))});password.value='';state.token=result.token;state.user=result.user;state.offset=0;streamLive();try{await load(state.user.role==='athlete'?'today':'team');}catch(error){signedOut();throw error;}});panel.append(form);content.append(panel);return;
   }

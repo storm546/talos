@@ -14,14 +14,16 @@ import java.util.Locale
 internal fun todayLocal(clock: Clock = Clock.systemDefaultZone()): String = LocalDate.now(clock).toString()
 
 internal fun localDate(value: String, locale: Locale): String =
-    LocalDate.parse(value).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale))
+    LocalDate.parse(value).format(if (locale.language == "bg") DateTimeFormatter.ofPattern("dd.MM.uuuu", locale)
+        else DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale))
 
 // Android 8–13 libcore predates JDK 12, so Instant.parse rejects offsets like +00:00.
 // OffsetDateTime.parse accepts both Z and +00:00.
 private fun instant(value: String): Instant = OffsetDateTime.parse(value).toInstant()
 
 internal fun localDateTime(value: String, locale: Locale, zone: ZoneId = ZoneId.systemDefault()): String =
-    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+    (if (locale.language == "bg") DateTimeFormatter.ofPattern("dd.MM.uuuu, HH:mm", locale)
+    else DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT))
         .withLocale(locale).withZone(zone).format(instant(value))
 
 internal data class ClubSession(val id: Long, val title: String, val startsAt: String, val place: String,
