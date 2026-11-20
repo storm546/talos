@@ -16,6 +16,7 @@ from fastapi import Depends, Header, HTTPException, Query
 from pydantic import AfterValidator, Field, StringConstraints, ValidationError, create_model
 
 from . import training_nutrition_api as tn
+from .response_data import json_chunks
 
 
 SYSTEM_PROMPT = (
@@ -154,10 +155,15 @@ def sqlite_integer(value):
 
 
 def tool_content(data):
-    encoded = json.dumps(data)
-    if len(encoded) <= RESULT_BYTES:
-        return encoded
-    return json.dumps({"truncated": True, "preview": encoded[:RESULT_BYTES // 4]})
+    chunks = []
+    length = 0
+    for chunk in json_chunks(data, json.JSONEncoder()):
+        length += len(chunk)
+        if length > RESULT_BYTES:
+            preview = ("".join(chunks) + chunk[:RESULT_BYTES // 4])[:RESULT_BYTES // 4]
+            return json.dumps({"truncated": True, "preview": preview})
+        chunks.append(chunk)
+    return "".join(chunks)
 
 
 @dataclass(frozen=True)

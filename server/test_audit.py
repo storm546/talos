@@ -1,8 +1,9 @@
 """Regression tests for server audit findings."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
+import tempfile
 
 import pytest
 
@@ -11,6 +12,72 @@ from server.test_form_api import FORM
 from server.test_server import METRICS, api, auth, template, user_id
 from server.test_training_nutrition import series
 from server.weight_trend import weight_smoothing, weight_trend_pipeline
+
+
+def test_large_personal_export_is_complete_and_spooled_before_the_audit_commit(api, auth, monkeypatch):
+    client, path = api
+    headers = auth("athlete1")
+    athlete = user_id(path, "athlete1")
+    body = "а" * 1000
+    with main.database(path) as db:
+        db.executemany("INSERT INTO comments(athlete_id, author_id, body, created_at) VALUES (?, ?, ?, ?)",
+                       [(athlete, athlete, body, "2026-01-01")] * 600)
+        expected = db.execute("SELECT COUNT(*) FROM comments WHERE athlete_id = ?", (athlete,)).fetchone()[0]
+
+    original = main.audit
+    spool = tempfile.SpooledTemporaryFile
+    files = []
+
+    def capture(*args, **kwargs):
+        output = spool(*args, **kwargs)
+        files.append(output)
+        return output
+
+    def audit(db, *args):
+        if args[1] == "json_export":
+            assert not db.in_transaction
+            assert len(files) == 1 and files[0]._rolled
+        original(db, *args)
+
+    monkeypatch.setattr(main, "audit", audit)
+    monkeypatch.setattr(tempfile, "SpooledTemporaryFile", capture)
+    response = client.get("/api/me/export", headers=headers)
+    assert response.status_code == 200, response.text[:300]
+    assert files[0].closed
+    assert len(response.content) > 1_048_576
+    assert len(response.json()["comments"]) == expected
+    assert response.json()["comments"][0]["body"] == body
+    with main.database(path) as db:
+        assert db.execute("SELECT COUNT(*) FROM audit WHERE action = 'json_export'").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("mode", ["holding", "updating"])
+def test_cold_coaching_sparse_replay_matches_daily_replay(monkeypatch, mode):
+    seed = date(2020, 1, 1)
+    end = date(2025, 1, 1)
+    days = [(seed + timedelta(days=index)).isoformat() for index in range(18)]
+    snaps = {day: {"status": "complete", "calories": 2600, "changed": False} for day in days}
+    snaps[(end - timedelta(days=1)).isoformat()] = snaps[days[0]]
+    weights = dict.fromkeys(days, 80.0)
+    previous = 2500.0
+    rows = []
+    original = coaching.step
+    for offset in range(1, (end - seed).days + 1):
+        row = original((seed + timedelta(days=offset)).isoformat(), previous, mode, snaps, weights)
+        previous = row["value_kcal"]
+        rows.append(row)
+    calls = []
+
+    def step(day, *args, **kwargs):
+        calls.append(day)
+        return original(day, *args, **kwargs)
+
+    monkeypatch.setattr(coaching, "step", step)
+    result = coaching.compute(seed.isoformat(), 2500, mode, snaps, weights, end.isoformat())
+    assert result["history"] == [{key: row[key] for key in ("date", "value_kcal", "status", "reason", "complete_days")}
+                                 for row in rows[-30:]]
+    assert result["expenditure"] == {key: value for key, value in rows[-1].items() if key != "date"}
+    assert len(calls) <= 30 + len(weights)
 
 
 @pytest.mark.parametrize("kind", ["jump", "checkin", "food", "weight", "set", "complete", "custom food", "form"])

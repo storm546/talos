@@ -31,6 +31,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from . import assistant_api, training_nutrition_api
 from .input_bounds import Offset, SQLITE_MAX, SqliteInt, SqlitePath
+from .response_data import complete_json, spooled_response
 
 
 def database_path():
@@ -720,16 +721,16 @@ class EventBus:
 
 
 def jump_rows(db, athlete_id):
-    return [{**json.loads(row["metrics"]), "id": row["id"], "athlete_id": row["athlete_id"],
+    return ({**json.loads(row["metrics"]), "id": row["id"], "athlete_id": row["athlete_id"],
              "created_at": row["created_at"], "session_id": row["session_id"],
              "client_id": row["client_id"]}
             for row in db.execute(
-                "SELECT * FROM jumps WHERE athlete_id = ? ORDER BY created_at, id", (athlete_id,))]
+                "SELECT * FROM jumps WHERE athlete_id = ? ORDER BY created_at, id", (athlete_id,)))
 
 
 def form_set_rows(rows):
-    return [{"id": row["id"], "athlete_id": row["athlete_id"], "created_at": row["created_at"],
-             "client_id": row["client_id"], **json.loads(row["metrics"])} for row in rows]
+    return ({"id": row["id"], "athlete_id": row["athlete_id"], "created_at": row["created_at"],
+             "client_id": row["client_id"], **json.loads(row["metrics"])} for row in rows)
 
 
 def athlete_form_sets(db, athlete_id):
@@ -784,6 +785,26 @@ def csv_cell(value):
     # Whitespace/control prefixes can hide formulas from a spreadsheet importer.
     stripped = value.lstrip(" \t\r\n\v\f\ufeff")
     return "'" + value if stripped.startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")) else value
+
+
+def csv_export(db, user, athlete_id, filename, fields, rows, detail=None):
+    def chunks():
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(fields)
+        yield output.getvalue()
+        for row in rows:
+            output.seek(0)
+            output.truncate()
+            writer.writerow([csv_cell(row.get(field)) for field in fields])
+            yield output.getvalue()
+
+    def record_export():
+        audit(db, user["id"], "csv_export", athlete_id, detail)
+        db.commit()
+
+    return spooled_response(chunks(), "text/csv", {"Content-Disposition": f'attachment; filename="{filename}"'},
+                            record_export)
 
 
 def ical_escape(text):
@@ -1184,11 +1205,11 @@ def create_app(db_path=None):
             athlete_id = user["id"]
         if athlete_id is not None:
             athlete_access(db, user, athlete_id)
-        return form_set_rows(db.execute(
+        return list(form_set_rows(db.execute(
             "SELECT form_sets.* FROM form_sets JOIN users ON users.id = form_sets.athlete_id "
             "WHERE (? IS NULL OR form_sets.athlete_id = ?) AND (? != 'coach' OR users.club_id = ?) "
             "ORDER BY form_sets.created_at DESC, form_sets.id DESC LIMIT ? OFFSET ?",
-            (athlete_id, athlete_id, user["role"], user["club_id"], limit, offset)))
+            (athlete_id, athlete_id, user["role"], user["club_id"], limit, offset))))
 
     @app.delete("/api/me/data", status_code=204)
     def delete_data(user=Depends(current_user), db=Depends(get_db)):
@@ -1228,57 +1249,50 @@ def create_app(db_path=None):
     @app.get("/api/me/export")
     def export_me(user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "athlete")
+        db.execute("BEGIN")
         profile = {**public_user(user), "email": user["email"], "active": bool(user["active"]), **consent_fields(user)}
-        checkins = [dict(row) for row in db.execute(
+        checkins = (dict(row) for row in db.execute(
             "SELECT day, sleep, fatigue, soreness, stress, mood, training_minutes, rpe, "
-            "created_at, updated_at FROM checkins WHERE athlete_id = ? ORDER BY day", (user["id"],))]
-        comments = [dict(row) for row in db.execute(
+            "created_at, updated_at FROM checkins WHERE athlete_id = ? ORDER BY day", (user["id"],)))
+        comments = (dict(row) for row in db.execute(
             "SELECT id, author_id, jump_id, session_id, body, created_at, read_at FROM comments "
-            "WHERE athlete_id = ? ORDER BY created_at, id", (user["id"],))]
+            "WHERE athlete_id = ? ORDER BY created_at, id", (user["id"],)))
         profile["under_18"] = bool(user["under_18"])
         result = {"user": profile, "jumps": jump_rows(db, user["id"]), "checkins": checkins,
                   "comments": comments, "form_sets": athlete_form_sets(db, user["id"]),
                   **training_nutrition_api.export_data(db, user["id"]),
                   "exported_at": now_iso()}
-        audit(db, user["id"], "json_export", user["id"])
-        db.commit()
-        return JSONResponse(result, headers={"Content-Disposition": 'attachment; filename="jumpscan-data.json"'})
+        def record_export():
+            db.rollback()
+            audit(db, user["id"], "json_export", user["id"])
+            db.commit()
+
+        return complete_json(result, {"Content-Disposition": 'attachment; filename="jumpscan-data.json"'},
+                             record_export)
 
     @app.get("/api/athletes/{athlete_id}/export.csv")
     def export_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = athlete_access(db, user, athlete_id)
-        output = io.StringIO(newline="")
-        writer = csv.writer(output)
         metric_fields = [key for key in Jump.model_fields if key not in ("session_id", "client_id")]
         fields = ["id", "athlete_id", "athlete_name", "created_at", "session_id", *metric_fields]
-        writer.writerow(fields)
-        for row in jump_rows(db, athlete_id):
-            row["athlete_name"] = athlete["name"]
-            writer.writerow([csv_cell(row.get(field)) for field in fields])
-        audit(db, user["id"], "csv_export", athlete_id)
-        db.commit()
-        return Response(output.getvalue(), media_type="text/csv",
-                        headers={"Content-Disposition": f'attachment; filename="athlete-{athlete_id}.csv"'})
+        rows = ({**row, "athlete_name": athlete["name"]} for row in jump_rows(db, athlete_id))
+        return csv_export(db, user, athlete_id, f"athlete-{athlete_id}.csv", fields, rows)
 
     @app.get("/api/athletes/{athlete_id}/form.csv")
     def form_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = athlete_access(db, user, athlete_id)
-        output = io.StringIO(newline="")
-        writer = csv.writer(output)
         hold_fields = ("hold_ms", "in_band_ms")
         fields = ["id", "athlete_id", "athlete_name", "created_at", "client_id", "exercise", "side", "view",
                   "fps", "quality", *(key for key in FormSummary.model_fields if key not in hold_fields),
                   "warnings", "repetitions", "mode", "source", *hold_fields]
-        writer.writerow(fields)
-        for row in athlete_form_sets(db, athlete_id):
-            row.update(row.pop("summary"), athlete_name=athlete["name"])
-            writer.writerow([csv_cell(row.get(field)) for field in fields])
-        audit(db, user["id"], "csv_export", athlete_id, {"kind": "form"})
-        db.commit()
-        return Response(output.getvalue(), media_type="text/csv",
-                        headers={"Content-Disposition": f'attachment; filename="athlete-{athlete_id}-form.csv"'})
+        def rows():
+            for row in athlete_form_sets(db, athlete_id):
+                row.update(row.pop("summary"), athlete_name=athlete["name"])
+                yield row
+
+        return csv_export(db, user, athlete_id, f"athlete-{athlete_id}-form.csv", fields, rows(), {"kind": "form"})
 
     @app.get("/api/clubs")
     def clubs(user=Depends(current_user), db=Depends(get_db)):
@@ -1549,37 +1563,31 @@ def create_app(db_path=None):
         sessions = db.execute(
             "SELECT * FROM sessions WHERE julianday(starts_at) >= julianday(?) AND "
             + clause + " ORDER BY julianday(starts_at), id",
-            (from_day, *params)).fetchall()
-        now = datetime.now(timezone.utc)
-        lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//JumpScan//Club Platform//EN"]
-        for session in sessions:
-            try:
-                start = datetime.fromisoformat(session["starts_at"].replace("Z", "+00:00"))
-                if start.utcoffset() is None:
+            (from_day, *params))
+        dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+        def lines():
+            yield from ("BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//JumpScan//Club Platform//EN")
+            for session in sessions:
+                try:
+                    start = datetime.fromisoformat(session["starts_at"].replace("Z", "+00:00"))
+                    if start.utcoffset() is None:
+                        continue
+                    start = start.astimezone(timezone.utc)
+                except (ValueError, OverflowError):
                     continue
-                start = start.astimezone(timezone.utc)
-            except (ValueError, OverflowError):
-                continue  # Invalid timestamps saved before validation must not break the feed.
-            dtstart = start.strftime("%Y%m%dT%H%M%SZ")
-            dtstamp = now.strftime("%Y%m%dT%H%M%SZ")
-            summary = ical_escape(session["title"])
-            location = ical_escape(session["place"])
-            description = ical_escape(session["notes"])
-            lines += ["BEGIN:VEVENT",
-                      "UID:session-" + str(session["id"]) + "@jumpscan",
-                      "DTSTAMP:" + dtstamp,
-                      "DTSTART:" + dtstart,
-                      "DURATION:PT1H",
-                      "SUMMARY:" + summary,
-                      "LOCATION:" + location,
-                      "DESCRIPTION:" + description]
-            if session["cancelled"]:
-                lines += ["STATUS:CANCELLED"]
-            lines += ["END:VEVENT"]
-        lines += ["END:VCALENDAR", ""]
-        body = "\r\n".join(ical_fold(line) for line in lines)
-        return Response(body + "\r\n", media_type="text/calendar",
-                        headers={"Content-Disposition": 'attachment; filename="jumpscan.ics"'})
+                yield from ("BEGIN:VEVENT", f"UID:session-{session['id']}@jumpscan", f"DTSTAMP:{dtstamp}",
+                            f"DTSTART:{start:%Y%m%dT%H%M%SZ}", "DURATION:PT1H",
+                            "SUMMARY:" + ical_escape(session["title"]), "LOCATION:" + ical_escape(session["place"]),
+                            "DESCRIPTION:" + ical_escape(session["notes"]))
+                if session["cancelled"]:
+                    yield "STATUS:CANCELLED"
+                yield "END:VEVENT"
+            yield "END:VCALENDAR"
+            yield ""
+
+        return spooled_response((ical_fold(line) + "\r\n" for line in lines()), "text/calendar",
+                                {"Content-Disposition": 'attachment; filename="jumpscan.ics"'})
 
     @app.put("/api/me/checkins/{day}", status_code=201, dependencies=[Depends(current_user)])
     def put_checkin(day: str, body: Checkin, request: Request, db=Depends(get_db)):
@@ -1622,6 +1630,9 @@ def create_app(db_path=None):
                       from_: Annotated[str | None, Query(alias="from")] = None,
                       to: Annotated[str | None, Query()] = None,
                       user=Depends(current_user), db=Depends(get_db)):
+        return complete_json(checkin_rows(athlete_id, from_, to, user, db))
+
+    def checkin_rows(athlete_id, from_, to, user, db):
         if user["role"] == "athlete":
             if athlete_id is not None and athlete_id != user["id"]:
                 raise HTTPException(403, "Athletes can read their own data only")
@@ -1646,8 +1657,8 @@ def create_app(db_path=None):
             where.append("checkins.day <= ?")
             params.append(to)
         clause = " AND ".join(where) if where else "1"
-        return [dict(row) for row in db.execute(
-            "SELECT * FROM checkins WHERE " + clause + " ORDER BY day DESC, id DESC", params)]
+        return (dict(row) for row in db.execute(
+            "SELECT * FROM checkins WHERE " + clause + " ORDER BY day DESC, id DESC", params))
 
     @app.get("/api/checkins/team")
     def team_checkins(day: Annotated[str | None, Query()] = None, club_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
@@ -1785,9 +1796,9 @@ def create_app(db_path=None):
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"X-Accel-Buffering": "no"})
 
-    assistant_api.install(app, sys.modules[__name__], {**training_tools, **{
+    assistant_api.install(app, sys.modules[__name__], {**training_tools, "list_checkins": checkin_rows, **{
         operation.__name__: operation for operation in (
-            athletes, athlete_summary, jumps, list_form_sets, list_sessions, session_report, list_checkins,
+            athletes, athlete_summary, jumps, list_form_sets, list_sessions, session_report,
             team_checkins, list_comments, create_session, update_session, save_checkin, write_comment,
         )
     }})

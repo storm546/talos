@@ -196,6 +196,8 @@ object checks on every read and management operation; login limit of 5 failures 
 constant-time credential checks; no stack traces or submitted secrets in errors; 16 KiB body limit
 (64 KiB for form uploads, section 6.1).
 Paginated lists accept limits 1–500 and nonnegative offsets. Exports and summaries include all jumps.
+Complete downloads and the check-in list are never truncated: serialized output beyond 256 KiB
+rolls to temporary storage before delivery. Use the available page or date filters for smaller histories.
 CSV quotes text cells starting with formula characters (`=`, `+`, `-`, `@`), including hidden whitespace
 prefixes, and leading tab/newline controls with an apostrophe; CSV quoting handles delimiters and newlines.
 Responses include `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`
