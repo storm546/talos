@@ -89,7 +89,6 @@ internal fun MainActivity.assistantScreen(message: String? = null, draft: String
             }, { assistantScreen(it, question) })
         }
     }
-    button(getString(R.string.home)) { home() }
     if (chat.turns.isNotEmpty()) (page.parent as? ScrollView)?.let { scroll ->
         scroll.post {
             val last = if (chat.proposal == null) page.getChildAt(page.childCount - 3)

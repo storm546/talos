@@ -98,7 +98,6 @@ internal fun MainActivity.formHome(message: String? = null) {
         section(group.label).setPadding(0, dp(20), 0, 0)
         members.forEach { exerciseCard(it, group.icon, replay) }
     }
-    button(getString(R.string.home)) { home() }
 }
 
 private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, replay: Boolean) {
@@ -166,7 +165,6 @@ internal fun MainActivity.formVideo() {
     if (!exercise.signal.legacy) notice(getString(R.string.form_experimental), caution = true)
     text(getString(R.string.form_clip_limit), 14)
     text(getString(R.string.no_video_upload), 14)
-    button(getString(R.string.ui_all_exercises)) { formHome() }
 }
 
 private fun median(values: List<Double>) = values.sorted().let { if (it.isEmpty()) null
@@ -272,7 +270,6 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
     }
     if (result != null) button(getString(R.string.ui_another_set)) { formHome() }
     if (token().isNotEmpty()) button(getString(R.string.ui_form_history)) { techniqueHistory() }
-    button(getString(R.string.home)) { home() }
 }
 
 private fun MainActivity.saveFormResult(result: FormResult, done: (Int?, String) -> Unit) {

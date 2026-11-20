@@ -58,7 +58,6 @@ private fun MainActivity.trainingWeek(week: LocalDate, plans: List<JSONObject>?,
         }
     }
     pendingControls()
-    button(getString(R.string.home)) { home() }
 }
 
 private fun MainActivity.dayPickerWeek(week: LocalDate, plans: List<JSONObject>?) {
