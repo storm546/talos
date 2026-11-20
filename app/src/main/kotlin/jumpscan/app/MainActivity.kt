@@ -55,7 +55,7 @@ class MainActivity : Activity() {
         private set
     private var previousTab = -1
     private var screen = "login"
-    private var progress: ProgressBar? = null
+    private var progress: Dial? = null
     private var progressText: TextView? = null
     internal val green by lazy { getColor(R.color.accent) }
     private val ink by lazy { getColor(R.color.ink) }
@@ -369,7 +369,7 @@ class MainActivity : Activity() {
         if (token().isEmpty()) button(getString(R.string.sign_in)) { login() }
         else {
             card().also {
-                text(prefs.getString("name", "").orEmpty(), 21, parent = it).setTypeface(null, Typeface.BOLD)
+                text(prefs.getString("name", "").orEmpty(), 21, parent = it).instrumentType(display = true)
                 text(getString(R.string.server_url), 13, parent = it)
                 text(base(), 14, parent = it)
             }
@@ -668,8 +668,7 @@ class MainActivity : Activity() {
         work(getString(R.string.analysing), { analyzeFormVideo(this, uri, choice, trial) { value ->
             runOnUiThread {
                 if (!isDestroyed && generation == expectedGeneration) {
-                    progress?.isIndeterminate = false
-                    progress?.setProgress(value, android.animation.ValueAnimator.areAnimatorsEnabled())
+                    progress?.show(value)
                     progressText?.text = getString(R.string.progress, value)
                 }
             }
@@ -692,14 +691,13 @@ class MainActivity : Activity() {
         work(getString(R.string.analysing), { analyzeVideo(this, uri, jumpTest, mode, trial, captureFps) { value ->
             runOnUiThread {
                 if (screen == "busy" && !isDestroyed && generation == expectedGeneration) {
-                    progress?.isIndeterminate = false
-                    progress?.setProgress(value, android.animation.ValueAnimator.areAnimatorsEnabled())
+                    progress?.show(value)
                     progressText?.text = getString(R.string.progress, value)
                 }
             }
         } }, { analysis = it; if (trial == null) result() else diagnostics() },
             { if (trial == null) home(it) else diagnostics(it) }, phoneTest = trial != null)
-        progress?.isIndeterminate = false
+        progress?.show(0)
         text(getString(R.string.first_ten), 14)
     }
 
@@ -721,9 +719,9 @@ class MainActivity : Activity() {
         }
         text(if (current.metrics.test == "cmj") getString(R.string.cmj) else getString(R.string.drop_jump), 14)
         if (hasFlight) {
+            jumpHighlights(metrics, uploadedId, clientId)
             metricWarnings(metrics)
             if (uploadedId == null && queuedId == null) button(getString(R.string.check_frames)) { editFrames(current) }
-            jumpHighlights(metrics, uploadedId, clientId)
         }
         if (message != null) notice(message, caution = true)
         resultSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 16, green) }
@@ -747,7 +745,8 @@ class MainActivity : Activity() {
         for ((label, color) in listOf(R.string.left_blue to LEFT_COLOR, R.string.right_orange to RIGHT_COLOR)) {
             legend.addView(TextView(this).apply {
                 text = getString(label); textSize = 14f
-                setTextColor(if (color == LEFT_COLOR) Color.rgb(0, 78, 162) else Color.rgb(139, 76, 0))
+                setTextColor(ink)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("index", color), null, null, null)
                 setPadding(0, dp(8), dp(16), dp(8))
             })
         }
@@ -1025,7 +1024,6 @@ class MainActivity : Activity() {
             notice(getString(R.string.jump_bent_landing), caution = true)
         }
         section(R.string.jump_comparison, host)
-        text(getString(if (side) R.string.jump_error_side else R.string.jump_error_front), 14, parent = host)
         text(getString(if (auth.isEmpty()) R.string.jump_baseline_sign_in else R.string.jump_baseline_info), 14, parent = host)
         val comparisons = highlights.associateWith { metric ->
             val panel = stat(getString(metric.label), number(json, metric.key), metric.unit, host)
@@ -1042,6 +1040,7 @@ class MainActivity : Activity() {
             text(getString(metric.meaning), 14, parent = panel)
             comparison
         }
+        text(getString(if (side) R.string.jump_error_side else R.string.jump_error_front), 14, parent = host)
         if (auth.isEmpty()) return
         val path = buildString {
             append("/api/jumps/baseline?test=").append(if (json.optString("test") == "cmj") "cmj" else "drop_jump")
@@ -1134,7 +1133,14 @@ class MainActivity : Activity() {
             text(getString(R.string.history_summary, rows.length()), 14)
             button(getString(R.string.home)) { home() }
             button(getString(R.string.ui_form_history)) { techniqueHistory() }
-            if (rows.length() == 0) notice(getString(R.string.empty_history))
+            heightTrace(rows.objects().asReversed().mapNotNull { item ->
+                val metrics = item.optJSONObject("metrics") ?: item
+                metrics.optDouble("jump_height_cm").takeIf { hasFlight(metrics) && it.isFinite() }
+            })
+            if (rows.length() == 0) {
+                notice(getString(R.string.empty_history))
+                button(getString(R.string.record), primary = true) { recordJump() }
+            }
             for (i in 0 until rows.length()) {
                 val item = rows.getJSONObject(i)
                 // The API returns metadata and metric fields in the same object.
@@ -1174,14 +1180,9 @@ class MainActivity : Activity() {
         val currentGeneration = ++generation
         layout(title, "busy")
         guiding = phoneTest
-        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
-            isIndeterminate = true
-            progressTintList = ColorStateList.valueOf(green)
-            indeterminateTintList = ColorStateList.valueOf(green)
-            page.addView(this, LinearLayout.LayoutParams(-1, dp(16)))
-        }
-        progressText = text(getString(R.string.please_wait), 14)
+        val stage = card()
+        progress = Dial(this).also { stage.addView(it, LinearLayout.LayoutParams(-1, dp(136))) }
+        progressText = text(getString(R.string.please_wait), 14, parent = stage).apply { gravity = Gravity.CENTER }
         button(getString(R.string.cancel)) { leaveWork() }
         task = executor.submit {
             try {

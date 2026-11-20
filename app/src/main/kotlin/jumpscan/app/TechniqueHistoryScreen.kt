@@ -29,7 +29,7 @@ internal fun MainActivity.techniqueHistory(offset: Int = 0) {
             line.addView(total, android.widget.LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10) })
             text(if (hold) metricNumber(summary.optLong("hold_ms") / 1000.0, "hold_ms", locale)
                 else summary.optInt("repetition_count").toString(), 24, green, total).apply {
-                typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.NORMAL)
+                instrumentType(numeric = true)
                 gravity = android.view.Gravity.END
                 setPadding(0, 0, 0, 0)
             }
@@ -37,6 +37,7 @@ internal fun MainActivity.techniqueHistory(offset: Int = 0) {
                 gravity = android.view.Gravity.END
                 setPadding(0, 0, 0, 0)
             }
+            panel.pressFeedback()
             panel.isClickable = true
             panel.isFocusable = true
             panel.foreground = android.graphics.drawable.RippleDrawable(
@@ -75,7 +76,7 @@ private fun MainActivity.renderSetTitle(set: JSONObject, exercise: JSONObject?, 
         }
     } else ""
     text(name + side, 17, parent = panel).apply {
-        setTypeface(null, android.graphics.Typeface.BOLD)
+        instrumentType(display = true)
         setPadding(0, 0, 0, dp(2))
     }
     val view = getString(if (set.optString("view", exercise?.optString("view").orEmpty()) == "front")

@@ -119,7 +119,7 @@ class LiveFormActivity : ComponentActivity() {
     private fun buildScreen() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.hero))
+            setBackgroundColor(getColor(R.color.paper))
         }
         preview = LiveFormPreview(this)
         val header = LinearLayout(this).apply {
@@ -129,27 +129,27 @@ class LiveFormActivity : ComponentActivity() {
         root.addView(header, LinearLayout.LayoutParams(-1, -2))
         val name = exercise.label(bg)
         val title = side?.let { getString(R.string.form_named_side, name, getString(if (it == "L") R.string.form_left else R.string.form_right)) } ?: name
-        header.addView(label(getString(if (replay) R.string.form_replay_debug else R.string.ui_live).uppercase(appLocale), 12, R.color.signal).apply {
-            letterSpacing = .12f; setTypeface(null, Typeface.BOLD)
+        header.addView(label(getString(if (replay) R.string.form_replay_debug else R.string.ui_live).uppercase(appLocale), 12, R.color.accent).apply {
+            letterSpacing = .12f; instrumentType(display = true)
         })
         val tally = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        tally.addView(label(title, 22, R.color.surface).apply {
-            typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
+        tally.addView(label(title, 28, R.color.ink).apply {
+            instrumentType(display = true)
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        counter = label("", 28, R.color.signal).apply {
-            typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
+        counter = label("", 40, R.color.accent).apply {
+            instrumentType(numeric = true)
             includeFontPadding = false
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         tally.addView(counter)
-        val unit = label(getString(if (exercise.mode == "hold") R.string.ui_held else R.string.ui_reps_unit), 16, R.color.on_hero)
+        val unit = label(getString(if (exercise.mode == "hold") R.string.ui_held else R.string.ui_reps_unit), 16, R.color.muted)
         tally.addView(unit, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(6) })
         header.addView(tally)
-        subcount = label("", 13, R.color.on_hero)
+        subcount = label("", 13, R.color.muted)
         header.addView(subcount)
         banner = label(getString(R.string.form_finding_camera), 14, R.color.ink).apply {
             minHeight = dp(36); gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(5), dp(10), dp(5)); setTypeface(null, Typeface.BOLD)
+            setPadding(dp(10), dp(5), dp(10), dp(5)); instrumentType(display = true)
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         header.addView(banner, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
@@ -159,7 +159,7 @@ class LiveFormActivity : ComponentActivity() {
             textSize = 13f
             isAllCaps = false
             minHeight = dp(48)
-            setTextColor(getColor(R.color.on_hero))
+            setTextColor(getColor(R.color.muted))
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
             visibility = View.GONE
             setOnClickListener {
@@ -175,9 +175,9 @@ class LiveFormActivity : ComponentActivity() {
             cuesMuted = settings.getBoolean("mute-technique", false)
             header.addView(Switch(this).apply {
                 setText(R.string.form_mute_technique)
-                setTextColor(getColor(R.color.on_hero))
+                setTextColor(getColor(R.color.muted))
                 thumbTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                    intArrayOf(getColor(R.color.signal), getColor(R.color.on_hero)))
+                    intArrayOf(getColor(R.color.accent), getColor(R.color.muted)))
                 minHeight = dp(48)
                 isChecked = cuesMuted
                 setOnCheckedChangeListener { _, muted ->
@@ -206,23 +206,15 @@ class LiveFormActivity : ComponentActivity() {
         }
         setContentView(root)
         @Suppress("DEPRECATION")
-        window.statusBarColor = getColor(R.color.hero)
+        window.statusBarColor = getColor(R.color.paper)
         @Suppress("DEPRECATION")
-        window.navigationBarColor = getColor(R.color.hero)
-        // Light system-bar icons over the dark camera surface.
-        if (Build.VERSION.SDK_INT >= 30) window.insetsController?.setSystemBarsAppearance(0,
-            android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
-        else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = 0
-        }
+        window.navigationBarColor = getColor(R.color.paper)
         root.requestApplyInsets()
         showProgress(FormProgress())
     }
 
     private enum class Tone(val fill: Int, val text: Int) {
-        GOOD(R.color.signal, R.color.hero), NEUTRAL(R.color.on_hero, R.color.hero), WARNING(R.color.notice, R.color.warning)
+        GOOD(R.color.ready_surface, R.color.ready), NEUTRAL(R.color.hover, R.color.ink), WARNING(R.color.notice, R.color.warning)
     }
 
     private fun tone(value: Tone) {
@@ -231,7 +223,7 @@ class LiveFormActivity : ComponentActivity() {
     }
 
     private fun label(value: String, size: Int, foreground: Int) = TextView(this).apply {
-        text = value; textSize = size.toFloat(); setTextColor(getColor(foreground))
+        instrumentType(); text = value; textSize = size.toFloat(); setTextColor(getColor(foreground))
     }
 
     override fun onStart() {

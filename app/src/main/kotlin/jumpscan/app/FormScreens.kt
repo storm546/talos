@@ -109,7 +109,7 @@ private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, repl
     val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     head.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
     text(exercise.label(locale.language == "bg"), 18, parent = column).apply {
-        setTypeface(null, Typeface.BOLD)
+        instrumentType(display = true)
         setPadding(0, 0, 0, 0)
     }
     chip(getString(if (exercise.mode == "hold") R.string.ui_mode_hold else R.string.ui_mode_reps), row(column))
@@ -182,7 +182,7 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
     val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     head.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
     text(formLabel(FormChoice(exercise.id, if (metrics.isNull("side")) null else metrics.getString("side"))), 20, parent = column)
-        .setTypeface(null, Typeface.BOLD)
+        .instrumentType(display = true)
     text(listOfNotNull(getString(if (metrics.getString("view") == "front") R.string.form_front else R.string.form_side),
         when (metrics.optString("source")) { "live" -> getString(R.string.ui_live); "video" -> getString(R.string.ui_video); else -> null },
         if (metrics.has("created_at")) localDateTime(metrics.getString("created_at"), locale) else null)
@@ -237,7 +237,7 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
         val panel = card()
         val title = row(panel, center = true)
         text(getString(R.string.ui_rep_number, rep.getInt("index")), 17, parent = title).apply {
-            setTypeface(null, Typeface.BOLD)
+            instrumentType(display = true)
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
         }
         val status = rep.getString("status")

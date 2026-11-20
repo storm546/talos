@@ -121,7 +121,7 @@ class JumpCaptureActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.surface))
+            setBackgroundColor(getColor(R.color.paper))
             setOnApplyWindowInsetsListener { view, insets ->
                 @Suppress("DEPRECATION")
                 view.setPadding(insets.systemWindowInsetLeft + dp(12), insets.systemWindowInsetTop,
@@ -129,7 +129,7 @@ class JumpCaptureActivity : ComponentActivity() {
                 insets
             }
         }
-        root.addView(label(R.string.jump_capture_title, 22))
+        root.addView(label(R.string.jump_capture_title, 28))
         root.addView(label(if (intent.getStringExtra("test") == "drop_jump") R.string.jump_capture_drop_tips
             else R.string.jump_capture_tips, 14))
         preview = PreviewView(this).apply {
@@ -139,6 +139,7 @@ class JumpCaptureActivity : ComponentActivity() {
         root.addView(preview, LinearLayout.LayoutParams(-1, 0, 1f))
         status = label(R.string.form_finding_camera, 16).apply {
             gravity = Gravity.CENTER
+            background = raisedSurface()
             minHeight = dp(64)
             accessibilityLiveRegion = TextView.ACCESSIBILITY_LIVE_REGION_POLITE
         }
@@ -168,6 +169,7 @@ class JumpCaptureActivity : ComponentActivity() {
     }
 
     private fun label(resource: Int, size: Int) = TextView(this).apply {
+        instrumentType(display = size >= 20)
         setText(resource)
         textSize = size.toFloat()
         setTextColor(getColor(R.color.ink))
@@ -336,7 +338,11 @@ class JumpCaptureActivity : ComponentActivity() {
         } else if (!finishingClip && previewBound) {
             start.isEnabled = selected != null && clearFrames >= 3
             val message = if (clearFrames < 3 && check == R.string.jump_frame_ready) R.string.jump_frame_hold else check
-            if (status.text != getString(message)) status.setText(message)
+            if (status.text != getString(message)) {
+                status.setText(message)
+                status.setTextColor(getColor(if (message == R.string.jump_frame_ready) R.color.ready else R.color.ink))
+                status.arrive()
+            }
         }
     }
 

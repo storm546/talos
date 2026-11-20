@@ -84,7 +84,7 @@ internal fun MainActivity.diagnostics(message: String? = null) {
                 textSize = 13f
                 setTextColor(getColor(R.color.ink))
                 setPadding(dp(3), dp(8), dp(3), dp(8))
-                if (heading) setTypeface(null, Typeface.BOLD)
+                if (heading) instrumentType(display = true)
             }, TableRow.LayoutParams(0, -2, if (index == 0) 1.25f else 1f))
             if (!heading && table.childCount % 2 == 1) row.setBackgroundColor(getColor(R.color.paper))
             table.addView(row)
