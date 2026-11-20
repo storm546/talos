@@ -251,7 +251,7 @@ Screens:
 2. Home: choose a test type, then record in the app or pick a video with the system photo picker.
    CameraX targets a fixed 60 fps and offers 120 or 240 fps only when supported by the rear camera's
    recording session. The live framing check looks for the whole body and headroom before a three-second
-   audible countdown. Recording stops about two seconds after detected landing, at the safety limit, or
+   audible countdown. Recording stops about two seconds after detected landing, at the recording limit, or
    when the athlete taps Stop. Imports remain available if fixed-rate capture is unavailable. Recordings
    are checked against their actual presentation timestamps and duration before analysis.
 3. Analysis: decode the clip frame by frame on a background thread, run Pose Landmarker
@@ -396,9 +396,9 @@ results. The live screen overlays a skeleton, checks framing and view before sta
 hold counter and technique cues, and speaks with an offline Android voice when available. Rep counts
 are provisional until the set ends. A technique cue follows a completed attempt only if a fault on that
 attempt also occurred in one of the previous two. At most one cue is presented per attempt; athletes can
-mute technique cues without muting counts. If the app
-language has no offline voice, an installed fallback speaks counts only; with no offline voice, feedback
-is visual. Live sets end at 60 seconds of tracked input or when stopped. No video, audio or landmarks are
+mute technique cues without muting counts. If no matching offline voice is installed, technique feedback
+is visual and completed repetitions are marked with a beep. Live sets end at 60 seconds of tracked input
+or when stopped. No video, audio or landmarks are
 uploaded. Recorded results retain the existing pending-upload queue; live results use the same authenticated,
 idempotent endpoint and can be retried from the result screen, but are not queued offline.
 

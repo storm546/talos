@@ -3,6 +3,7 @@ package jumpscan.app
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.hardware.camera2.CameraCaptureSession
@@ -173,6 +174,8 @@ class LiveFormActivity : ComponentActivity() {
             header.addView(Switch(this).apply {
                 setText(R.string.form_mute_technique)
                 setTextColor(getColor(R.color.on_hero))
+                thumbTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(getColor(R.color.signal), getColor(R.color.on_hero)))
                 minHeight = dp(48)
                 isChecked = cuesMuted
                 setOnCheckedChangeListener { _, muted ->

@@ -1007,8 +1007,10 @@ class MainActivity : Activity() {
             if (band != null && band.isFinite()) {
                 text(getString(R.string.jump_error_band, String.format(textLocale, "%.1f", band), metric.unit), 14, parent = panel)
             }
+            val comparison = text(getString(if (auth.isEmpty()) R.string.jump_baseline_offline else R.string.jump_baseline_loading),
+                14, parent = panel)
             text(getString(metric.meaning), 14, parent = panel)
-            text(getString(if (auth.isEmpty()) R.string.jump_baseline_offline else R.string.jump_baseline_loading), 14, parent = panel)
+            comparison
         }
         if (auth.isEmpty()) return
         val path = buildString {
