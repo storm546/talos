@@ -5,6 +5,8 @@ import android.app.Instrumentation
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.content.Intent
+import android.media.MediaExtractor
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -26,16 +28,21 @@ import java.time.LocalDate
 
 /** Small platform-only checks; no test library is needed. */
 class AppChecks : Instrumentation() {
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); start() }
+    private var only: String? = null
+    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); only = arguments?.getString("only"); start() }
     override fun onStart() {
         val output = Bundle()
         try {
-            clubChecks()
-            assistantConfirmationCheck()
-            queueChecks()
-            featureChecks()
-            previewChecks()
-            numberChecks()
+            if (only == "cutoff") videoCutoffCheck()
+            else {
+                clubChecks()
+                assistantConfirmationCheck()
+                queueChecks()
+                featureChecks()
+                previewChecks()
+                videoCutoffCheck()
+                numberChecks()
+            }
             output.putString("stream", "Club parsing, check-in validation, feature routing and ordering, queue migration, retry identity, isolation, durability, preview and number-format checks passed.\n")
             finish(Activity.RESULT_OK, output)
         } catch (e: Throwable) {
@@ -342,5 +349,30 @@ class AppChecks : Instrumentation() {
         check(!unclearPreview(frame) && unclearPreview(hidden))
         check(hiddenPreview.getPixel(40, 70) == Color.WHITE) { "An unclear leg must not leave floating ankle markers" }
         raw.recycle(); preview.recycle(); hiddenPreview.recycle()
+    }
+
+    private fun videoCutoffCheck() {
+        val file = File.createTempFile("reordered", ".mp4", targetContext.cacheDir)
+        try {
+            context.assets.open("reordered.mp4").use { source -> file.outputStream().use { source.copyTo(it) } }
+            val uri = Uri.fromFile(file)
+            val cutoff = 10_000_000L
+            val extractor = MediaExtractor()
+            val decodeOrder = try {
+                extractor.setDataSource(file.path)
+                extractor.selectTrack(0)
+                buildList {
+                    while (extractor.sampleTime >= 0) {
+                        add(extractor.sampleTime)
+                        if (!extractor.advance()) break
+                    }
+                }
+            } finally { extractor.release() }
+            val prefix = decodeOrder.takeWhile { it < cutoff }
+            val expected = decodeOrder.filter { it < cutoff }.distinct().sorted()
+            check(expected.size == 120 && prefix.size == 118) { "Fixture must cross the cutoff in decode order" }
+            val actual = videoSampleTimes(targetContext, uri, cutoff)
+            check(actual == expected) { "Expected ${expected.size} presentations before cutoff, got ${actual.size}" }
+        } finally { file.delete() }
     }
 }
