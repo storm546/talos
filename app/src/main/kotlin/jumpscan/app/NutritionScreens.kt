@@ -27,7 +27,6 @@ internal fun MainActivity.nutritionHome(day: String = todayLocal(), message: Str
     text(getString(R.string.feature_day), 14).setPadding(0, dp(14), 0, 0)
     dayPicker(day) { nutritionHome(it) }
     pendingControls()
-    button(getString(R.string.home)) { home() }
 }
 
 private fun MainActivity.foodName(food: JSONObject): String =
@@ -62,19 +61,17 @@ private fun MainActivity.foodLog(day: String, food: JSONObject, message: String?
     val grams = decimalField(R.string.nutr_grams, gramsText)
     text(getString(R.string.nutr_meal), 14)
     var selected = meal
-    val choices = meals.map { (key, label) ->
-        android.widget.RadioButton(this).apply {
+    val group = android.widget.RadioGroup(this)
+    page.addView(group)
+    meals.forEach { (key, label) ->
+        group.addView(android.widget.RadioButton(this).apply {
             id = android.view.View.generateViewId()
             text = getString(label)
-            buttonTintList = android.content.res.ColorStateList.valueOf(green)
-            minHeight = dp(48)
+            segment()
             setOnClickListener { selected = key }
-        }
+        })
     }
-    page.addView(android.widget.RadioGroup(this).apply {
-        choices.forEach { addView(it) }
-        check(choices[meals.keys.indexOf(meal)].id)
-    })
+    group.check(group.getChildAt(meals.keys.indexOf(meal)).id)
     button(getString(R.string.nutr_food_save), primary = true) {
         val value = decimal(grams.value())
         if (value == null || value <= 0 || value > 5000) grams.error = getString(R.string.nutr_invalid_grams)
