@@ -24,6 +24,8 @@
     <string name="diag_count_error">Въведете цяло число за броя повторения.</string>
     <string name="diag_recent">Последни анализи</string>
     <string name="diag_empty">Още няма анализи.</string>
+    <string name="diag_details">Подробности</string>
+    <string name="diag_wall">Общо време</string>
     <string name="diag_run_column">Анализ</string>
     <string name="diag_frames_column">Кадри: прочетени / анализирани / пропуснати</string>
     <string name="diag_time_column">Време / кадри в секунда</string>

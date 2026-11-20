@@ -118,6 +118,18 @@ internal fun MainActivity.chip(value: String, parent: LinearLayout, caution: Boo
     parent.addView(this, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6); topMargin = dp(6) })
 }
 
+/** A status pill whose fill and foreground are colour resources chosen by the caller. */
+internal fun MainActivity.statusChip(value: String, fill: Int, foreground: Int, parent: LinearLayout) = TextView(this).apply {
+    text = value
+    textSize = 12f
+    instrumentType(display = true)
+    setTextColor(getColor(foreground))
+    background = shape(getColor(fill), 10)
+    setPadding(dp(9), dp(4), dp(9), dp(4))
+    gravity = Gravity.CENTER
+    parent.addView(this, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
+}
+
 /** A horizontal row. Centred rows must not give children top margins; LinearLayout then clips their bottoms. */
 internal fun MainActivity.row(parent: LinearLayout = page, top: Int = 0, center: Boolean = false) = LinearLayout(this).apply {
     if (center) gravity = Gravity.CENTER_VERTICAL
@@ -157,6 +169,72 @@ internal fun MainActivity.iconTile(icon: String, parent: LinearLayout, dark: Boo
     importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
     parent.addView(this, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(14) })
 }
+
+/** A rounded surface that stacks settings rows, like Hermes Companion's modules list. */
+internal fun MainActivity.settingsGroup(parent: LinearLayout = page) = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    background = raisedSurface()
+    parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+}
+
+/** A hairline between grouped rows, indented past the leading icon. */
+internal fun MainActivity.divider(parent: LinearLayout) = View(this).apply {
+    background = shape(getColor(R.color.line), 0)
+    parent.addView(this, LinearLayout.LayoutParams(-1, dp(1)).apply { marginStart = dp(54); marginEnd = dp(12) })
+}
+
+private class SettingRow(val row: LinearLayout, val value: TextView)
+
+private fun MainActivity.settingRowCore(icon: String, title: String, parent: LinearLayout,
+                                        subtle: Boolean, action: () -> Unit): SettingRow {
+    val row = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(16), dp(12), dp(12), dp(12))
+        minimumHeight = dp(60)
+        isClickable = true
+        isFocusable = true
+        foreground = RippleDrawable(ColorStateList.valueOf(getColor(R.color.hover)), null, shape(Color.TRANSPARENT, 0))
+        background = null
+        setOnClickListener { action() }
+        pressFeedback()
+    }
+    row.addView(android.widget.ImageView(this).apply {
+        setImageDrawable(lineIcon(icon, getColor(if (subtle) R.color.error else R.color.accent)))
+        scaleType = android.widget.ImageView.ScaleType.CENTER
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginEnd = dp(14) })
+    val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    row.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
+    text(title, 16, getColor(if (subtle) R.color.error else R.color.ink), column).apply {
+        instrumentType(display = true)
+        setPadding(0, 0, 0, 0)
+    }
+    val value = text("", 13, getColor(R.color.muted), column).apply {
+        setPadding(0, dp(3), 0, 0)
+        setSingleLine(true)
+        ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+        visibility = View.GONE
+    }
+    row.addView(android.widget.ImageView(this).apply {
+        setImageDrawable(lineIcon("chevron", getColor(R.color.muted)))
+        scaleType = android.widget.ImageView.ScaleType.CENTER
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginStart = dp(10) })
+    parent.addView(row, LinearLayout.LayoutParams(-1, -2))
+    return SettingRow(row, value)
+}
+
+/** A tappable settings row: line icon, title, optional current value and a chevron. */
+internal fun MainActivity.settingRow(icon: String, title: String, value: String?, parent: LinearLayout,
+                                     subtle: Boolean = false, action: () -> Unit): LinearLayout =
+    settingRowCore(icon, title, parent, subtle, action).also { core ->
+        if (value != null) { core.value.text = value; core.value.visibility = View.VISIBLE }
+    }.row
+
+/** A settings row whose current value is filled in later; returns the value view. */
+internal fun MainActivity.statusRow(icon: String, title: String, parent: LinearLayout, action: () -> Unit): TextView =
+    settingRowCore(icon, title, parent, false, action).value
 
 internal fun MainActivity.notice(value: String, caution: Boolean = false) = text(value, 14,
     getColor(if (caution) R.color.warning else R.color.muted)).apply {
@@ -238,5 +316,11 @@ internal fun Context.lineIcon(name: String, tint: Int) = getDrawable(when (name)
     "home" -> R.drawable.ic_home
     "index" -> R.drawable.ic_index
     "more" -> R.drawable.ic_more
+    "back" -> R.drawable.ic_back
+    "chevron" -> R.drawable.ic_chevron
+    "appearance" -> R.drawable.ic_appearance
+    "diagnostics" -> R.drawable.ic_diagnostics
+    "server" -> R.drawable.ic_server
+    "signout" -> R.drawable.ic_signout
     else -> R.drawable.ic_history
 })!!.mutate().apply { setTint(tint) }

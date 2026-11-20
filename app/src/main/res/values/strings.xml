@@ -204,10 +204,10 @@
     <string name="session_clear">Without a session</string>
     <string name="club_loading">Loading…</string>
     <string name="checkin_title">How I feel today</string>
-    <string name="checkin_pending">Today’s check-in · saved on device</string>
-    <string name="checkin_done">Today’s check-in · done</string>
-    <string name="checkin_not_done">Today’s check-in · not filled in</string>
-    <string name="checkin_unknown">Today’s check-in · status unavailable</string>
+    <string name="checkin_pending">Saved on device</string>
+    <string name="checkin_done">Done</string>
+    <string name="checkin_not_done">Not filled in</string>
+    <string name="checkin_unknown">Status unavailable</string>
     <string name="checkin_day">Day: %1$s</string>
     <string name="checkin_scale">Choose 1–5. 5 is best.</string>
     <string name="checkin_sleep">Sleep · 1 poor / 5 good</string>
@@ -224,8 +224,8 @@
     <string name="checkin_queued">Saved on device. Use Send pending when connected.</string>
     <string name="checkin_invalid">Choose five scores from 1–5. Minutes must be 0–600 and RPE 0–10; fill in both or neither.</string>
     <string name="feedback_title">Coach feedback</string>
-    <string name="feedback_unread">Coach feedback · %1$d unread</string>
-    <string name="feedback_unknown">Coach feedback · status unavailable</string>
+    <string name="feedback_unread">%1$d unread</string>
+    <string name="feedback_unknown">Status unavailable</string>
     <string name="feedback_empty">No comments yet.</string>
     <string name="feedback_reply">Your reply</string>
     <string name="feedback_send">Send reply</string>
@@ -399,4 +399,8 @@
     <string name="form_get_position">Get into the exercise position.</string>
     <string name="form_tracking">Tracking your set</string>
     <string name="form_voice_settings">Counting with beeps · Set up a voice</string>
+    <string name="nav_back">Back</string>
+    <string name="not_signed_in">Not signed in</string>
+    <string name="retry">Try again</string>
+    <string name="jump_vs_baseline">Compared with your starting point</string>
 </resources>

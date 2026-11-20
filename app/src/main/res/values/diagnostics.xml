@@ -24,6 +24,8 @@
     <string name="diag_count_error">Enter a whole number of repetitions.</string>
     <string name="diag_recent">Recent runs</string>
     <string name="diag_empty">No runs yet.</string>
+    <string name="diag_details">Details</string>
+    <string name="diag_wall">Wall time</string>
     <string name="diag_run_column">Run</string>
     <string name="diag_frames_column">Frames: decoded / analysed / dropped</string>
     <string name="diag_time_column">Time / fps</string>

@@ -204,10 +204,10 @@
     <string name="session_clear">Без сесия</string>
     <string name="club_loading">Зареждане…</string>
     <string name="checkin_title">Самочувствие днес</string>
-    <string name="checkin_pending">Самочувствие днес · запазено на устройството</string>
-    <string name="checkin_done">Самочувствие днес · попълнено</string>
-    <string name="checkin_not_done">Самочувствие днес · непопълнено</string>
-    <string name="checkin_unknown">Самочувствие днес · статусът е недостъпен</string>
+    <string name="checkin_pending">Запазено на устройството</string>
+    <string name="checkin_done">Попълнено</string>
+    <string name="checkin_not_done">Непопълнено</string>
+    <string name="checkin_unknown">Статусът е недостъпен</string>
     <string name="checkin_day">Ден: %1$s</string>
     <string name="checkin_scale">Изберете 1–5. 5 е най-добре.</string>
     <string name="checkin_sleep">Сън · 1 лош / 5 добър</string>
@@ -224,8 +224,8 @@
     <string name="checkin_queued">Запазено на устройството. При връзка използвайте „Изпратете чакащите записи“.</string>
     <string name="checkin_invalid">Изберете пет оценки от 1–5. Минутите са 0–600, а усилие 0–10; попълнете и двете или нито едно.</string>
     <string name="feedback_title">Бележки от треньора</string>
-    <string name="feedback_unread">Бележки от треньора · непрочетени: %1$d</string>
-    <string name="feedback_unknown">Бележки от треньора · статусът е недостъпен</string>
+    <string name="feedback_unread">Непрочетени: %1$d</string>
+    <string name="feedback_unknown">Статусът е недостъпен</string>
     <string name="feedback_empty">Все още няма бележки.</string>
     <string name="feedback_reply">Вашият отговор</string>
     <string name="feedback_send">Изпратете отговор</string>
@@ -399,4 +399,8 @@
     <string name="form_get_position">Заемете позицията за упражнението.</string>
     <string name="form_tracking">Серията се проследява</string>
     <string name="form_voice_settings">Броене със сигнал · Настройте глас</string>
+    <string name="nav_back">Назад</string>
+    <string name="not_signed_in">Не сте влезли</string>
+    <string name="retry">Опитайте отново</string>
+    <string name="jump_vs_baseline">Спрямо началните Ви скокове</string>
 </resources>

@@ -63,28 +63,25 @@ internal fun RadioButton.segment(inverse: Boolean = false) {
     pressFeedback()
 }
 
-internal fun MainActivity.appearance() {
+internal fun MainActivity.appearanceSheet() {
     val settings = getSharedPreferences("instrument", android.content.Context.MODE_PRIVATE)
     val options = listOf("dark" to R.string.dark_mode, "light" to R.string.light_mode, "system" to R.string.system_mode)
     val selected = settings.getString("appearance", "dark")
-    button(getString(R.string.appearance_value, getString(options.first { it.first == selected }.second))) {
-        val dialog = Dialog(this)
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(16), dp(22), dp(24))
-            background = raisedSurface()
-        }
-        section(R.string.appearance, panel)
-        options.forEach { (key, label) ->
-            button(getString(label), primary = key == selected, parent = panel) {
-                dialog.dismiss()
-                if (key != selected) { settings.edit().putString("appearance", key).apply(); recreate() }
-            }.isSelected = key == selected
-        }
-        dialog.setContentView(ScrollView(this).apply { addView(panel) })
-        dialog.setTitle(R.string.appearance)
-        dialog.window?.apply { setGravity(Gravity.BOTTOM); setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)); setLayout(-1, -2) }
-        dialog.show()
-        panel.arrive()
+    val dialog = Dialog(this)
+    val panel = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(22), dp(16), dp(22), dp(24))
+        background = raisedSurface()
     }
+    section(R.string.appearance, panel)
+    options.forEach { (key, label) ->
+        button(getString(label), primary = key == selected, parent = panel) {
+            dialog.dismiss()
+            if (key != selected) { settings.edit().putString("appearance", key).apply(); recreate() }
+        }.isSelected = key == selected
+    }
+    dialog.setContentView(ScrollView(this).apply { addView(panel) })
+    dialog.window?.apply { setGravity(Gravity.BOTTOM); setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)); setLayout(-1, -2) }
+    dialog.show()
+    panel.arrive()
 }
