@@ -796,3 +796,96 @@ Files are in `/root/jumpscan/logs/reps/`:
 
 Countix and MM-Fit videos, cut sets and tracks stay on the kit under `/work/jumpscan-data/form/reps/`. None of
 this is phone footage, and the live path is simulated from recorded video.
+
+## 2026-11-20 (later): Views, per-limb counting, more ground truth
+
+Goal: bring the remaining exercises to the same bar as squat. The bar and the rules are unchanged: choose on the
+training split, ship only if the held-out split improves, and use squat (21 of 22) as the regression guard.
+
+### New ground truth
+
+- **MM-Fit curls, rows and lunges.** In the first round these were dropped because the athletes alternate arms or
+  legs. They are now used, with the same unseen-subject split (w00, w05, w12, w13, w20 held out).
+  - Curls and rows count each arm; see the engine changes below.
+  - A lunge bends both knees, so the one measured leg (side L) sees every lunge, whichever leg steps.
+  - Each set is counted as MM-Fit labels it: the total number of arm or leg repetitions.
+- **Countix "lunge".** 142 of 155 spans were still online. After the same visibility, timing, camera-cut and
+  screening filters, 68 sets remain. Ten more were screened out: lateral lunges, two-person scenes and cropped legs.
+  Spot-check of 12 segments: 9 exact, 2 within one, and 1 not countable (moving camera).
+- **Plank, hand-timed.** 15 segments from the Kaggle dataset "Workout/Exercises Video" by hasyimabdillah (CC BY-NC-SA
+  4.0) and from Creative Commons YouTube videos. The label is the time in the hold, read off pixel time slices at
+  5 fps.
+  - Most segments are continuous shots in which the athlete holds the plank throughout.
+  - Two YouTube segments include getting into or out of the hold.
+  - In-band time (body line) was not labelled; only hold time is benchmarked. A hold set counts as exact when the
+    measured hold is within max(1 s, 10%) of the label.
+  - The three held-out plank people all come from the Kaggle clips, and 6 of the 9 test segments are one person.
+- **Not found or not used.**
+  - RepCount/RepCount-A (TransRAC): its videos are YouTube-sourced with no reusable licence per clip, the
+    same situation as Countix. Not used in this round.
+  - Countix front raises: not a catalogue exercise. Countix situp: not in the catalogue. Deadlifting: no Countix
+    class.
+  - Glute bridge, dip, wall sit, side plank, split squat, lateral lunge, step-up, Romanian deadlift, calf raise and
+    single-leg squat: still fewer than the 8 held-out sets from 3 people the bar needs. Of 30 glute-bridge shots only
+    2 were countable tutorial segments.
+
+### Engine changes
+
+- **Per-limb counting** (`"limbs": "each"`). In a front view with no side chosen, each arm or leg gets its own
+  repetition tracker.
+  - A repetition on one limb that overlaps at least half of a repetition already counted on the other limb is the
+    same movement and counts once. So alternating curls count every arm, and a two-arm curl counts once.
+  - A unit test covers both cases.
+  - The single-tracker path gives byte-identical results to before on every set.
+- **View-specific driving signal** (`signal_front`), used when the camera sees the athlete from the front.
+  - Push-up from the front: `rise:wrist:nose`, the nose height above the wrists divided by the larger of
+    shoulder width and torso length. That scale survives a horizontal body seen head-on, where the torso length
+    collapses.
+- **Per-signal visibility threshold** (`min_visibility`). MediaPipe's visibility for the arms of a push-up seen
+  from the front is often 0.1–0.2 while the coordinates stay smooth.
+  - The signal and its gate may use a lower threshold. Technique checks keep 0.5.
+- **Catalogue changes, all chosen on the training split:**
+  - push-up: side signal at visibility 0.1, plus the frontal signal (rest above 0.8, bottom below 0.3, range 0.4);
+  - biceps curl: per-limb, rest at 140 degrees;
+  - lateral raise: per-limb;
+  - pull-up: signal visibility 0.2.
+- **Dropped.**
+  - Lunge rest at 145 degrees: live exact rose from 53% to 58% on the held-out split, but recorded fell from 22% to
+    19%.
+  - A frontal row signal without the trunk-tilt gate: MM-Fit's single-arm rows stayed at 0–1 of 5 on train.
+
+### Results (held-out split)
+
+"Start" is the engine at the beginning of this round. "f172120" is the engine before any benchmark work.
+
+| Exercise | Held-out sets / people | Live exact: f172120 / start / now | Live off by >1 | Live unclear | Recorded exact: f172120 / start / now | Status |
+|---|---|---|---:|---:|---|---|
+| squat | 22 / 12 | 0% / 95.5% / 95.5% | 0 | 0% | 77% / 95.5% / 95.5% | validated |
+| plank (hold time) | 9 / 3 | 100% / 100% / 100% | 0 | – | 89% / 89% / 89% | validated (hold time only; Kaggle NC data) |
+| lateral_raise | 12 / 4 | 33% / 75% / 75% | 3 | 0% | 33% / 50% / 67% | experimental |
+| biceps_curl | 13 / 5 | 0% / 0% / 62% | 1 | 2% | 0% / 0% / 54% | experimental |
+| jumping_jack | 28 / 18 | 39% / 61% / 61% | 7 | 1% | 57% / 61% / 61% | experimental |
+| pull_up | 17 / 17 | 35% / 47% / 59% | 1 | 2% | 41% / 35% / 41% | experimental |
+| push_up | 27 / 17 | 7% / 18% / 56% | 8 | 5% | 18% / 15% / 56% | experimental |
+| lunge | 36 / 25 | 53% / 53% / 53% | 13 | 31% | 14% / 22% / 22% | experimental |
+| overhead_press | 12 / 4 | 25% / 25% / 25% | 7 | 1% | 0% / 0% / 0% | experimental |
+| bent_over_row | 15 / 5 | 0% / 0% / 0% | 15 | 1% | 0% / 0% / 0% | experimental |
+| glute_bridge | 1 / 1 | – | – | – | – | experimental (2 counted sets) |
+| 9 others | 0 | – | – | – | – | experimental (no counted or timed test videos) |
+
+Per view (live, held-out): no exercise passes in a single view either.
+- push-up: front 59% of 17, side 50% of 10;
+- pull-up: front 70% of 10, side 43% of 7;
+- lunge: front 58% of 26, side 40% of 10;
+- jumping jack: front 59% of 27.
+
+By source:
+- push-up: MM-Fit 73% of 15, Countix 33% of 12;
+- lunge: MM-Fit 80% of 15, Countix 33% of 21.
+
+Countix's mid-cycle span edges remain the main source of error for push-ups, lunges and jumping jacks.
+
+Full per-source and per-view tables, the index and the scripts are in `/root/jumpscan/logs/reps/`:
+- `results2-final.csv`, `results2-start.csv`, `results2-baseline.csv`;
+- `INDEX.csv`;
+- `countix/`, `mmfit/`.

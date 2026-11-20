@@ -416,12 +416,32 @@ than 300 ms adds no time (shorter low-visibility or dropped-frame stretches are 
 provisional until `finish`. Depth is peak knee flexion (side: image plane; front: world), FPPA is measured
 at deepest flexion (front only), asymmetry uses both legs, and hips below knees is available from the side.
 
-Validated status (benchmark of 20 November 2026, hand counts, Countix and MM-Fit): squat is validated (held-out live
-15 fps: 21 of 22 sets exact, 12 people, none off by more than one, no unclear repetitions). Experimental, with their
-held-out exact rates: lateral raise 75% of 12, jumping jack 61% of 28, pull-up 47% of 17, overhead press 25% of 12,
-push-up 19% of 27. Glute bridge has 2 counted sets. The other 13 entries have no counted test videos. In the squat
-counter, unusable frames are skipped and only an unobserved stretch longer than max(200 ms, 1.5 median intervals)
-splits an observation; `FormStream` interrupts after 300 ms without a usable frame.
+Validated status (benchmark of 20 November 2026, hand counts, Countix and MM-Fit; see `core/VALIDATION.md`):
+- **Squat** is validated: held-out live 15 fps, 21 of 22 sets exact, 12 people, none off by more than one, no
+  unclear repetitions.
+- **Plank** is validated for hold time: 9 of 9 held-out sets within max(1 s, 10%), 3 people. In-band time is not
+  benchmarked.
+- **Experimental**, with their held-out exact rates:
+  - lateral raise 75% of 12;
+  - biceps curl 62% of 13;
+  - jumping jack 61% of 28;
+  - pull-up 59% of 17;
+  - push-up 56% of 27;
+  - lunge 53% of 36;
+  - overhead press 25% of 12;
+  - bent-over row 0% of 15;
+  - glute bridge, which has 2 counted sets;
+  - the other 9 entries, which have no counted or timed test videos.
+
+Catalogue signals may set:
+- `"limbs": "each"`: in a front view with no side chosen, each arm or leg is counted separately, and overlapping
+  repetitions on both sides count once;
+- `min_visibility` for the signal and its gate (checks keep 0.5);
+- `signal_front`: a driving signal used when the camera sees the athlete from the front. The metric `rise:a:b` is
+  the height of b above a, divided by the larger of shoulder width and torso length.
+
+In the squat counter, unusable frames are skipped, and only an unobserved stretch longer than max(200 ms, 1.5 median
+intervals) splits an observation. `FormStream` interrupts after 300 ms without a usable frame.
 Burpees are not included: the fast transition between upright and floor phases often hides joints, and
 push-up/jump variants cannot reliably be distinguished by the single cycle signal. No check measures load,
 contact with equipment, or medical outcomes. The checks are technique feedback only.
