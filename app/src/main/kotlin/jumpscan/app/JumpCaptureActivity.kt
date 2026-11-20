@@ -339,6 +339,7 @@ class JumpCaptureActivity : ComponentActivity() {
         if (recording != null) {
             if (lastTick != 0 && startedAt > 0 && clearFrames == 0) stopRecording(discard = true)
             if (stopAt == Long.MAX_VALUE && latestFeet?.let { landingWatch?.landed(it) } == true) {
+                status.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
                 stopAt = SystemClock.uptimeMillis() + POST_LANDING_MS
                 status.textSize = 16f
                 status.setText(R.string.jump_capture_landed)

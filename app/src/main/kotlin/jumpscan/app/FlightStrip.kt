@@ -99,8 +99,9 @@ internal class FlightView(context: Context, private val flight: FlightStrip?) : 
         val airborne = 4 * phase * (1 - phase)
         val pose = samples[(phase * (samples.size - 1)).roundToInt()]
         val fit = minOf(110f / (maxX - minX).coerceAtLeast(1), (if (flight == null) 86f else 116f) / (maxY - minY).coerceAtLeast(1))
-        fun x(index: Int) = 65f + (pose[2 * index] - (minX + maxX) / 2f) * fit
-        fun y(index: Int) = 133f - (maxY - pose[2 * index + 1]) * fit - if (flight == null) 26 * airborne else 0f
+        val bend = if (flight == null) 1-airborne else 0f
+        fun x(index: Int) = 65f + (pose[2 * index] - (minX + maxX) / 2f) * fit + when(index) { 9 -> -5*bend; 10 -> 5*bend; else -> 0f }
+        fun y(index: Int) = 133f - (maxY - pose[2 * index + 1]) * fit + (if (index <= 8) 10*bend else 0f) - (if (flight == null) 26*airborne else 0f)
         pen.strokeWidth = 1f; pen.alpha = 90; canvas.drawLine(12f, 136f, 121f, 136f, pen)
         pen.color = chalk; pen.strokeWidth = 3.6f
         for (index in links.indices step 2) {

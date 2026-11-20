@@ -109,9 +109,6 @@ internal fun MainActivity.formHome(message: String? = null) {
     }
 }
 
-/** Collapsed on every app start. */
-private var showExperimental = false
-
 private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, replay: Boolean) {
     val panel = card()
     val head = row(panel, center = true)

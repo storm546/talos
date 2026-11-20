@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private val pendingRoot by lazy { java.io.File(filesDir, "pending") }
     private fun pending() = PendingUploads(pendingRoot, base(), athleteId())
     internal var formChoice = FormChoice("squat", null)
+    internal var showExperimental = false
     internal var lastForm: FormResult? = null
     private var pendingTrial: PhoneTrial? = null
     private var guiding = false
@@ -296,7 +297,7 @@ class MainActivity : Activity() {
             }, { (newToken, name, id) ->
                 val prior = prefs.getLong("user_id", 0)
                 if (prior != id || base() != address) {
-                    prefs.edit().remove("flight_strip").apply()
+                    clearFlightMemory()
                     selectedSession = null
                     resultSession = null
                     if (prior != 0L) lastForm = null
@@ -360,7 +361,7 @@ class MainActivity : Activity() {
         button(getString(R.string.pick_video), parent = jump) {
             filmingGuide { pickJumpVideo() }
         }
-        button(getString(R.string.repeat_live, formLabel(formChoice))) { openLiveForm(false) }.apply {
+        if (!jumpscan.core.FormExercises[formChoice.exercise].experimental || showExperimental) button(getString(R.string.repeat_live, formLabel(formChoice))) { openLiveForm(false) }.apply {
             styleButton(this, false, ActionTone.TONAL)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             compoundDrawablePadding = dp(12)
@@ -440,7 +441,8 @@ class MainActivity : Activity() {
     }
 
     private fun signOutLocal() {
-        prefs.edit().remove("token").remove("name").remove("user_id").remove("flight_strip").apply()
+        clearFlightMemory(); showExperimental = false
+        prefs.edit().remove("token").remove("name").remove("user_id").apply()
         selectedSession = null
         resultSession = null
         analysis = null
@@ -766,8 +768,18 @@ class MainActivity : Activity() {
         text(getString(R.string.first_ten), 14)
     }
 
-    private fun rememberFlight(run: Analysis) {
-        FlightStrip.from(run)?.let { prefs.edit().putString("flight_strip", it.encode()).apply() }
+    private fun clearFlightMemory() {
+        prefs.edit().remove("flight_strip").remove("flight_cmj").remove("flight_drop_jump").apply()
+    }
+
+    private fun localHeights(test: String): List<Double> = prefs.getString("flight_$test", "").orEmpty().split(',').mapNotNull { it.toDoubleOrNull() }
+
+    private fun rememberFlight(run: Analysis, replace: Boolean = false) {
+        FlightStrip.from(run)?.let {
+            val heights = localHeights(run.metrics.test)
+            prefs.edit().putString("flight_strip", it.encode()).putString("flight_${run.metrics.test}",
+                ((if (replace && heights.isNotEmpty()) heights.dropLast(1) else heights) + it.heightCm).takeLast(7).joinToString(",")).apply()
+        }
     }
 
     private fun edgePair(run: Analysis, parent: LinearLayout) {
@@ -800,7 +812,7 @@ class MainActivity : Activity() {
         text(if (current.metrics.test == "cmj") getString(R.string.cmj) else getString(R.string.drop_jump), 14)
         if (current.contactFound) edgePair(current, page)
         if (hasFlight) {
-            jumpHighlights(metrics, uploadedId, clientId)
+            jumpHighlights(metrics, uploadedId, clientId, localHeights(current.metrics.test).dropLast(1))
             metricWarnings(metrics)
             if (uploadedId == null && queuedId == null) button(getString(R.string.check_frames)) { editFrames(current) }
         }
@@ -928,7 +940,7 @@ class MainActivity : Activity() {
                 catch (_: IllegalArgumentException) { throw AppError(R.string.manual_analysis_error) }
             }, {
                 analysis = it
-                    rememberFlight(it)
+                    rememberFlight(it, replace = current.metrics.jumpHeightCm != null)
                 edits = null
                 uploadedId = null
                 queuedId = null
@@ -1245,10 +1257,12 @@ class MainActivity : Activity() {
             }
             val pastByTest = mutableMapOf<String, MutableList<Double>>()
             val priorHeights = Array(rows.length()) { emptyList<Double>() }
+            val startingHeights = arrayOfNulls<Double>(rows.length())
             for (index in rows.length()-1 downTo 0) {
                 val item = rows.getJSONObject(index); val metrics = item.optJSONObject("metrics") ?: item
                 val heights = pastByTest.getOrPut(metrics.getString("test")) { mutableListOf() }
                 priorHeights[index] = heights.takeLast(6)
+                if (rows.length() < 100 && heights.size >= 3) startingHeights[index] = heights.take(3).sorted()[1]
                 if (hasFlight(metrics)) metrics.optDouble("jump_height_cm").takeIf { it.isFinite() }?.let(heights::add)
             }
             for (i in 0 until rows.length()) {
@@ -1261,9 +1275,10 @@ class MainActivity : Activity() {
                 text(getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump), 14, parent = panel)
                 if (!hasFlight) text(getString(R.string.no_flight_detected), 14, parent = panel)
                 else if (!metrics.isNull("jump_height_cm")) {
-                    panel.addView(HeightRule(this, metrics, priorHeights[i]), LinearLayout.LayoutParams(-1, dp(82)))
+                    panel.addView(HeightRule(this, metrics, priorHeights[i]).apply { baseline(startingHeights[i]) }, LinearLayout.LayoutParams(-1, dp(90)))
                 }
-                button(getString(R.string.view_jump, item.getLong("id")), parent = panel) {
+                panel.isFocusable = true; panel.pressFeedback()
+                panel.setOnClickListener {
                     layout(getString(R.string.jump_title, item.getLong("id")), "history_detail")
                     if (hasFlight) {
                         jumpHighlights(metrics, item.getLong("id"), previous = priorHeights[i])

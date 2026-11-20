@@ -27,13 +27,14 @@ internal fun MainActivity.techniqueHistory(offset: Int = 0) {
                 gravity = android.view.Gravity.END
             }
             line.addView(total, android.widget.LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10) })
-            text(if (hold) metricNumber(summary.optLong("hold_ms") / 1000.0, "hold_ms", locale)
-                else summary.optInt("repetition_count").toString(), 24, green, total).apply {
+            val quantity = if (hold) "hold_ms" else "repetition_count"
+            text(if (summary.isNull(quantity)) "—" else if (hold) metricNumber(summary.getLong(quantity) / 1000.0, "hold_ms", locale)
+                else summary.getInt(quantity).toString(), 24, green, total).apply {
                 instrumentType(numeric = true)
                 gravity = android.view.Gravity.END
                 setPadding(0, 0, 0, 0)
             }
-            text(getString(if (hold) R.string.ui_seconds else R.string.ui_reps_unit), 12, parent = total).apply {
+            if (!summary.isNull(quantity)) text(getString(if (hold) R.string.ui_seconds else R.string.ui_reps_unit), 12, parent = total).apply {
                 gravity = android.view.Gravity.END
                 setPadding(0, 0, 0, 0)
             }
