@@ -179,11 +179,33 @@ class MainActivity : Activity() {
         setContentView(shell)
         page.arrive()
         shell.requestApplyInsets()
-        text(getString(R.string.brand), 13, ink).apply {
-            instrumentType(numeric = true)
-            letterSpacing = .1f
-            compoundDrawablePadding = dp(8)
-            setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("index", green), null, null, null)
+        val backable = name !in listOf("home", "form", "profile", "login", "busy", "guide", "frames")
+        if (backable) {
+            val header = row(center = true).apply { setPadding(0, 0, 0, dp(4)) }
+            header.addView(android.widget.ImageView(this).apply {
+                setImageDrawable(lineIcon("back", ink))
+                scaleType = android.widget.ImageView.ScaleType.CENTER
+                setPadding(dp(7), dp(7), dp(7), dp(7))
+                contentDescription = getString(R.string.nav_back)
+                isClickable = true
+                isFocusable = true
+                background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(getColor(R.color.hover)),
+                    null, shape(Color.TRANSPARENT, 0))
+                setOnClickListener { onBackPressed() }
+            }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(6) })
+            text(getString(R.string.brand), 13, ink, header).apply {
+                instrumentType(numeric = true)
+                letterSpacing = .1f
+                compoundDrawablePadding = dp(8)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("index", green), null, null, null)
+            }
+        } else {
+            text(getString(R.string.brand), 13, ink).apply {
+                instrumentType(numeric = true)
+                letterSpacing = .1f
+                compoundDrawablePadding = dp(8)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("index", green), null, null, null)
+            }
         }
         text(title, 40).apply {
             instrumentType(display = true)
@@ -374,27 +396,51 @@ class MainActivity : Activity() {
         tiles(UiTile(R.string.training_title, "training") { trainingHome() },
             UiTile(R.string.nutrition_title, "food") { nutritionHome() },
             UiTile(R.string.assistant_title, "assistant") { assistantScreen() })
-        button(getString(R.string.home)) { home() }
     }
 
     internal fun profile() {
         layout(getString(R.string.ui_profile), "profile")
-        if (token().isEmpty()) button(getString(R.string.sign_in)) { login() }
-        else {
-            card().also {
-                text(prefs.getString("name", "").orEmpty(), 21, parent = it).instrumentType(display = true)
-                text(getString(R.string.server_url), 13, parent = it)
-                text(base(), 14, parent = it)
+        val account = card()
+        val head = row(account, center = true)
+        iconTile("profile", head)
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        head.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
+        if (token().isEmpty()) {
+            text(getString(R.string.not_signed_in), 18, parent = column).apply {
+                instrumentType(display = true); setPadding(0, 0, 0, 0)
             }
+            text(getString(R.string.login_intro), 13, parent = column).setPadding(0, dp(2), 0, 0)
+            button(getString(R.string.sign_in), primary = true, parent = account) { login() }
+        } else {
+            text(prefs.getString("name", "").orEmpty(), 18, parent = column).apply {
+                instrumentType(display = true); setPadding(0, 0, 0, 0)
+            }
+            text(base(), 13, parent = column).setPadding(0, dp(2), 0, 0)
         }
-        appearance()
-        button(getString(R.string.diagnostics)) { diagnostics() }
+        val settings = getSharedPreferences("instrument", android.content.Context.MODE_PRIVATE)
+        val options = listOf("dark" to R.string.dark_mode, "light" to R.string.light_mode, "system" to R.string.system_mode)
+        val group = settingsGroup()
+        settingRow("appearance", getString(R.string.appearance),
+            getString(options.first { it.first == settings.getString("appearance", "dark") }.second), group) {
+            appearanceSheet()
+        }
+        divider(group)
+        settingRow("diagnostics", getString(R.string.diagnostics), diagnosticsProgress(), group) { diagnostics() }
         if (token().isNotEmpty()) {
-            pendingControls()
-            button(getString(R.string.ui_change_server)) { leaveProfile(showServer = true) }
-            button(getString(R.string.sign_out)) { leaveProfile(showServer = false) }
+            divider(group)
+            settingRow("server", getString(R.string.server_url), base(), group) { leaveProfile(showServer = true) }
+            divider(group)
+            settingRow("signout", getString(R.string.sign_out), null, group, subtle = true) { leaveProfile(showServer = false) }
         }
-        button(getString(R.string.home)) { home() }
+        if (token().isNotEmpty()) pendingControls()
+    }
+
+    private fun diagnosticsProgress(): String? {
+        val rows = DiagnosticLog(this).read()
+        val jumps = rows.filter { it.completedJump() }.map { it.getInt("trial") }.toSet()
+        val sets = rows.filter { it.completedSquat() && it.has("human_reps") }.map { it.getInt("trial") }.toSet()
+        val done = (jumps + sets).size
+        return if (done > 0) "$done/23" else null
     }
 
     private fun leaveProfile(showServer: Boolean) {
@@ -433,11 +479,14 @@ class MainActivity : Activity() {
         layout(getString(R.string.ui_club), "club")
         val host = page
         val day = todayLocal()
-        val actions = card()
-        val checkin = button(getString(R.string.checkin_title), primary = true, parent = actions) { checkin() }
-        val feedback = button(getString(R.string.feedback_title), parent = actions) { feedback() }
-        checkin.isEnabled = token().isNotEmpty()
-        feedback.isEnabled = token().isNotEmpty()
+        var checkin: TextView? = null
+        var feedback: TextView? = null
+        if (token().isNotEmpty()) {
+            val statusGroup = settingsGroup()
+            checkin = statusRow("checkin", getString(R.string.checkin_title), statusGroup) { checkin() }
+            divider(statusGroup)
+            feedback = statusRow("assistant", getString(R.string.feedback_title), statusGroup) { feedback() }
+        }
         val sessions = card()
         section(R.string.sessions_title, sessions)
         val status = text(getString(if (token().isEmpty()) R.string.club_sign_in else R.string.club_loading), 14, parent = sessions)
@@ -446,7 +495,6 @@ class MainActivity : Activity() {
         if (selectedSession != null) button(getString(R.string.session_clear), parent = sessions) {
             selectedSession = null; clubHome()
         }
-        button(getString(R.string.home)) { home() }
         if (token().isEmpty()) return
         val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
         fun current() = !isDestroyed && page === host && token() == savedToken && base() == savedBase
@@ -477,15 +525,21 @@ class MainActivity : Activity() {
             val done = if (queued != null) true else runCatching {
                 JSONArray(api(savedBase, "/api/checkins?athlete_id=$owner&from=$day&to=$day", token = savedToken)).length() > 0
             }.getOrNull()
-            runOnUiThread { if (current()) checkin.text = getString(when {
-                queued != null -> R.string.checkin_pending
-                done == true -> R.string.checkin_done
-                done == false -> R.string.checkin_not_done
-                else -> R.string.checkin_unknown
-            }) }
+            runOnUiThread { if (current()) {
+                checkin?.text = getString(when {
+                    queued != null -> R.string.checkin_pending
+                    done == true -> R.string.checkin_done
+                    done == false -> R.string.checkin_not_done
+                    else -> R.string.checkin_unknown
+                })
+                checkin?.visibility = View.VISIBLE
+            } }
             val unread = runCatching { JSONObject(api(savedBase, "/api/me/unread", token = savedToken)).getInt("comments") }.getOrNull()
-            runOnUiThread { if (current()) feedback.text = if (unread == null) getString(R.string.feedback_unknown)
-                else getString(R.string.feedback_unread, unread) }
+            runOnUiThread { if (current()) {
+                feedback?.text = if (unread == null) getString(R.string.feedback_unknown)
+                    else getString(R.string.feedback_unread, unread)
+                feedback?.visibility = View.VISIBLE
+            } }
         }
     }
 
@@ -553,7 +607,6 @@ class MainActivity : Activity() {
                 snack(getString(R.string.checkin_saved))
             }, { checkinForm(day, body, getString(R.string.checkin_queued) + "\n" + it) })
         }
-        button(getString(R.string.home)) { home() }
     }
 
     private fun feedback(offset: Int = 0) {
@@ -586,7 +639,6 @@ class MainActivity : Activity() {
                 api(savedBase, "/api/comments", "POST", savedToken, JSONObject().put("athlete_id", owner).put("body", body))
             }, { feedback() }, { feedbackForm(rows, offset, body, it) })
         }
-        button(getString(R.string.home)) { home() }
         for (comment in rows) {
             text(getString(R.string.feedback_author, comment.authorName, getString(when (comment.authorRole) {
                 "coach" -> R.string.role_coach
@@ -797,7 +849,6 @@ class MainActivity : Activity() {
         }
         pendingControls()
         if (token().isNotEmpty()) button(getString(R.string.history)) { history() }
-        button(getString(R.string.home)) { home() }
         text(getString(R.string.no_video_upload), 13)
     }
 
@@ -1040,7 +1091,7 @@ class MainActivity : Activity() {
         }
         section(R.string.jump_comparison, host)
         text(getString(if (auth.isEmpty()) R.string.jump_baseline_sign_in else R.string.jump_baseline_info), 14, parent = host)
-        val comparisons = highlights.associateWith { metric ->
+        for (metric in highlights) {
             val panel = stat(getString(metric.label), number(json, metric.key), metric.unit, host)
             val band = when (metric.key) {
                 "flight_time_ms" -> errorMs
@@ -1050,42 +1101,62 @@ class MainActivity : Activity() {
             if (band != null && band.isFinite()) {
                 text(getString(R.string.jump_error_band, String.format(textLocale, "%.1f", band), metric.unit), 14, parent = panel)
             }
-            val comparison = text(getString(if (auth.isEmpty()) R.string.jump_baseline_offline else R.string.jump_baseline_loading),
-                14, parent = panel)
             text(getString(metric.meaning), 14, parent = panel)
-            comparison
         }
         text(getString(if (side) R.string.jump_error_side else R.string.jump_error_front), 14, parent = host)
         if (auth.isEmpty()) return
+        val panel = card()
+        section(R.string.jump_vs_baseline, panel)
+        val status = text(getString(R.string.jump_baseline_loading), 14, parent = panel)
+        val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        panel.addView(rows)
+        val retry = button(getString(R.string.retry), parent = panel) { }.apply {
+            styleButton(this, false, ActionTone.TONAL)
+            textSize = 14f
+            visibility = View.GONE
+        }
         val path = buildString {
             append("/api/jumps/baseline?test=").append(if (json.optString("test") == "cmj") "cmj" else "drop_jump")
             beforeId?.let { append("&before_id=").append(it) }
             excludeClient?.let { append("&exclude_client_id=").append(Uri.encode(it)) }
         }
-        clubExecutor.submit {
-            val baseline = runCatching { JSONObject(api(address, path, token = auth)) }.getOrNull()
-            runOnUiThread {
-                if (host !== page || auth != token() || address != base()) return@runOnUiThread
-                for ((metric, caption) in comparisons) {
-                    caption.text = when {
-                        baseline == null -> getString(R.string.jump_baseline_unavailable)
-                        baseline.isNull(metric.key) -> getString(R.string.jump_baseline_pending)
-                        else -> {
-                            val change = json.getDouble(metric.key) - baseline.getDouble(metric.key)
-                            val value = metricNumber(kotlin.math.abs(change), metric.key, locale)
-                            val unit = if (metric.unit == "%") getString(R.string.jump_percentage_points) else metric.unit
-                            val comparison = when {
-                                value == metricNumber(0.0, metric.key, locale) -> getString(R.string.jump_baseline_equal)
-                                change > 0 -> getString(R.string.jump_baseline_higher, value, unit)
-                                else -> getString(R.string.jump_baseline_lower, value, unit)
+        fun loadBaseline() {
+            status.visibility = View.VISIBLE
+            status.text = getString(R.string.jump_baseline_loading)
+            rows.removeAllViews()
+            retry.visibility = View.GONE
+            clubExecutor.submit {
+                val baseline = runCatching { JSONObject(api(address, path, token = auth)) }.getOrNull()
+                runOnUiThread {
+                    if (host !== page || auth != token() || address != base()) return@runOnUiThread
+                    if (baseline == null) {
+                        status.text = getString(R.string.jump_baseline_unavailable)
+                        retry.visibility = View.VISIBLE
+                    } else {
+                        status.visibility = View.GONE
+                        for (metric in highlights) {
+                            val caption = when {
+                                baseline.isNull(metric.key) -> getString(R.string.jump_baseline_pending)
+                                else -> {
+                                    val change = json.getDouble(metric.key) - baseline.getDouble(metric.key)
+                                    val value = metricNumber(kotlin.math.abs(change), metric.key, locale)
+                                    val unit = if (metric.unit == "%") getString(R.string.jump_percentage_points) else metric.unit
+                                    when {
+                                        value == metricNumber(0.0, metric.key, locale) -> getString(R.string.jump_baseline_equal)
+                                        change > 0 -> getString(R.string.jump_baseline_higher, value, unit)
+                                        else -> getString(R.string.jump_baseline_lower, value, unit)
+                                    }
+                                }
                             }
-                            val reference = metricNumber(baseline.getDouble(metric.key), metric.key, locale)
-                            getString(R.string.jump_baseline_value, reference, metric.unit, comparison)
+                            text(getString(R.string.feature_value, getString(metric.label), caption), 14, parent = rows)
+                                .setPadding(0, dp(2), 0, dp(2))
                         }
                     }
                 }
             }
         }
+        retry.setOnClickListener { loadBaseline() }
+        loadBaseline()
     }
 
     private data class JumpHighlight(val key: String, val label: Int, val meaning: Int, val unit: String)
@@ -1146,7 +1217,6 @@ class MainActivity : Activity() {
         work(getString(R.string.loading_history), { JSONArray(api(savedBase, "/api/jumps", token = savedToken)) }, { rows ->
             layout(getString(R.string.ui_jump_history), "history")
             text(getString(R.string.history_summary, rows.length()), 14)
-            button(getString(R.string.home)) { home() }
             button(getString(R.string.ui_form_history)) { techniqueHistory() }
             heightTrace(rows.objects().asReversed().mapNotNull { item ->
                 val metrics = item.optJSONObject("metrics") ?: item
@@ -1182,8 +1252,6 @@ class MainActivity : Activity() {
                             recordJump()
                         }
                     }
-                    button(getString(R.string.history)) { history() }
-                    button(getString(R.string.home)) { home() }
                 }
             }
         }, { home(it) })
@@ -1244,6 +1312,11 @@ class MainActivity : Activity() {
             "diagnostics" -> profile()
             "frames" -> { cancelWork(); edits = null; result() }
             "login" -> if (analysis != null) result() else super.onBackPressed()
+            "checkin", "feedback" -> clubHome()
+            "history_detail" -> history()
+            "technique_history" -> formHome()
+            "technique_detail" -> techniqueHistory()
+            "form_video", "form_detail", "form_result" -> formHome()
             else -> home()
         }
     }
