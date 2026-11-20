@@ -173,3 +173,17 @@ svg polyline {stroke-linecap:round;stroke-linejoin:round}
 .icon-profile { --symbol:-100px }
 .icon-home { --symbol:-120px }
 .icon-more { --symbol:-140px }
+.brand {font-size:0;gap:0}
+.brand .brand-mark {width:126px;height:24px;background:var(--ink);mask:url(wordmark.svg) center/contain no-repeat;border-radius:0}
+.brand-mark::before {display:none}
+.flight-board {margin:24px 0}
+.flight-lanes {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr));gap:0 20px}
+.flight-lane,.flight-arrival {display:flex;align-items:center;gap:12px}
+.flight-lane {background:transparent;color:var(--ink);border:0;border-bottom:1px solid var(--line);border-radius:0;text-align:start;padding:8px 0}
+.flight-lane:hover {background:var(--hover)}
+.flight-lane strong,.flight-arrival span {margin-inline-start:auto;white-space:nowrap;font:1rem Timing,monospace}
+.flight-glyph {flex:none;width:64px;height:40px;color:var(--accent)}
+.flight-rule,.flight-path {fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.flight-rule {stroke:var(--muted);stroke-width:1;opacity:.7}
+.flight-arrival {padding:10px 16px;border-inline-start:3px solid var(--accent);background:var(--surface);margin-bottom:12px}
+@media(prefers-reduced-motion:no-preference){.flight-arrival {animation:flight-in .45s ease-out}.flight-arrival .flight-path {stroke-dasharray:1;animation:flight-draw .75s ease-out}@keyframes flight-in{from{transform:translateY(-12px);opacity:0}}@keyframes flight-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}}

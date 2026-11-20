@@ -327,7 +327,18 @@ function refreshFor(event) {
       String(event.athlete_id) === String(state.user.id)) {
     api('/api/me/read', {method:'POST'}).catch(() => {});
   }
+  const expectedLoad = loadVersion + 1;
   load().then(() => {
+    if (expectedLoad !== loadVersion || state.view !== view) return;
+    if (event.type === 'jump' && ['team','today','history'].includes(view)) {
+      const jump = (view === 'team' ? state.teamFlights : state.jumps)?.find(row => row.id === event.id);
+      if (jump) {
+        const receipt = node('section', null, 'flight-arrival'); receipt.setAttribute('role','status');
+        const athlete = state.athletes.find(row => row.id === event.athlete_id);
+        receipt.append(flightGlyph(jump), node('strong',(state.language === 'bg' ? 'Нов скок' : 'New jump') + (athlete ? ' · ' + athlete.name : '')), node('span',flightLabel(jump)));
+        $('content').prepend(receipt);
+      }
+    }
     window.scrollTo(0, scroll);
     if (activeId) { const el = document.getElementById(activeId); if (el) el.focus(); }
   }).catch(() => {});
@@ -356,7 +367,7 @@ function relevant(event, view) {
 function signedOut() {
   state.liveGeneration++;
   liveController?.abort();
-  Object.assign(state, {todayCheckins:[], lastSession:null, lastReport:null, formCatalogue:[]});
+  Object.assign(state, {todayCheckins:[], teamFlights:[], lastSession:null, lastReport:null, formCatalogue:[]});
   Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],live:'idle',training:null,setLogs:[],exercises:[],plansData:[],nutritionDay:null,nutSummary:null,weightsData:null,expenditure:null,program:null,nutTarget:null,foodLogs:[],foods:[],formSets:[],planEdit:null,assistant:{open:false,conversationId:null,reply:null,proposal:null,note:null,error:null}});
   setLive('idle');
   render();
@@ -371,12 +382,12 @@ async function load(view=state.view) {
   let data;
   const staff = state.user.role !== 'athlete';
   if (view === 'team') {
-    const [athletes, todayCheckins, sessions] = await Promise.all([
-      allPages('/api/athletes'), api('/api/checkins/team?day=' + apiDay()), allPages('/api/sessions')]);
+    const [athletes, todayCheckins, sessions, teamFlights] = await Promise.all([
+      allPages('/api/athletes'), api('/api/checkins/team?day=' + apiDay()), allPages('/api/sessions'), api('/api/jumps?limit=100')]);
     const lastSession = sessions.filter(session => !session.cancelled && Date.parse(session.starts_at) <= Date.now())
       .sort((first, second) => Date.parse(second.starts_at) - Date.parse(first.starts_at))[0];
     const lastReport = lastSession ? await api('/api/sessions/' + lastSession.id + '/report') : null;
-    data = {athletes, todayCheckins, lastSession, lastReport};
+    data = {athletes, todayCheckins, lastSession, lastReport, teamFlights};
   }
   if (view === 'today') {
     const id = state.user.id;
@@ -606,6 +617,22 @@ function consentEditor(athlete) {
   }));
   form.append(button('cancel',()=>{state.consent=null;render('#consent-'+athlete.id);}));wrap.append(form);return wrap;
 }
+function measuredFlight(jump) {
+  return jump && jump.flight_time_ms > 0 && Number.isFinite(jump.jump_height_cm) && !jump.warnings?.includes('no_flight_detected');
+}
+function flightLabel(jump) {
+  return measuredFlight(jump) ? format(jump.jump_height_cm,'jump_height_cm') + (state.language === 'bg' ? ' см' : ' cm') : '—';
+}
+function flightGlyph(jump) {
+  const glyph = svgNode('svg',{viewBox:'0 0 74 42',class:'flight-glyph','aria-hidden':'true'});
+  glyph.append(svgNode('path',{d:'M5 3V37H68 M5 9H10 M5 17H8 M5 25H10 M5 33H8',class:'flight-rule'}));
+  if (measuredFlight(jump)) {
+    const rise = 31*Math.min(1,jump.jump_height_cm/80), end = 15+52*Math.min(1,jump.flight_time_ms/800);
+    glyph.append(svgNode('path',{d:`M12 36 Q${(12+end)/2} ${36-2*rise} ${end} 36`,class:'flight-path',pathLength:1}),
+      svgNode('circle',{cx:(12+end)/2,cy:36-rise,r:2.5,fill:'currentColor'}));
+  }
+  return glyph;
+}
 function team(content) {
   content.append(overviewHero(t(state.user.role === 'admin' ? 'adminDesk' : 'coachDesk'), t('team'), date(apiDay())));
   const hero = content.querySelector('.overview-hero');
@@ -616,6 +643,22 @@ function team(content) {
     hero.append(strip);
   }
   teamOverview(content);
+  if (state.athletes.length) {
+    const latest = new Map(); for (const jump of state.teamFlights) if (!latest.has(jump.athlete_id)) latest.set(jump.athlete_id,jump);
+    const board = node('section',null,'flight-board'); board.append(node('h2',state.language === 'bg' ? 'Последен скок по спортист' : 'Latest flight by athlete'));
+    const lanes = node('div',null,'flight-lanes'); board.append(lanes); content.append(board);
+    for (const athlete of state.athletes) {
+      const lane = athleteLink(athlete,athlete.name); lane.className = 'flight-lane';
+      const show = jump => lane.replaceChildren(flightGlyph(jump),node('span',athlete.name),node('strong',flightLabel(jump)));
+      show(latest.get(athlete.id)); lanes.append(lane);
+      if (athlete.jump_count && !latest.has(athlete.id)) {
+        const observer = new IntersectionObserver(entries => {
+          if (!entries.some(entry => entry.isIntersecting)) return;
+          observer.disconnect(); api('/api/jumps?athlete_id='+athlete.id+'&limit=1').then(rows => { if (lane.isConnected) show(rows[0]); }).catch(()=>{});
+        }); observer.observe(lane);
+      }
+    }
+  }
   content.append(node('h2', t('roster')), node('p', t('changeNote'), 'muted'));
   if(state.consent)content.append(consentEditor(state.consent));
   const columns=['name','jumps','lastJump','ratio','peakMean','asymmetry','consent'];
