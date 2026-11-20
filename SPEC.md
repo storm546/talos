@@ -238,7 +238,7 @@ All original 131 test cases are retained. Existing tests adjusted for the expand
 `test_dashboard_is_public_static_and_uses_safe_dom` now reads the external JavaScript.
 Other existing behavior assertions remain unchanged. Validation: `server/.venv/bin/python -m pytest server -q`.
 
-Run: `uvicorn server.main:app`. Database path from `JUMPSCAN_DB`, default `server/jumpscan.db`.
+Run: `uvicorn server.main:app --no-server-header`. Database path from `JUMPSCAN_DB`, default `server/jumpscan.db`.
 
 ## 4. app (Android, Kotlin, package `jumpscan.app`)
 

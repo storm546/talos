@@ -60,7 +60,7 @@ Requires Python 3.13.
 ```sh
 python3.13 -m venv server/.venv
 server/.venv/bin/pip install -r server/requirements.txt
-server/.venv/bin/uvicorn server.main:app --port 8000
+server/.venv/bin/uvicorn server.main:app --port 8000 --no-server-header
 ```
 
 The dashboard is at `http://127.0.0.1:8000/`. The database path comes from `JUMPSCAN_DB` and defaults to

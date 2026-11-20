@@ -1,4 +1,4 @@
-"""Run with uvicorn server.main:app."""
+"""Run with uvicorn server.main:app --no-server-header."""
 
 from collections import deque
 from contextlib import asynccontextmanager, contextmanager, nullcontext
