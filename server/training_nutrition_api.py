@@ -8,7 +8,6 @@ import csv
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 import hashlib
-import io
 from itertools import groupby
 import json
 from pathlib import Path
@@ -16,7 +15,7 @@ import sqlite3
 from typing import Annotated, Literal
 
 from fastapi import Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from . import coaching as co
@@ -659,21 +658,23 @@ def install(app, h):
 
     # --- food logs ---
 
-    def food_log_rows(db, athlete_id, where="", params=(), tail="", tail_params=()):
+    def iter_food_logs(db, athlete_id, where="", params=(), tail="", tail_params=(), *, oldest_first=False):
+        order = " ORDER BY food_logs.day, food_logs.id" if oldest_first else " ORDER BY food_logs.day DESC, food_logs.id DESC"
         rows = db.execute(
             "SELECT food_logs.*, foods.name_bg, foods.name_en, foods.kcal AS f_kcal, foods.protein_g AS f_protein_g, "
             "foods.carbs_g AS f_carbs_g, foods.fat_g AS f_fat_g, foods.fibre_g AS f_fibre_g "
             "FROM food_logs JOIN foods ON foods.id = food_logs.food_id WHERE food_logs.athlete_id = ? "
-            + where + " ORDER BY food_logs.day DESC, food_logs.id DESC" + tail, (athlete_id, *params, *tail_params))
-        result = []
+            + where + order + tail, (athlete_id, *params, *tail_params))
         for r in rows:
             per100 = {"kcal": r["f_kcal"], "protein_g": r["f_protein_g"], "carbs_g": r["f_carbs_g"],
                       "fat_g": r["f_fat_g"], "fibre_g": r["f_fibre_g"]}
-            result.append({"id": r["id"], "athlete_id": r["athlete_id"], "day": r["day"], "meal": r["meal"],
-                           "food_id": r["food_id"], "name_bg": r["name_bg"], "name_en": r["name_en"],
-                           "grams": r["grams"], "client_id": r["client_id"], "created_at": r["created_at"],
-                           **food_macros(per100, r["grams"])})
-        return result
+            yield {"id": r["id"], "athlete_id": r["athlete_id"], "day": r["day"], "meal": r["meal"],
+                   "food_id": r["food_id"], "name_bg": r["name_bg"], "name_en": r["name_en"],
+                   "grams": r["grams"], "client_id": r["client_id"], "created_at": r["created_at"],
+                   **food_macros(per100, r["grams"])}
+
+    def food_log_rows(*args, **kwargs):
+        return list(iter_food_logs(*args, **kwargs))
 
     @app.post("/api/food-logs", status_code=201, dependencies=[Depends(current_user)])
     def add_food_log(body: FoodLog, request: Request, db=Depends(get_db)):
@@ -1058,23 +1059,15 @@ def install(app, h):
     # --- CSV exports for staff ---
 
     def csv_response(db, user, athlete, kind, fields, rows):
-        output = io.StringIO(newline="")
-        writer = csv.writer(output)
-        writer.writerow(fields)
-        for row in rows:
-            writer.writerow([h.csv_cell(row.get(field)) for field in fields])
-        audit(db, user["id"], "csv_export", athlete["id"], {"kind": kind})
-        db.commit()
-        return Response(output.getvalue(), media_type="text/csv", headers={
-            "Content-Disposition": f'attachment; filename="athlete-{athlete["id"]}-{kind}.csv"'})
+        return h.csv_export(db, user, athlete["id"], f'athlete-{athlete["id"]}-{kind}.csv', fields, rows, {"kind": kind})
 
     @app.get("/api/athletes/{athlete_id}/training.csv")
     def training_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = h.athlete_access(db, user, athlete_id)
-        rows = [{**dict(r), "athlete_name": athlete["name"]} for r in db.execute(
+        rows = ({**dict(r), "athlete_name": athlete["name"]} for r in db.execute(
             "SELECT set_logs.*, exercises.name AS exercise FROM set_logs JOIN exercises ON exercises.id = "
-            "set_logs.exercise_id WHERE athlete_id = ? ORDER BY day, set_no, set_logs.id", (athlete_id,))]
+            "set_logs.exercise_id WHERE athlete_id = ? ORDER BY day, set_no, set_logs.id", (athlete_id,)))
         return csv_response(db, user, athlete, "training", [
             "id", "athlete_id", "athlete_name", "day", "exercise", "set_no", "reps", "load_kg", "rpe", "plan_id"], rows)
 
@@ -1082,7 +1075,7 @@ def install(app, h):
     def nutrition_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = h.athlete_access(db, user, athlete_id)
-        rows = [{**r, "athlete_name": athlete["name"]} for r in reversed(food_log_rows(db, athlete_id))]
+        rows = ({**r, "athlete_name": athlete["name"]} for r in iter_food_logs(db, athlete_id, oldest_first=True))
         return csv_response(db, user, athlete, "nutrition", [
             "id", "athlete_id", "athlete_name", "day", "meal", "name_bg", "name_en", "grams", "kcal",
             "protein_g", "carbs_g", "fat_g", "fibre_g"], rows)
@@ -1093,9 +1086,9 @@ def install(app, h):
         athlete = h.athlete_access(db, user, athlete_id)
         rows, trend = weight_series(db, athlete_id)
         by_day = {t["day"]: t["trend_kg"] for t in trend}
-        return csv_response(db, user, athlete, "weights", ["athlete_id", "athlete_name", "day", "kg", "trend_kg"], [
+        return csv_response(db, user, athlete, "weights", ["athlete_id", "athlete_name", "day", "kg", "trend_kg"], (
             {"athlete_id": athlete_id, "athlete_name": athlete["name"], "day": day, "kg": kg,
-             "trend_kg": by_day.get(day)} for day, kg in rows])
+             "trend_kg": by_day.get(day)} for day, kg in rows))
 
     return {operation.__name__: operation for operation in (
         list_plans, get_plan, list_exercises, list_set_logs, training_summary, list_foods,
@@ -1107,25 +1100,25 @@ def install(app, h):
 
 def export_data(db, athlete_id):
     """The athlete's training and nutrition data for the JSON export."""
-    sets = [dict(r) for r in db.execute(
+    sets = (dict(r) for r in db.execute(
         "SELECT id, day, exercise_id, set_no, reps, load_kg, rpe, plan_id, client_id, created_at FROM set_logs "
-        "WHERE athlete_id = ? ORDER BY day, set_no, id", (athlete_id,))]
-    foods = [dict(r) for r in db.execute(
+        "WHERE athlete_id = ? ORDER BY day, set_no, id", (athlete_id,)))
+    foods = (dict(r) for r in db.execute(
         "SELECT id, name_bg, name_en, kcal, protein_g, carbs_g, fat_g, fibre_g FROM foods "
-        "WHERE owner_id = ? ORDER BY id", (athlete_id,))]
-    meals = [dict(r) for r in db.execute(
+        "WHERE owner_id = ? ORDER BY id", (athlete_id,)))
+    meals = (dict(r) for r in db.execute(
         "SELECT food_logs.id, day, meal, food_id, foods.name_bg, foods.name_en, grams, client_id, food_logs.created_at "
         "FROM food_logs JOIN foods ON foods.id = food_logs.food_id WHERE athlete_id = ? "
-        "ORDER BY day, food_logs.id", (athlete_id,))]
-    weights = [dict(r) for r in db.execute("SELECT day, kg FROM weights WHERE athlete_id = ? ORDER BY day", (athlete_id,))]
+        "ORDER BY day, food_logs.id", (athlete_id,)))
+    weights = (dict(r) for r in db.execute("SELECT day, kg FROM weights WHERE athlete_id = ? ORDER BY day", (athlete_id,)))
     target = db.execute("SELECT kcal, protein_g, carbs_g, fat_g, set_by, updated_at FROM nutrition_targets "
                         "WHERE athlete_id = ?", (athlete_id,)).fetchone()
     program = db.execute("SELECT effective_date, seed_kcal, mode, goal, rate_kg_week, protein_g, fat_g, "
                          "applied, set_by, updated_at FROM coaching_programs WHERE athlete_id = ?",
                          (athlete_id,)).fetchone()
-    complete_days = [dict(r) for r in db.execute(
+    complete_days = (dict(r) for r in db.execute(
         "SELECT day, diary_fingerprint, confirmed_at FROM nutrition_day_complete WHERE athlete_id = ? ORDER BY day",
-        (athlete_id,))]
+        (athlete_id,)))
     return {"set_logs": sets, "custom_foods": foods, "food_logs": meals, "weights": weights,
             "nutrition_target": None if target is None else dict(target),
             "coaching_program": None if program is None else {**dict(program), "applied": bool(program["applied"])},

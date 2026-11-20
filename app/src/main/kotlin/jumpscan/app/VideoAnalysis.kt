@@ -41,9 +41,7 @@ internal fun videoFrame(context: Context, uri: Uri, timesUs: List<Long>, index: 
 
 private fun videoFrame(retriever: MediaMetadataRetriever, timesUs: List<Long>, index: Int, aspect: Float): Bitmap {
     val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-    val indexed = if (Build.VERSION.SDK_INT >= 28)
-        runCatching { retriever.getFrameAtIndex(index) }.getOrNull() else null
-    val raw = indexed ?: retriever.getFrameAtTime(timesUs[index], MediaMetadataRetriever.OPTION_CLOSEST)
+    val raw = retriever.getFrameAtTime(timesUs[index], MediaMetadataRetriever.OPTION_CLOSEST)
         ?: throw AppError(R.string.decode_error)
     val display = if (kotlin.math.abs(raw.width.toFloat() / raw.height - aspect) < 0.01) raw
         else Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height,
@@ -91,6 +89,25 @@ internal fun analyzeFormVideo(context: Context, uri: Uri, choice: FormChoice, pr
         catch (_: IllegalArgumentException) { throw AppError(R.string.too_few_clear_frames) }
     }
 
+internal fun videoSampleTimes(context: Context, uri: Uri, limitUs: Long): List<Long> {
+    val extractor = MediaExtractor()
+    return try {
+        extractor.setDataSource(context, uri, null)
+        val track = (0 until extractor.trackCount).firstOrNull {
+            extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
+        } ?: throw AppError(R.string.no_track)
+        extractor.selectTrack(track)
+        val times = mutableListOf<Long>()
+        while (extractor.sampleTime >= 0) {
+            if (Thread.currentThread().isInterrupted) throw InterruptedException()
+            val time = extractor.sampleTime
+            if (time < limitUs) times += time
+            if (!extractor.advance()) break
+        }
+        times.distinct().sorted()
+    } finally { extractor.release() }
+}
+
 private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: Long, progress: (Int) -> Unit,
     finish: (MediaMetadataRetriever, List<Frame>, List<Long>, Float, Boolean) -> T): T {
     val started = android.os.SystemClock.elapsedRealtime()
@@ -110,22 +127,7 @@ private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: L
         val aspect = displayWidth.toFloat() / displayHeight
         if (mode == "form" && duration > maxMs) throw AppError(R.string.form_clip_limit)
         val limit = minOf(duration, maxMs)
-        val extractor = MediaExtractor()
-        val timesUs = try {
-            extractor.setDataSource(context, uri, null)
-            val track = (0 until extractor.trackCount).firstOrNull {
-                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
-            } ?: throw AppError(R.string.no_track)
-            extractor.selectTrack(track)
-            val times = mutableListOf<Long>()
-            while (extractor.sampleTime >= 0 && extractor.sampleTime < limit * 1000) {
-                if (Thread.currentThread().isInterrupted) throw InterruptedException()
-                times += extractor.sampleTime
-                if (!extractor.advance()) break
-            }
-            // Compressed samples can arrive in decoding order rather than presentation order.
-            times.distinct().sorted()
-        } finally { extractor.release() }
+        val timesUs = videoSampleTimes(context, uri, limit * 1000)
         if (timesUs.size < 2) throw AppError(R.string.too_few_frames)
         val fps = (timesUs.size - 1) * 1_000_000.0 / (timesUs.last() - timesUs.first())
         if (!fps.isFinite() || fps !in 10.0..480.0) throw AppError(R.string.fps_error)

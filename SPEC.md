@@ -196,6 +196,8 @@ object checks on every read and management operation; login limit of 5 failures 
 constant-time credential checks; no stack traces or submitted secrets in errors; 16 KiB body limit
 (64 KiB for form uploads, section 6.1).
 Paginated lists accept limits 1–500 and nonnegative offsets. Exports and summaries include all jumps.
+Complete downloads and the check-in list are never truncated: serialized output beyond 256 KiB
+rolls to temporary storage before delivery. Use the available page or date filters for smaller histories.
 CSV quotes text cells starting with formula characters (`=`, `+`, `-`, `@`), including hidden whitespace
 prefixes, and leading tab/newline controls with an apostrophe; CSV quoting handles delimiters and newlines.
 Responses include `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`
@@ -236,7 +238,7 @@ All original 131 test cases are retained. Existing tests adjusted for the expand
 `test_dashboard_is_public_static_and_uses_safe_dom` now reads the external JavaScript.
 Other existing behavior assertions remain unchanged. Validation: `server/.venv/bin/python -m pytest server -q`.
 
-Run: `uvicorn server.main:app`. Database path from `JUMPSCAN_DB`, default `server/jumpscan.db`.
+Run: `uvicorn server.main:app --no-server-header`. Database path from `JUMPSCAN_DB`, default `server/jumpscan.db`.
 
 ## 4. app (Android, Kotlin, package `jumpscan.app`)
 
@@ -298,7 +300,7 @@ or injury wording; texts speak of training, testing and how the athlete feels.
 | `POST /api/sessions`, `PATCH /api/sessions/{id}` | admin, coach of club | create or change (also `cancelled: true`); `group_id` must belong to the same club; audit `session_created` / `session_changed` |
 | `GET /api/sessions/{id}/report` | admin, coach of club; athlete (own row only) | per athlete in scope: `trials_done`, `trials` and the median of each section 1 numeric field over that athlete's jumps in the session, plus `warnings_count`; athletes of the group without jumps appear with `trials_done: 0` |
 | `GET /api/me/calendar.ics` | all | iCalendar (RFC 5545) `text/calendar` file of the caller's visible sessions from 30 days ago on: one `VEVENT` per session with `UID`, `DTSTAMP`, `DTSTART` (UTC), 1 h `DURATION`, `SUMMARY`, `LOCATION`, `DESCRIPTION`, `STATUS:CANCELLED` when cancelled; CRLF line endings, lines folded at 75 octets, text escaped |
-| `POST /api/jumps` | athlete | section 3 behaviour plus optional `session_id` (must be visible to the athlete and not cancelled, else 422) and optional `client_id` (section 5.6) |
+| `POST /api/jumps` | athlete | section 3 behaviour plus optional `session_id` (must be visible to the athlete and not cancelled, else 422 with `code: "jump_session_unavailable"` in addition to `detail`) and optional `client_id` (section 5.6) |
 | `PUT /api/me/checkins/{day}` | athlete | create or replace the caller's check-in for `day`, from 6 days before today (UTC) through today+1 (UTC), inclusive, else 422; the app sends the phone's local calendar date and displays it in the locale's date format without a UTC label; requires consent like jumps; returns the stored check-in; 201 on create, 200 on replace |
 | `GET /api/checkins?athlete_id=&from=&to=` | scope as jumps | check-ins, newest day first |
 | `GET /api/checkins/team?day=` | admin, coach | for each active athlete of the coach's club (admin: filter `club_id`): the check-in for `day` (default today) or null, `wellbeing` = sum of the five items (5–25), `load` = `rpe × training_minutes` (session RPE in arbitrary units), and `below_usual: true` when `wellbeing` is at least 3 below the median of the athlete's previous 14 days with at least 5 check-ins (null otherwise) |
@@ -322,7 +324,10 @@ limits 1–500. Unknown fields are rejected as in section 3.
 - The events stream authenticates with the same bearer header (the dashboard reads it with `fetch`, not
   `EventSource`, so the token never appears in a URL). Each keep-alive tick rechecks authentication;
   revocation, expiry or deactivation ends the stream. Stream slots are reserved before a response starts;
-  a fourth stream returns 429. Proxy buffering is disabled for events.
+  a fourth stream returns 429. Proxy buffering is disabled for events. Each stream holds up to 64 pending
+  events. On overflow it sends `{"type":"resync"}` and closes. There is no event replay: reconnect first,
+  then reload the current view through authorized REST reads. The dashboard refreshes after reconnecting
+  without replacing an active, unsent draft.
 
 ### 5.4 Dashboard (additions)
 

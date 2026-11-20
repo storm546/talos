@@ -145,7 +145,7 @@ internal class PendingUploads(root: File, server: String, owner: Long) {
             post(body)
         } catch (e: ApiError) {
             // A jump rejected only for its session is retried once without it, same client_id.
-            if (e.status == 422 && body.has("session_id")) {
+            if (e.status == 422 && e.code == "jump_session_unavailable" && body.has("session_id")) {
                 body.remove("session_id")
                 post(body)
             } else throw e
