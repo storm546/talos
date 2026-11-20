@@ -66,8 +66,8 @@
       {"key": "body_line", "label_en": "Body line", "label_bg": "Линия на тялото", "unit": "°", "metric": "angle:shoulder:hip:ankle", "min": 158, "cue_en": "Keep shoulders, hips and ankles in line.", "cue_bg": "Дръжте раменете, таза и глезените в една линия."},
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."}
     ]},
-  {"id": "overhead_press", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 25% of 12 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 25% от 12 серии (нужни са 90%).", "name_en": "Overhead press", "name_bg": "Раменна преса", "mode": "reps", "sided": false, "view": "front",
-    "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 113, "down": 155, "min_range": 33, "gate": {"metric": "angle:hip:shoulder:elbow", "min": 55, "max": 180}},
+  {"id": "overhead_press", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 67% of 12 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 67% от 12 серии (нужни са 90%).", "name_en": "Overhead press", "name_bg": "Раменна преса", "mode": "reps", "sided": false, "view": "front",
+    "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 113, "down": 140, "min_range": 33, "gate": {"metric": "angle:hip:shoulder:elbow", "min": 55, "max": 180}},
     "checks": [
       {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 148, "cue_en": "Reach higher with your arms.", "cue_bg": "Вдигнете ръцете по-високо."},
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
