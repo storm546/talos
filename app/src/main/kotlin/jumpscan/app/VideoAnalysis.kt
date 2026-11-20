@@ -41,9 +41,7 @@ internal fun videoFrame(context: Context, uri: Uri, timesUs: List<Long>, index: 
 
 private fun videoFrame(retriever: MediaMetadataRetriever, timesUs: List<Long>, index: Int, aspect: Float): Bitmap {
     val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-    val indexed = if (Build.VERSION.SDK_INT >= 28)
-        runCatching { retriever.getFrameAtIndex(index) }.getOrNull() else null
-    val raw = indexed ?: retriever.getFrameAtTime(timesUs[index], MediaMetadataRetriever.OPTION_CLOSEST)
+    val raw = retriever.getFrameAtTime(timesUs[index], MediaMetadataRetriever.OPTION_CLOSEST)
         ?: throw AppError(R.string.decode_error)
     val display = if (kotlin.math.abs(raw.width.toFloat() / raw.height - aspect) < 0.01) raw
         else Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height,

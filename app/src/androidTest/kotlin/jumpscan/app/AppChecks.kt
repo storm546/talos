@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.content.Intent
 import android.media.MediaExtractor
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -34,12 +35,14 @@ class AppChecks : Instrumentation() {
         val output = Bundle()
         try {
             if (only == "cutoff") videoCutoffCheck()
+            else if (only == "timestamp") videoPreviewCheck()
             else {
                 clubChecks()
                 assistantConfirmationCheck()
                 queueChecks()
                 featureChecks()
                 previewChecks()
+                videoPreviewCheck()
                 videoCutoffCheck()
                 numberChecks()
             }
@@ -349,6 +352,24 @@ class AppChecks : Instrumentation() {
         check(!unclearPreview(frame) && unclearPreview(hidden))
         check(hiddenPreview.getPixel(40, 70) == Color.WHITE) { "An unclear leg must not leave floating ankle markers" }
         raw.recycle(); preview.recycle(); hiddenPreview.recycle()
+    }
+
+    private fun videoPreviewCheck() {
+        val file = File.createTempFile("reordered", ".mp4", targetContext.cacheDir)
+        try {
+            context.assets.open("reordered.mp4").use { source -> file.outputStream().use { source.copyTo(it) } }
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(file.path)
+                val timeUs = 2_000_000L
+                val expected = checkNotNull(retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST))
+                val actual = videoFrame(targetContext, Uri.fromFile(file), listOf(timeUs), 0, 128f / 96f)
+                check((0 until expected.height).all { row -> (0 until expected.width).all { column ->
+                    actual.getPixel(column, row) == expected.getPixel(column, row)
+                } }) { "A preview must use its presentation timestamp, not its list index" }
+                actual.recycle(); expected.recycle()
+            } finally { retriever.release() }
+        } finally { file.delete() }
     }
 
     private fun videoCutoffCheck() {
