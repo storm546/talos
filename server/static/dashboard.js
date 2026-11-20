@@ -336,7 +336,7 @@ function refreshFor(event) {
         const receipt = node('section', null, 'flight-arrival'); receipt.setAttribute('role','status');
         const athlete = state.athletes.find(row => row.id === event.athlete_id);
         receipt.append(flightGlyph(jump), node('strong',(state.language === 'bg' ? 'Нов скок' : 'New jump') + (athlete ? ' · ' + athlete.name : '')), node('span',flightLabel(jump)));
-        $('content').prepend(receipt);
+        $('content').querySelector('.view').prepend(receipt);
       }
     }
     window.scrollTo(0, scroll);
@@ -624,12 +624,11 @@ function flightLabel(jump) {
   return measuredFlight(jump) ? format(jump.jump_height_cm,'jump_height_cm') + (state.language === 'bg' ? ' см' : ' cm') : '—';
 }
 function flightGlyph(jump) {
-  const glyph = svgNode('svg',{viewBox:'0 0 74 42',class:'flight-glyph','aria-hidden':'true'});
-  glyph.append(svgNode('path',{d:'M5 3V37H68 M5 9H10 M5 17H8 M5 25H10 M5 33H8',class:'flight-rule'}));
+  const glyph = node('span',null,'flight-glyph'); glyph.setAttribute('aria-hidden','true');
+  glyph.append(node('i',null,'flight-rule'));
   if (measuredFlight(jump)) {
-    const rise = 31*Math.min(1,jump.jump_height_cm/80), end = 15+52*Math.min(1,jump.flight_time_ms/800);
-    glyph.append(svgNode('path',{d:`M12 36 Q${(12+end)/2} ${36-2*rise} ${end} 36`,class:'flight-path',pathLength:1}),
-      svgNode('circle',{cx:(12+end)/2,cy:36-rise,r:2.5,fill:'currentColor'}));
+    const arc = node('i',null,'flight-path'); arc.style.height = (Math.min(1,jump.jump_height_cm/80)*32+1)+'px';
+    arc.style.width = (Math.min(1,jump.flight_time_ms/800)*54+2)+'px'; glyph.append(arc);
   }
   return glyph;
 }
