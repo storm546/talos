@@ -257,6 +257,22 @@ Screens:
 4. Result: the numbers of section 1 with plain labels and the warnings; "Upload" sends the JSON to
    `POST /api/jumps`. The video is never uploaded.
 5. History: the athlete's own jumps from `GET /api/jumps`.
+6. Profile → Diagnostics (also available offline): the latest 200 local jump and form runs. The Android
+   share sheet exports a CSV and a plain-text summary, with no video, landmarks, or account data.
+   The guided test pairs selected clips with 20 jump trials and collects manual counts for three squat sets.
+   A jump step advances when analysis completes and the clip is within 5 fps of the selected rate; failed
+   attempts and analyses with no flight are visible in the report. The trial view is the instructed view.
+
+Diagnostic wall times use a monotonic clock. Decode time includes frame preparation (for live camera,
+copy and rotation of the delivered RGBA buffer); pose time is the synchronous video call or the live
+submit-to-result interval. Frames analysed count completed pose calls used by the run, not necessarily
+frames with a visible person. Jump preview extraction adds a decode but no pose call. Manual jump
+corrections and landmark fixtures do not rerun pose; model and delegate are blank. Live FPS is the
+number of analysed frames divided by the set duration. Live drops are completed camera captures during
+the set minus frames analysed, including backpressure and frames still in flight at Stop; callback
+delivery near the two boundaries can affect the count. Debug live replay uses 50 ms sample slots instead
+of camera captures and is labelled separately. Battery percentage and temperature (°C) are snapshots;
+unavailable readings or empty timing samples are blank, not zero.
 
 Errors (no person found, too few frames, network failure, expired token) show a clear message and
 never crash.

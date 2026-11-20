@@ -1126,3 +1126,31 @@ mirroring; daylight and low-light tracking; skeleton alignment over the image; f
 latency, frame drops and heat across repeated sets; Bulgarian speech with and without an installed
 offline Bulgarian voice; and the live upload against a real account. Count differences between live
 and recorded input must be reported separately from the engine's identical-frame parity.
+
+## 2026-11-20 — Phone test diagnostics
+
+The Android build kit passed `:core:test :app:assembleDebug` (68 tests passed; the optional private
+fixture test was skipped). `AppChecks` on `jumpscan-worker-a` also passed, including the 200-run cap,
+p95, CSV escaping, frame-rate matching, manual count persistence and clearing the diagnostic log.
+
+The API 34 emulator ran under `/work/jumpscan-emu.lock`. The public `one-person.mp4` stock clip was
+picked through the guided jump test and processed by the heavy CPU model. It advanced the guide to
+trial 2 and reported no flight, as expected for this clip. The same clip ran through recorded squat
+analysis. The separate stock live replay exercised the lite CPU path using 50 ms replay slots.
+
+| Run | Decoded / analysed | Wall time | Result |
+| --- | ---: | ---: | --- |
+| Guided jump | 301 / 300 | 136.45 s | 29.97 input fps, no flight |
+| Recorded squat | 300 / 300 | 124.71 s | 4 app-counted repetitions |
+| Live replay | 137 / 136 | 10.08 s | 13.59 achieved fps, 65 missed slots, 4 app-counted repetitions |
+
+An independent test app received and opened both attachments through the Android share sheet in
+English and Bulgarian. The CSV bytes matched across locales. Screenshots and the actual exported
+files are in `/root/jumpscan/logs/phonekit/`. A separate seeded fixture exercised all three manual
+count entries (app counts 4/4/4, entered counts 5/4/3, differences −1/0/+1) and the completion
+screen. The fixture rows are not in the actual emulator report. Clear was confirmed in the Bulgarian
+UI and reset the stored rows and guide. The emulator was stopped afterward.
+
+These are emulator measurements, not Galaxy A54 results. The live camera opened on the emulator,
+but there was no person in frame; camera drop counts and battery behavior still need a physical
+test. The share sheet was tested with a local receiver, not with Taildrop, mail, or a messenger account.

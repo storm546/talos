@@ -2,6 +2,7 @@ package jumpscan.app
 
 import android.content.Context
 import jumpscan.core.FormAnalyzer
+import jumpscan.core.FormExercises
 import jumpscan.core.FormMetrics
 import android.graphics.Bitmap
 import android.graphics.Matrix
@@ -10,8 +11,10 @@ import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import jumpscan.core.Frame
@@ -25,7 +28,7 @@ import kotlin.math.roundToInt
 
 internal data class Analysis(val landing: JumpAnalyzer.Analysis, val truncated: Boolean,
     val preview: Bitmap, val previewUnclear: Boolean, val frames: List<Frame>, val timesUs: List<Long>,
-    val uri: Uri, val aspect: Float) {
+    val uri: Uri, val aspect: Float, val clipMs: Long?) {
     val metrics get() = landing.metrics
     val contactFound get() = landing.contactMs != null
 }
@@ -61,30 +64,42 @@ internal fun framePreview(context: Context, analysis: Analysis, index: Int): Bit
 }
 
 internal fun applyEdges(context: Context, analysis: Analysis, takeoffMs: Long, landingMs: Long): Analysis {
-    val landing = JumpAnalyzer.analyzeWithLanding(analysis.frames, analysis.metrics.test, analysis.aspect,
-        takeoffMs = takeoffMs, landingMs = landingMs)
-    val preview = framePreview(context, analysis, analysis.timesUs.indexOfFirst { it / 1000 == landingMs })
-    return analysis.copy(landing = landing, preview = preview,
-        previewUnclear = unclearPreview(analysis.frames.first { it.tMs == landingMs }))
+    val timing = RunTiming(context, "jump_manual", null).apply {
+        clipMs = analysis.clipMs
+        clipFps = analysis.metrics.fps
+    }
+    var status = "error"
+    try {
+        val landing = JumpAnalyzer.analyzeWithLanding(analysis.frames, analysis.metrics.test, analysis.aspect,
+            takeoffMs = takeoffMs, landingMs = landingMs)
+        val index = analysis.timesUs.indexOfFirst { it / 1000 == landingMs }
+        val raw = timing.decode { videoFrame(context, analysis.uri, analysis.timesUs, index, analysis.aspect) }
+        val frame = analysis.frames.first { it.tMs == landingMs }
+        val preview = try { landingPreview(raw, frame) } finally { raw.recycle() }
+        status = "ok"
+        return analysis.copy(landing = landing, preview = preview, previewUnclear = unclearPreview(frame))
+    } finally { timing.save(status) }
 }
 
-internal fun analyzeVideo(context: Context, uri: Uri, test: String, mode: String = "full", progress: (Int) -> Unit): Analysis =
-    withVideoPose(context, uri, mode, 10_000L, progress) { retriever, frames, timesUs, aspect, truncated ->
+internal fun analyzeVideo(context: Context, uri: Uri, test: String, mode: String = "full", trial: PhoneTrial? = null,
+    progress: (Int) -> Unit): Analysis =
+    withVideoPose(context, uri, mode, 10_000L, trial, progress) { retriever, frames, timesUs, aspect, truncated, timing ->
         val landing = try { JumpAnalyzer.analyzeWithLanding(frames, test, aspect) }
             catch (_: IllegalArgumentException) { throw AppError(R.string.too_few_clear_frames) }
         val previewFrame = landing.contactMs?.let { time -> frames.first { it.tMs == time } } ?: peakFlexionFrame(frames)
         val previewIndex = timesUs.indexOfFirst { it / 1000 == previewFrame.tMs }
-        val raw = videoFrame(retriever, timesUs, previewIndex, aspect)
+        val raw = timing.decode { videoFrame(retriever, timesUs, previewIndex, aspect) }
         val preview = try { landingPreview(raw, previewFrame) } finally { raw.recycle() }
-        if (BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG && trial == null) {
             android.util.Log.d("JumpScan", "Metrics ${landing.metrics.toJson()} contactMs=${landing.contactMs} previewMs=${previewFrame.tMs}")
             File(context.filesDir, "metrics.json").writeText(landing.metrics.toJson())
         }
-        Analysis(landing, truncated, preview, unclearPreview(previewFrame), frames, timesUs, uri, aspect)
+        Analysis(landing, truncated, preview, unclearPreview(previewFrame), frames, timesUs, uri, aspect, timing.clipMs)
     }
 
-internal fun analyzeFormVideo(context: Context, uri: Uri, choice: FormChoice, progress: (Int) -> Unit): FormMetrics =
-    withVideoPose(context, uri, "form", 60_000L, progress) { _, frames, _, aspect, _ ->
+internal fun analyzeFormVideo(context: Context, uri: Uri, choice: FormChoice, trial: PhoneTrial? = null,
+    progress: (Int) -> Unit): FormMetrics =
+    withVideoPose(context, uri, "form", 60_000L, trial, progress) { _, frames, _, aspect, _, _ ->
         try { FormAnalyzer.analyze(frames, choice.exercise, choice.side, aspect) }
         catch (_: IllegalArgumentException) { throw AppError(R.string.too_few_clear_frames) }
     }
@@ -108,15 +123,19 @@ internal fun videoSampleTimes(context: Context, uri: Uri, limitUs: Long): List<L
     } finally { extractor.release() }
 }
 
-private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: Long, progress: (Int) -> Unit,
-    finish: (MediaMetadataRetriever, List<Frame>, List<Long>, Float, Boolean) -> T): T {
-    val started = android.os.SystemClock.elapsedRealtime()
+private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: Long, trial: PhoneTrial?, progress: (Int) -> Unit,
+    finish: (MediaMetadataRetriever, List<Frame>, List<Long>, Float, Boolean, RunTiming) -> T): T {
+    val replay = BuildConfig.DEBUG && mode == "replay"
+    val kind = if (mode == "form") "form_recorded" else if (replay) "jump_replay" else "jump"
+    val timing = RunTiming(context, kind, if (replay) null else "heavy", trial)
+    var status = "error"
     val retriever = MediaMetadataRetriever()
     try {
         retriever.setDataSource(context, uri)
         fun metadata(key: Int) = retriever.extractMetadata(key)
         val duration = metadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
             ?: throw AppError(R.string.duration_error)
+        timing.clipMs = duration
         if (duration <= 0) throw AppError(R.string.no_frames)
         val width = metadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
         val height = metadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
@@ -131,6 +150,7 @@ private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: L
         if (timesUs.size < 2) throw AppError(R.string.too_few_frames)
         val fps = (timesUs.size - 1) * 1_000_000.0 / (timesUs.last() - timesUs.first())
         if (!fps.isFinite() || fps !in 10.0..480.0) throw AppError(R.string.fps_error)
+        timing.clipFps = fps
         if (!timesUs.zipWithNext().all { (a, b) -> b / 1000 > a / 1000 })
             throw AppError(R.string.timestamps_error)
 
@@ -158,11 +178,8 @@ private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: L
         fun detect(): List<Frame> {
             val samples = timesUs
             val model = "pose_landmarker_heavy.task"
-            val passStarted = android.os.SystemClock.elapsedRealtime()
-            var decodeMs = 0L
-            var inferenceMs = 0L
             val options = PoseLandmarker.PoseLandmarkerOptions.builder()
-                .setBaseOptions(BaseOptions.builder().setModelAssetPath(model).build())
+                .setBaseOptions(BaseOptions.builder().setModelAssetPath(model).setDelegate(Delegate.CPU).build())
                 .setMinPoseDetectionConfidence(0.5f).setMinPosePresenceConfidence(0.5f)
                 .setMinTrackingConfidence(0.5f).setRunningMode(RunningMode.VIDEO).setNumPoses(1).build()
             val landmarker = PoseLandmarker.createFromOptions(context, options)
@@ -172,17 +189,15 @@ private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: L
                 var foundPerson = false
                 for ((index, timeUs) in samples.withIndex()) {
                     if (Thread.currentThread().isInterrupted) throw InterruptedException()
-                    val decodeStarted = if (BuildConfig.DEBUG) android.os.SystemClock.elapsedRealtime() else 0L
-                    val bitmap = decode(timeUs, 720)
-                    if (BuildConfig.DEBUG) decodeMs += android.os.SystemClock.elapsedRealtime() - decodeStarted
+                    val bitmap = timing.decode { decode(timeUs, 720) }
                     if (BuildConfig.DEBUG && index == 0) android.util.Log.d("JumpScan",
                         "Decoded ${bitmap.width}x${bitmap.height}, rotation=$rotation, aspect=$aspect, samples=${samples.size}, model=$model, mode=$mode")
                     try {
                         val image = BitmapImageBuilder(bitmap).build()
                         try {
-                            val inferenceStarted = if (BuildConfig.DEBUG) android.os.SystemClock.elapsedRealtime() else 0L
+                            val inferenceStarted = SystemClock.elapsedRealtimeNanos()
                             val result = landmarker.detectForVideo(image, timeUs / 1000)
-                            if (BuildConfig.DEBUG) inferenceMs += android.os.SystemClock.elapsedRealtime() - inferenceStarted
+                            timing.analysed(SystemClock.elapsedRealtimeNanos() - inferenceStarted)
                             val pose = result.landmarks().firstOrNull()
                             val world = result.worldLandmarks().firstOrNull()
                             frames += if (pose?.size == 33 && world?.size == 33) {
@@ -196,8 +211,6 @@ private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: L
                     progress((index + 1) * 100 / samples.size)
                 }
                 if (!foundPerson) throw AppError(R.string.no_person)
-                if (BuildConfig.DEBUG) android.util.Log.d("JumpScan",
-                    "Pass model=$model samples=${samples.size} elapsedMs=${android.os.SystemClock.elapsedRealtime() - passStarted} decodeMs=$decodeMs inferenceMs=$inferenceMs")
                 return frames
             } finally { landmarker.close() }
         }
@@ -214,18 +227,27 @@ private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: L
         }
 
         fun complete(frames: List<Frame>, phase: String): T {
-            if (mode != "form") export(frames, "landmarks.csv")
+            if (mode != "form" && trial == null) export(frames, "landmarks.csv")
             if (BuildConfig.DEBUG) android.util.Log.d("JumpScan",
-                "Analysis elapsedMs=${android.os.SystemClock.elapsedRealtime() - started} phase=$phase frames=${frames.size}")
-            return finish(retriever, frames, timesUs, aspect, duration - limit > 1000.0 / fps)
+                "Analysis elapsedMs=${timing.elapsedMs} phase=$phase frames=${frames.size}")
+            val result = finish(retriever, frames, timesUs, aspect, duration - limit > 1000.0 / fps, timing)
+            if (result is FormMetrics && FormExercises[result.exercise].mode == "reps") timing.appReps = result.summary.repetitionCount
+            status = if (result is Analysis && ((result.metrics.flightTimeMs ?: 0.0) <= 0.0 ||
+                    "no_flight_detected" in result.metrics.warnings)) "no_flight" else "ok"
+            return result
         }
 
-        if (BuildConfig.DEBUG && mode == "replay") {
+        if (replay) {
             val (fixtureAspect, frames) = File(context.filesDir, "replay.csv").bufferedReader().use(::readLandmarkCsv)
             require(kotlin.math.abs(fixtureAspect - aspect) < 0.01) { "Fixture aspect differs from video" }
             progress(100)
             return complete(frames, "replay")
         }
         return complete(detect(), "full")
-    } finally { retriever.release() }
+    } catch (interrupted: InterruptedException) {
+        status = "cancelled"
+        throw interrupted
+    } finally {
+        try { retriever.release() } finally { timing.save(status) }
+    }
 }

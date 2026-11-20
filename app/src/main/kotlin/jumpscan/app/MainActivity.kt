@@ -45,6 +45,8 @@ class MainActivity : Activity() {
     private fun pending() = PendingUploads(pendingRoot, base(), athleteId())
     internal var formChoice = FormChoice("squat", null)
     internal var lastForm: FormResult? = null
+    private var pendingTrial: PhoneTrial? = null
+    private var guiding = false
     internal var assistantChat = AssistantChat()
     private var test = "cmj"
     internal lateinit var page: LinearLayout
@@ -78,7 +80,11 @@ class MainActivity : Activity() {
         lastForm = retained?.form
         assistantChat = retained?.chat ?: AssistantChat()
         savedInstanceState?.getString("form_exercise")?.let { formChoice = FormChoice(it, savedInstanceState.getString("form_side")) }
-        if (lastForm != null && retained?.screen == "form_result") formResult(lastForm!!.metrics, lastForm)
+        savedInstanceState?.getInt("phone_trial")?.takeIf { it in 1..23 }?.let {
+            pendingTrial = PhoneTrial(it, savedInstanceState.getInt("phone_fps").takeIf { fps -> fps > 0 })
+        }
+        if (savedInstanceState?.getString("screen") == "diagnostics" || pendingTrial != null) diagnostics()
+        else if (lastForm != null && retained?.screen == "form_result") formResult(lastForm!!.metrics, lastForm)
         else if (analysis != null && retained?.screen in listOf("frames", "result")) { if (edits != null) frameEditor() else result() } else if (!openVideo(intent)) {
             if (token().isEmpty()) login() else home()
         }
@@ -94,6 +100,11 @@ class MainActivity : Activity() {
         super.onSaveInstanceState(outState)
         outState.putString("form_exercise", formChoice.exercise)
         outState.putString("form_side", formChoice.side)
+        outState.putString("screen", screen)
+        pendingTrial?.let {
+            outState.putInt("phone_trial", it.number)
+            outState.putInt("phone_fps", it.targetFps ?: 0)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -311,7 +322,7 @@ class MainActivity : Activity() {
                 UiTile(R.string.ui_profile, "profile") { profile() })
             button(getString(R.string.ui_more)) { more() }
         } else {
-            tiles(UiTile(R.string.ui_technique, "form") { formHome() }, UiTile(R.string.sign_in, "profile") { login() })
+            tiles(UiTile(R.string.ui_technique, "form") { formHome() }, UiTile(R.string.ui_profile, "profile") { profile() })
         }
         if (analysis != null) button(getString(R.string.last_result)) { result() }
         if (signedIn) pendingControls()
@@ -327,17 +338,22 @@ class MainActivity : Activity() {
         button(getString(R.string.home)) { home() }
     }
 
-    private fun profile() {
-        if (token().isEmpty()) return login()
+    internal fun profile() {
         layout(getString(R.string.ui_profile), "profile")
-        card().also {
-            text(prefs.getString("name", "").orEmpty(), 21, parent = it).setTypeface(null, Typeface.BOLD)
-            text(getString(R.string.server_url), 13, parent = it)
-            text(base(), 14, parent = it)
+        if (token().isEmpty()) button(getString(R.string.sign_in)) { login() }
+        else {
+            card().also {
+                text(prefs.getString("name", "").orEmpty(), 21, parent = it).setTypeface(null, Typeface.BOLD)
+                text(getString(R.string.server_url), 13, parent = it)
+                text(base(), 14, parent = it)
+            }
         }
-        pendingControls()
-        button(getString(R.string.ui_change_server)) { leaveProfile(showServer = true) }
-        button(getString(R.string.sign_out)) { leaveProfile(showServer = false) }
+        button(getString(R.string.diagnostics)) { diagnostics() }
+        if (token().isNotEmpty()) {
+            pendingControls()
+            button(getString(R.string.ui_change_server)) { leaveProfile(showServer = true) }
+            button(getString(R.string.sign_out)) { leaveProfile(showServer = false) }
+        }
         button(getString(R.string.home)) { home() }
     }
 
@@ -569,8 +585,16 @@ class MainActivity : Activity() {
         try { startActivityForResult(intent, request) }
         catch (_: Exception) {
             val error = getString(R.string.no_video_app)
-            if (request in 12..13) formHome(error) else home(error)
+            if (request == 30) { pendingTrial = null; diagnostics(error) }
+            else if (request in 12..13) formHome(error) else home(error)
         }
+    }
+
+    internal fun pickPhoneTrial(trial: PhoneTrial) {
+        pendingTrial = trial
+        val pick = if (Build.VERSION.SDK_INT >= 33) Intent(MediaStore.ACTION_PICK_IMAGES)
+            else Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+        launchVideo(pick.setType("video/*"), 30)
     }
 
     @Deprecated("Uses the platform activity result API")
@@ -580,39 +604,49 @@ class MainActivity : Activity() {
             val uri = data?.data
             if (uri != null) startAnalysis(uri) else home(getString(R.string.no_video_returned))
         }
-        if (requestCode in 12..13) {
+        if (requestCode == 30) {
+            val trial = pendingTrial
+            pendingTrial = null
+            val uri = data?.data
+            if (trial == null || resultCode != RESULT_OK) diagnostics()
+            else if (uri == null) diagnostics(getString(R.string.no_video_returned))
+            else if (trial.number <= 20) startAnalysis(uri, trial = trial)
+            else startRecordedForm(uri, FormChoice("squat", null), trial)
+        } else if (requestCode in 12..13) {
             val uri = data?.data
             if (resultCode != RESULT_OK) formHome()
             else if (uri == null) formHome(getString(R.string.no_video_returned))
-            else {
-                val choice = formChoice
-                val expectedGeneration = generation + 1
-                work(getString(R.string.analysing), { analyzeFormVideo(this, uri, choice) { value ->
-                    runOnUiThread {
-                        if (!isDestroyed && generation == expectedGeneration) {
-                            progress?.isIndeterminate = false
-                            progress?.progress = value
-                            progressText?.text = getString(R.string.progress, value)
-                        }
-                    }
-                } }, { metrics ->
-                    val result = FormResult(JSONObject(metrics.toJson()))
-                    lastForm = result
-                    formResult(result.metrics, result)
-                }, { formHome(it) })
-            }
+            else startRecordedForm(uri, formChoice)
         }
     }
 
-    private fun startAnalysis(uri: Uri, mode: String = "full") {
+    private fun startRecordedForm(uri: Uri, choice: FormChoice, trial: PhoneTrial? = null) {
+        val expectedGeneration = generation + 1
+        work(getString(R.string.analysing), { analyzeFormVideo(this, uri, choice, trial) { value ->
+            runOnUiThread {
+                if (!isDestroyed && generation == expectedGeneration) {
+                    progress?.isIndeterminate = false
+                    progress?.progress = value
+                    progressText?.text = getString(R.string.progress, value)
+                }
+            }
+        } }, { metrics ->
+            val result = FormResult(JSONObject(metrics.toJson()))
+            lastForm = result
+            if (trial != null) diagnostics() else formResult(result.metrics, result)
+        }, { if (trial != null) diagnostics(it) else formHome(it) }, phoneTest = trial != null)
+    }
+
+    private fun startAnalysis(uri: Uri, mode: String = "full", trial: PhoneTrial? = null) {
         analysis = null
         edits = null
         uploadedId = null
         queuedId = null
         clientId = null
-        resultSession = selectedSession
+        resultSession = if (trial == null) selectedSession else null
         val expectedGeneration = generation + 1
-        work(getString(R.string.analysing), { analyzeVideo(this, uri, test, mode) { value ->
+        val jumpTest = if (trial == null) test else "cmj"
+        work(getString(R.string.analysing), { analyzeVideo(this, uri, jumpTest, mode, trial) { value ->
             runOnUiThread {
                 if (screen == "busy" && !isDestroyed && generation == expectedGeneration) {
                     progress?.isIndeterminate = false
@@ -620,7 +654,8 @@ class MainActivity : Activity() {
                     progressText?.text = getString(R.string.progress, value)
                 }
             }
-        } }, { analysis = it; result() }, { home(it) })
+        } }, { analysis = it; if (trial == null) result() else diagnostics() },
+            { if (trial == null) home(it) else diagnostics(it) }, phoneTest = trial != null)
         progress?.isIndeterminate = false
         text(getString(R.string.first_ten), 14)
     }
@@ -1069,10 +1104,12 @@ class MainActivity : Activity() {
         }, { home(it) })
     }
 
-    internal fun <T> work(title: String, action: () -> T, success: (T) -> Unit, failure: (String) -> Unit) {
+    internal fun <T> work(title: String, action: () -> T, success: (T) -> Unit, failure: (String) -> Unit,
+        phoneTest: Boolean = false) {
         task?.cancel(true)
         val currentGeneration = ++generation
         layout(title, "busy")
+        guiding = phoneTest
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             isIndeterminate = true
@@ -1081,7 +1118,7 @@ class MainActivity : Activity() {
             page.addView(this, LinearLayout.LayoutParams(-1, dp(16)))
         }
         progressText = text(getString(R.string.please_wait), 14)
-        button(getString(R.string.cancel)) { cancelWork(); home() }
+        button(getString(R.string.cancel)) { leaveWork() }
         task = executor.submit {
             try {
                 val value = action()
@@ -1117,11 +1154,14 @@ class MainActivity : Activity() {
 
     private fun cancelWork() { generation++; task?.cancel(true) }
 
+    private fun leaveWork() { cancelWork(); if (guiding) diagnostics() else home() }
+
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
         when (screen) {
             "home" -> super.onBackPressed()
-            "busy" -> { cancelWork(); home() }
+            "busy" -> leaveWork()
+            "diagnostics" -> profile()
             "frames" -> { cancelWork(); edits = null; result() }
             "login" -> if (analysis != null) result() else super.onBackPressed()
             else -> home()
