@@ -767,7 +767,7 @@ Bar, on the held-out split at live 15 fps: exact on at least 90% of sets, none o
 
 | Exercise | Held-out sets / people | Live exact | Off by >1 | Unclear | Status |
 |---|---|---:|---:|---:|---|
-| squat | 22 / 12 | 95% (21 of 22) | 0 | 0% | **validated**, offered normally |
+| squat | 22 / 12 | 95.5% (21 of 22) | 0 | 0% | **validated**, offered normally |
 | lateral_raise | 12 / 4 | 75% | 3 | 0% | experimental |
 | jumping_jack | 28 / 18 | 61% | 7 | 1% | experimental |
 | pull_up | 17 / 17 | 47% | 1 | 13% | experimental |
