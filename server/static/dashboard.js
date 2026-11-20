@@ -1685,7 +1685,7 @@ function render(focusSelector=null) {
   if(focusSelector)content.querySelector(focusSelector)?.focus();
 }
 try {
-  const saved = localStorage.getItem('jumpscan-appearance');
+  const saved = sessionStorage.getItem('jumpscan-appearance');
   document.documentElement.dataset.theme = saved === 'light' ? 'light' : 'dark';
 } catch { document.documentElement.dataset.theme = 'dark'; }
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
@@ -1697,7 +1697,7 @@ function updateThemeLabel() {
 $('theme').addEventListener('click', () => {
   const root = document.documentElement;
   root.dataset.theme = (root.dataset.theme || (systemTheme.matches ? 'dark' : 'light')) === 'dark' ? 'light' : 'dark';
-  try { localStorage.setItem('jumpscan-appearance', root.dataset.theme); } catch {}
+  try { sessionStorage.setItem('jumpscan-appearance', root.dataset.theme); } catch {}
   updateThemeLabel();
 });
 systemTheme.addEventListener('change', updateThemeLabel);
