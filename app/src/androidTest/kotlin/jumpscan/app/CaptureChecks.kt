@@ -86,7 +86,8 @@ internal class CaptureChecks(private val test: Instrumentation) {
             "60 fps capture analysis: ${capture.metrics.toJson()}"
     }
 
-    fun visual() {
+    fun visual(studio: StudioChecks? = null) {
+        fun movie(name: String, action: () -> Unit) { if (studio == null) action() else studio.record(name, action) }
         val locale = context.resources.configuration.locales[0].language
         fun shot(name: String) {
             test.waitForIdleSync()
@@ -137,17 +138,21 @@ internal class CaptureChecks(private val test: Instrumentation) {
         }
         shot("framing-ready-fixture")
         test.runOnMainSync {
-            val status = field(capture, "status").get(capture) as TextView
             (field(capture, "rateNotice").get(capture) as View).visibility = View.GONE
             (field(capture, "start").get(capture) as Button).apply {
                 setText(R.string.jump_record_stop)
                 isEnabled = true
             }
             (field(capture, "pick").get(capture) as Button).isEnabled = false
-            call(capture, "showCountdown", 0L)
-            check(status.text == "3")
-            call(capture, "showCountdown", 1_000L)
-            check(status.text == "2")
+        }
+        movie("countdown") {
+            test.runOnMainSync { call(capture, "showCountdown", 0L) }
+            SystemClock.sleep(720)
+            test.runOnMainSync {
+                check((statusField.get(capture) as TextView).text == "3")
+                call(capture, "showCountdown", 1_000L)
+                check((statusField.get(capture) as TextView).text == "2")
+            }
         }
         shot("countdown-fixture")
         test.runOnMainSync {
@@ -160,11 +165,17 @@ internal class CaptureChecks(private val test: Instrumentation) {
         val prefs = context.getSharedPreferences("account", 0)
         prefs.edit().putString("server", "http://10.0.2.2:18767").putString("token", "capture-fixture").apply()
         val main = launch(MainActivity::class.java)
-        test.runOnMainSync {
-            field(main, "analysis").set(main, result)
-            call(main, "result", null)
+        movie("digit-roll") {
+            test.runOnMainSync {
+                field(main, "analysis").set(main, result)
+                call(main, "result", null)
+            }
         }
         shot("result")
+        if (studio != null) {
+            test.runOnMainSync { call(main, "editFrames", result) }
+            shot("frame-editor")
+        }
         test.runOnMainSync { main.finish() }
         prefs.edit().clear().commit()
 
@@ -189,13 +200,15 @@ internal class CaptureChecks(private val test: Instrumentation) {
         }
         SystemClock.sleep(900)
         shot("live-cue-fixture")
-        test.runOnMainSync {
-            val content = form.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0) as android.view.ViewGroup
-            val header = content.getChildAt(0) as android.view.ViewGroup
-            (header.getChildAt(header.childCount - 1) as Switch).isChecked = true
-            call(form, "updateFeedback", FormProgress(complete = 2, partial = 3), listOf(FormEvent.End(rep.copy(index = 5))), true)
-            check((field(form, "banner").get(form) as TextView).text != form.getString(R.string.form_more_range))
-            check((field(form, "counter").get(form) as TextView).text == "2")
+        movie("live-counter") {
+            test.runOnMainSync {
+                val content = form.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0) as android.view.ViewGroup
+                val header = content.getChildAt(0) as android.view.ViewGroup
+                (header.getChildAt(header.childCount - 1) as Switch).isChecked = true
+                call(form, "updateFeedback", FormProgress(complete = 2, partial = 3), listOf(FormEvent.End(rep.copy(index = 5))), true)
+                check((field(form, "banner").get(form) as TextView).text != form.getString(R.string.form_more_range))
+                check((field(form, "counter").get(form) as TextView).text == "2")
+            }
         }
         shot("live-muted-fixture")
         test.runOnMainSync {
