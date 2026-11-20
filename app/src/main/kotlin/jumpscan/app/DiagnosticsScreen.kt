@@ -68,6 +68,13 @@ internal fun MainActivity.diagnostics(message: String? = null) {
     section(R.string.diag_recent)
     if (rows.isEmpty()) text(getString(R.string.diag_empty), 14)
     else {
+        button(getString(R.string.diag_clear)) {
+            AlertDialog.Builder(this).setMessage(R.string.diag_clear_confirm)
+                .setNegativeButton(R.string.cancel, null).setPositiveButton(R.string.diag_clear) { _, _ ->
+                    log.clear()
+                    diagnostics()
+                }.show()
+        }
         val table = TableLayout(this)
         card().addView(table)
         fun line(values: List<String>, heading: Boolean = false) {
@@ -96,13 +103,6 @@ internal fun MainActivity.diagnostics(message: String? = null) {
                 (if (row.has("dropped_frames")) " / ${row.getInt("dropped_frames")}" else "")
             val time = getString(R.string.diag_seconds, row.getLong("wall_ms") / 1000.0)
             line(listOf("$kind\n$status", frames, time + if (fps.isFinite()) "\n" + getString(R.string.diag_fps, fps) else ""))
-        }
-        button(getString(R.string.diag_clear)) {
-            AlertDialog.Builder(this).setMessage(R.string.diag_clear_confirm)
-                .setNegativeButton(R.string.cancel, null).setPositiveButton(R.string.diag_clear) { _, _ ->
-                    log.clear()
-                    diagnostics()
-                }.show()
         }
     }
     button(getString(R.string.ui_profile)) { profile() }

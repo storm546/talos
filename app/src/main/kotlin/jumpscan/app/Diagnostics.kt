@@ -149,7 +149,7 @@ internal class DiagnosticLog(private val context: Context) {
             val unavailable = runs.count { it.optString("status") !in listOf("ok", "no_flight") }
             append(context.getString(R.string.diag_summary_runs, context.getString(runTitle(kind)), runs.size, unavailable,
                 runs.map { it.getLong("wall_ms") }.average() / 1000))
-            if (fps.isNotEmpty()) append(context.getString(R.string.diag_summary_live, fps.average(), drops))
+            if (fps.isNotEmpty()) append(' ').append(context.getString(R.string.diag_summary_live, fps.average(), drops))
             appendLine()
         }
         for (row in squats) {
