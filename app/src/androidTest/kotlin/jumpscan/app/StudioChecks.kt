@@ -83,7 +83,7 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             test.runOnMainSync { open("checkin") }; shot("checkin")
             test.runOnMainSync { host.assistantScreen() }; shot("assistant")
             test.runOnMainSync { host.profile() }; shot("profile")
-            test.runOnMainSync { buttons(host.page).single { it.text.startsWith(host.getString(R.string.appearance)) }.performClick() }
+            test.runOnMainSync { host.appearanceSheet() }
             shot("appearance", "profile")
             test.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
             test.runOnMainSync { host.diagnostics() }; shot("guided-phone-test", "diagnostics")
