@@ -45,8 +45,8 @@ internal fun MainActivity.navigation(destinations: List<UiTile>, selected: Int, 
 }
 
 internal fun RadioButton.segment(inverse: Boolean = false) {
-    val selected = context.getColor(if (inverse) R.color.signal else R.color.accent)
-    val rest = context.getColor(if (inverse) R.color.hero_top else R.color.hover)
+    val selected = context.getColor(if (inverse) R.color.segment_selected else R.color.accent)
+    val rest = context.getColor(if (inverse) R.color.hero else R.color.hover)
     val density = resources.displayMetrics.density
     buttonDrawable = null
     background = StateListDrawable().apply {
@@ -55,7 +55,7 @@ internal fun RadioButton.segment(inverse: Boolean = false) {
         addState(intArrayOf(), context.shape(rest, 8))
     }
     setTextColor(ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(
-        context.getColor(if (inverse) R.color.hero else R.color.paper), context.getColor(if (inverse) R.color.on_hero else R.color.ink))))
+        context.getColor(if (inverse) R.color.signal else R.color.paper), context.getColor(if (inverse) R.color.on_hero else R.color.ink))))
     minHeight = (48 * density).toInt()
     minWidth = 0
     gravity = Gravity.CENTER

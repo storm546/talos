@@ -1,6 +1,8 @@
 package jumpscan.app
 
 import android.content.Context
+import android.graphics.Color
+import android.view.View
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
@@ -19,34 +21,75 @@ internal fun Context.shape(fill: Int, radius: Int, border: Int? = null) = Gradie
     border?.let { setStroke(px(1), it) }
 }
 
-internal fun Context.styleButton(button: Button, primary: Boolean) = button.apply {
+internal enum class ActionTone { PRIMARY, SECONDARY, TONAL, TEXT }
+
+internal fun Context.styleButton(button: Button, primary: Boolean, tone: ActionTone = if (primary) ActionTone.PRIMARY else ActionTone.SECONDARY) = button.apply {
     instrumentType(display = true)
+    val foreground = when (tone) {
+        ActionTone.PRIMARY -> R.color.on_action
+        ActionTone.SECONDARY -> R.color.ink
+        else -> R.color.accent
+    }
+    val normal = when (tone) {
+        ActionTone.PRIMARY -> getColor(R.color.signal)
+        ActionTone.TEXT -> Color.TRANSPARENT
+        ActionTone.TONAL -> getColor(R.color.tonal)
+        ActionTone.SECONDARY -> getColor(R.color.hover)
+    }
     setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
-        intArrayOf(getColor(R.color.muted), getColor(if (primary) R.color.hero else R.color.ink))))
+        intArrayOf(getColor(R.color.muted), getColor(foreground))))
     fun fill(color: Int) = shape(color, 10)
     val states = StateListDrawable().apply {
         addState(intArrayOf(-android.R.attr.state_enabled), fill(getColor(R.color.hover)))
-        addState(intArrayOf(android.R.attr.state_focused), shape(getColor(R.color.hover), 14, getColor(R.color.accent)))
-        addState(intArrayOf(), fill(getColor(if (primary) R.color.signal else R.color.hover)))
+        addState(intArrayOf(android.R.attr.state_focused), shape(normal, 10, getColor(if (primary) R.color.ink else R.color.accent)))
+        addState(intArrayOf(), fill(normal))
     }
     backgroundTintList = null
-    background = RippleDrawable(ColorStateList.valueOf(getColor(if (primary) R.color.accent_pressed else R.color.hover)),
+    background = RippleDrawable(ColorStateList.valueOf(getColor(R.color.accent_pressed)),
         states, null)
     isAllCaps = false
-    minHeight = px(48)
+    minHeight = resources.getDimensionPixelSize(R.dimen.touch_target)
     textSize = 15f
     stateListAnimator = null
     pressFeedback()
 }
 
+internal fun MainActivity.skeleton(parent: LinearLayout) = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+    for (width in listOf(172, 108)) addView(View(context).apply { background = shape(getColor(R.color.hover), 4) },
+        LinearLayout.LayoutParams(dp(width), dp(7)).apply { topMargin = dp(7) })
+    parent.addView(this)
+}
+
+internal fun MainActivity.snack(message: String) {
+    val shell = (page.parent as? android.widget.ScrollView)?.parent as? LinearLayout ?: return
+    shell.findViewWithTag<View>("message")?.let { shell.removeView(it) }
+    val messageView = TextView(this).apply {
+        tag = "message"
+        text = message
+        instrumentType()
+        textSize = 15f
+        setPadding(dp(16), dp(12), dp(16), dp(12))
+        background = shape(getColor(R.color.hero), 10)
+        setTextColor(getColor(R.color.on_hero))
+        accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+    }
+    shell.addView(messageView, 1, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(12), 0, dp(12), dp(8)) })
+    messageView.arrive()
+    val timeout = if (android.os.Build.VERSION.SDK_INT >= 29) getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+        .getRecommendedTimeoutMillis(4500, android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT) else 4500
+    messageView.postDelayed({ shell.removeView(messageView) }, timeout.toLong())
+}
+
 internal fun MainActivity.card(parent: LinearLayout = page, hero: Boolean = false): LinearLayout = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
-    val pad = dp(if (hero) 20 else 16)
+    val pad = resources.getDimensionPixelSize(if (hero) R.dimen.space_feature else R.dimen.space_panel)
     setPadding(pad, pad, pad, pad)
     background = raisedSurface(hero)
-    elevation = dp(if (hero) 3 else 1).toFloat()
+    elevation = resources.getDimension(if (hero) R.dimen.lift_feature else R.dimen.lift_panel)
     if (parent === page && parent.childCount < 9) arrive((parent.childCount * 18L).coerceAtMost(90))
-    parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+    parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = resources.getDimensionPixelSize(R.dimen.space_gap) })
 }
 
 internal fun MainActivity.section(label: Int, parent: LinearLayout = page) = text(getString(label), 20, parent = parent).apply {
@@ -117,7 +160,10 @@ internal fun MainActivity.iconTile(icon: String, parent: LinearLayout, dark: Boo
 
 internal fun MainActivity.notice(value: String, caution: Boolean = false) = text(value, 14,
     getColor(if (caution) R.color.warning else R.color.accent)).apply {
-    background = shape(getColor(if (caution) R.color.notice else R.color.hover), 14)
+    background = shape(getColor(if (caution) R.color.notice else R.color.surface), 14)
+        setTextColor(getColor(if (caution) R.color.warning else R.color.muted))
+        compoundDrawablePadding = dp(10)
+        setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon(if (caution) "notice" else "info", currentTextColor), null, null, null)
     setPadding(dp(14), dp(12), dp(14), dp(12))
     accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
     (layoutParams as LinearLayout.LayoutParams).apply { topMargin = dp(8); bottomMargin = dp(8) }
@@ -133,7 +179,7 @@ internal fun MainActivity.tiles(vararg entries: UiTile, parent: LinearLayout = p
             button(getString(tile.label), parent = row, action = tile.action).apply {
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 minHeight = dp(66)
-                compoundDrawablePadding = dp(8)
+                compoundDrawablePadding = resources.getDimensionPixelSize(R.dimen.space_small)
                 setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon(tile.icon, green), null, null, null)
                 layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply { if (index > 0) marginStart = dp(8) }
             }
@@ -143,7 +189,7 @@ internal fun MainActivity.tiles(vararg entries: UiTile, parent: LinearLayout = p
 
 internal fun MainActivity.stat(label: String, value: String, unit: String = "", parent: LinearLayout = page) =
     card(parent).apply {
-        text(label, 13, parent = this)
+        text(label, 14, parent = this)
         val measurement = when {
             value == "—" || unit.isEmpty() -> value
             unit == "°" || unit == "%" -> "$value$unit"
@@ -162,12 +208,16 @@ internal fun MainActivity.targetBar(label: String, value: String, fraction: Doub
     text(label, 13, parent = parent)
     text(value, 20, green, parent).instrumentType(display = true)
     if (fraction != null) parent.addView(ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+        progressDrawable = android.graphics.drawable.LayerDrawable(arrayOf(
+            shape(getColor(R.color.hover), 4),
+            android.graphics.drawable.ClipDrawable(shape(getColor(R.color.accent), 4), Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL)
+        )).apply { setId(0, android.R.id.background); setId(1, android.R.id.progress) }
         max = 100
         setProgress((fraction.coerceIn(0.0, 1.0) * 100).toInt(), android.animation.ValueAnimator.areAnimatorsEnabled())
         progressTintList = ColorStateList.valueOf(green)
         progressBackgroundTintList = ColorStateList.valueOf(getColor(R.color.hover))
         importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    }, LinearLayout.LayoutParams(-1, dp(12)).apply { bottomMargin = dp(10) })
+    }, LinearLayout.LayoutParams(-1, dp(6)).apply { bottomMargin = dp(10) })
 }
 
 internal fun Context.lineIcon(name: String, tint: Int) = getDrawable(when (name) {
@@ -177,6 +227,8 @@ internal fun Context.lineIcon(name: String, tint: Int) = getDrawable(when (name)
     "assistant" -> R.drawable.ic_assistant
     "club" -> R.drawable.ic_club
     "checkin" -> R.drawable.ic_checkin
+    "notice" -> R.drawable.ic_notice
+    "info" -> R.drawable.ic_info
     "profile" -> R.drawable.ic_profile
     "legs" -> R.drawable.ic_legs
     "hinge" -> R.drawable.ic_hinge

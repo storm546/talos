@@ -28,4 +28,16 @@ internal fun TextView.instrumentType(display: Boolean = false, numeric: Boolean 
 internal fun Context.raisedSurface(hero: Boolean = false) = GradientDrawable(
     GradientDrawable.Orientation.TOP_BOTTOM,
     intArrayOf(getColor(if (hero) R.color.hero_top else R.color.surface_top), getColor(if (hero) R.color.hero else R.color.surface))
-).apply { cornerRadius = resources.displayMetrics.density * 14 }
+).apply { cornerRadius = resources.getDimension(R.dimen.radius_panel) }
+
+internal fun TextView.typeSize(size: Int) {
+    val role = when (size) {
+        11, 12 -> R.dimen.type_label
+        13, 14 -> R.dimen.type_caption
+        16, 17 -> R.dimen.type_body
+        28, 29 -> R.dimen.type_title
+        40 -> R.dimen.type_display
+        else -> { textSize = size.toFloat(); return }
+    }
+    setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(role))
+}

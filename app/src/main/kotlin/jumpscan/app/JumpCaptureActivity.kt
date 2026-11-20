@@ -104,6 +104,8 @@ class JumpCaptureActivity : ComponentActivity() {
     private var latestFeet: Float? = null
     private var landingWatch: JumpLandingWatch? = null
     private var stopAt = Long.MAX_VALUE
+    private var manualStart: Button? = null
+    private var armed = false
     private var lastTick = -1
     private var tone: ToneGenerator? = null
     private lateinit var preview: PreviewView
@@ -118,6 +120,7 @@ class JumpCaptureActivity : ComponentActivity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        armed = state == null && intent.getBooleanExtra("when_ready", false)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -144,12 +147,16 @@ class JumpCaptureActivity : ComponentActivity() {
             accessibilityLiveRegion = TextView.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         root.addView(status)
+        if (armed) manualStart = styleButton(Button(this), false).apply {
+            setText(R.string.manual_start)
+            setOnClickListener { armed = false; visibility = android.view.View.GONE; start.setText(R.string.jump_record_start) }
+        }.also { root.addView(it) }
         rateChoices = LinearLayout(this).apply { gravity = Gravity.CENTER }
         root.addView(rateChoices)
         rateNotice = label(R.string.jump_rate_unavailable, 14).apply { visibility = View.GONE }
         root.addView(rateNotice)
         start = styleButton(Button(this), primary = true).apply {
-            setText(R.string.jump_record_start)
+            setText(if (armed) R.string.armed_hint else R.string.jump_record_start)
             isEnabled = false
             setOnClickListener { if (recording == null) record() else stopRecording() }
         }
@@ -171,7 +178,7 @@ class JumpCaptureActivity : ComponentActivity() {
     private fun label(resource: Int, size: Int) = TextView(this).apply {
         instrumentType(display = size >= 20)
         setText(resource)
-        textSize = size.toFloat()
+        typeSize(size)
         setTextColor(getColor(R.color.ink))
         setPadding(dp(4), dp(5), dp(4), dp(5))
     }
@@ -203,7 +210,8 @@ class JumpCaptureActivity : ComponentActivity() {
                 val fast = Recorder.getHighSpeedVideoCapabilities(info)?.getSupportedQualities(DynamicRange.SDR).orEmpty()
                 modes = listOfNotNull(mode(60, regular, info), mode(120, fast, info), mode(240, fast, info))
                 previewOnly = SessionConfig(listOf(newPreview()))
-                bind(modes.firstOrNull())
+                val lastRate = getSharedPreferences("instrument", MODE_PRIVATE).getInt("capture_fps", 60)
+                bind(modes.firstOrNull { it.fps == lastRate } ?: modes.firstOrNull())
             }.onFailure { cameraError() }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -259,7 +267,7 @@ class JumpCaptureActivity : ComponentActivity() {
         for (mode in modes) rateChoices.addView(styleButton(Button(this), primary = mode == selected).apply {
             text = getString(R.string.jump_capture_rate, mode.fps)
             isEnabled = recording == null && !finishingClip && mode != selected
-            setOnClickListener { bind(mode) }
+            setOnClickListener { bind(mode); selected?.let { getSharedPreferences("instrument", MODE_PRIVATE).edit().putInt("capture_fps", it.fps).apply() } }
         }, LinearLayout.LayoutParams(0, -2, 1f))
     }
 
@@ -342,6 +350,11 @@ class JumpCaptureActivity : ComponentActivity() {
                 status.setText(message)
                 status.setTextColor(getColor(if (message == R.string.jump_frame_ready) R.color.ready else R.color.ink))
                 status.arrive()
+            }
+            if (armed && start.isEnabled) {
+                armed = false
+                manualStart?.visibility = android.view.View.GONE
+                record()
             }
         }
     }

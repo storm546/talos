@@ -7,7 +7,6 @@ import android.app.Activity
 import android.app.Fragment
 import android.os.Build
 import android.provider.MediaStore
-import android.graphics.Typeface
 import android.widget.LinearLayout
 import jumpscan.core.FormExercise
 import jumpscan.core.FormExercises

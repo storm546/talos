@@ -8,4 +8,8 @@
     <string name="need_email">Въведете имейл адреса си.</string>
     <string name="need_password">Въведете паролата си.</string>
     <string name="height_trace">Височина на скока · см</string>
+    <string name="ready_record">Запис при готов кадър</string>
+    <string name="armed_hint">Застанете в кадър. Отброяването ще започне автоматично.</string>
+    <string name="manual_start">Ръчно начало</string>
+    <string name="ready_explainer">Поставете телефона и отстъпете назад. Отброяването започва, когато се виждате в цял ръст.</string>
 </resources>

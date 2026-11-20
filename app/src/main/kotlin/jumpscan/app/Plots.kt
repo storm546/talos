@@ -40,7 +40,7 @@ internal class Dial(context: Context) : View(context) {
         pen.color = context.getColor(R.color.hover)
         canvas.drawArc(-radius, -radius, radius, radius, 150f, 240f, false, pen)
         pen.color = context.getColor(R.color.accent)
-        if (shown >= 0) canvas.drawArc(-radius, -radius, radius, radius, 150f, shown * 2.4f, false, pen)
+        if (shown > 0) canvas.drawArc(-radius, -radius, radius, radius, 150f, shown * 2.4f, false, pen)
         pen.strokeWidth = density
         pen.color = context.getColor(R.color.muted)
         for (index in 0..20) {

@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
-import android.graphics.Typeface
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.TotalCaptureResult
@@ -178,6 +177,11 @@ class LiveFormActivity : ComponentActivity() {
                 setTextColor(getColor(R.color.muted))
                 thumbTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
                     intArrayOf(getColor(R.color.accent), getColor(R.color.muted)))
+                trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(getColor(R.color.tonal), getColor(R.color.hover)))
+                switchMinWidth = dp(42)
+                switchPadding = dp(10)
+                instrumentType()
                 minHeight = dp(48)
                 isChecked = cuesMuted
                 setOnCheckedChangeListener { _, muted ->
@@ -223,7 +227,7 @@ class LiveFormActivity : ComponentActivity() {
     }
 
     private fun label(value: String, size: Int, foreground: Int) = TextView(this).apply {
-        instrumentType(); text = value; textSize = size.toFloat(); setTextColor(getColor(foreground))
+        instrumentType(); text = value; typeSize(size); setTextColor(getColor(foreground))
     }
 
     override fun onStart() {

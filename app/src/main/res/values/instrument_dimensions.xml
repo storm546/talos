@@ -1,0 +1,15 @@
+<resources>
+    <dimen name="space_small">8dp</dimen>
+    <dimen name="space_gap">12dp</dimen>
+    <dimen name="space_panel">16dp</dimen>
+    <dimen name="space_feature">20dp</dimen>
+    <dimen name="radius_panel">14dp</dimen>
+    <dimen name="lift_panel">1dp</dimen>
+    <dimen name="lift_feature">3dp</dimen>
+    <dimen name="touch_target">48dp</dimen>
+    <dimen name="type_label">12sp</dimen>
+    <dimen name="type_caption">14sp</dimen>
+    <dimen name="type_body">17sp</dimen>
+    <dimen name="type_title">28sp</dimen>
+    <dimen name="type_display">40sp</dimen>
+</resources>

@@ -8,4 +8,8 @@
     <string name="need_email">Enter your email address.</string>
     <string name="need_password">Enter your password.</string>
     <string name="height_trace">Jump height · cm</string>
+    <string name="ready_record">Record when in frame</string>
+    <string name="armed_hint">Move into frame. The countdown starts automatically.</string>
+    <string name="manual_start">Switch to manual start</string>
+    <string name="ready_explainer">Set down the phone and step back. The countdown starts when your whole body is in frame.</string>
 </resources>

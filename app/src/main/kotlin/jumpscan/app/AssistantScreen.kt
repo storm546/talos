@@ -15,15 +15,14 @@ internal class AssistantChat {
 internal fun MainActivity.assistantScreen(message: String? = null, draft: String = "") {
     val chat = assistantChat
     layout(getString(R.string.assistant_title), "assistant")
-    hero(R.string.assistant_title, R.string.assistant_intro)
+    text(getString(R.string.assistant_intro), 17)
     if (chat.turns.isEmpty()) notice(getString(R.string.ui_assistant_empty))
     for ((question, answer) in chat.turns) {
         val prompt = card()
         text(getString(R.string.assistant_you), 14, green, prompt)
         text(question, parent = prompt)
-        val reply = card()
-        text(getString(R.string.assistant_title), 14, green, reply)
-        text(answer, parent = reply)
+        text(getString(R.string.assistant_title), 14, green)
+        text(answer)
     }
     if (message != null) notice(message, caution = true)
     val api = featureApi()

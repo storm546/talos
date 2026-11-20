@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
@@ -195,7 +194,7 @@ class MainActivity : Activity() {
 
     internal fun text(value: String, size: Int = 16, color: Int = if (size <= 14) muted else ink, parent: LinearLayout = page): TextView = TextView(this).apply {
         text = value
-        textSize = size.toFloat()
+        typeSize(size)
         instrumentType(display = size >= 17)
         setTextColor(color)
         setPadding(0, dp(5), 0, dp(5))
@@ -209,7 +208,13 @@ class MainActivity : Activity() {
         minHeight = dp(48)
         minimumWidth = 0
         setPadding(dp(12), dp(10), dp(12), dp(10))
-        styleButton(this, primary)
+        val tone = when {
+            primary -> ActionTone.PRIMARY
+            label == getString(R.string.home) || label == getString(R.string.cancel) || label == getString(R.string.ui_server_settings) -> ActionTone.TEXT
+            label == getString(R.string.continue_offline) -> ActionTone.TONAL
+            else -> ActionTone.SECONDARY
+        }
+        styleButton(this, primary, tone)
         setOnClickListener { action() }
         parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
     }
@@ -298,10 +303,6 @@ class MainActivity : Activity() {
                 connection.requestRectangleOnScreen(android.graphics.Rect(0, 0, connection.width, connection.height))
             }
         }.apply {
-            val style = android.util.TypedValue()
-            theme.resolveAttribute(android.R.attr.selectableItemBackground, style, true)
-            setBackgroundResource(style.resourceId)
-            setTextColor(green)
             textSize = 14f
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
         }
@@ -316,9 +317,22 @@ class MainActivity : Activity() {
         val day = localDate(todayLocal(), locale)
         text(if (signedIn) "$day  ·  $name" else day, 14)
         if (message != null) notice(message, caution = true)
-        val jump = hero(R.string.ui_jump, R.string.ui_jump_intro)
+        val jump = card(hero = true)
+        val head = row(jump, center = true)
+        text(getString(R.string.ui_jump), 28, Color.WHITE, head).apply {
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+        }
+        head.addView(ImageView(this).apply {
+            setImageResource(R.drawable.flight_diagram)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(90), dp(58)).apply { marginStart = dp(8) })
+        text(getString(R.string.ready_explainer), 14, getColor(R.color.on_hero), jump)
         selectedSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 14, getColor(R.color.on_hero), jump) }
-        val types = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
+        val types = RadioGroup(this).apply {
+            orientation = RadioGroup.HORIZONTAL
+            background = shape(getColor(R.color.hero), 10)
+            setPadding(dp(3), dp(3), dp(3), dp(3))
+        }
         listOf(Triple("cmj", R.string.ui_cmj_short, R.string.cmj),
             Triple("drop_jump", R.string.ui_drop_short, R.string.drop_jump)).forEach { (value, label, fullLabel) ->
             types.addView(RadioButton(this).apply {
@@ -326,8 +340,6 @@ class MainActivity : Activity() {
                 text = getString(label)
                 contentDescription = getString(fullLabel)
                 textSize = 13f
-                setTextColor(Color.WHITE)
-                buttonTintList = ColorStateList.valueOf(getColor(R.color.signal))
                 minHeight = dp(48)
                 isChecked = test == value
                 isEnabled = selectedSession == null
@@ -336,11 +348,12 @@ class MainActivity : Activity() {
             }, RadioGroup.LayoutParams(0, -2, 1f))
         }
         jump.addView(types)
-        button(getString(R.string.record), primary = true, parent = jump) { recordJump() }
+        button(getString(R.string.ready_record), primary = true, parent = jump) { recordJump(whenReady = true) }
         button(getString(R.string.pick_video), parent = jump) {
             filmingGuide { pickJumpVideo() }
         }
         button(getString(R.string.repeat_live, formLabel(formChoice))) { openLiveForm(false) }.apply {
+            styleButton(this, false, ActionTone.TONAL)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             compoundDrawablePadding = dp(12)
             setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("form", green), null, null, null)
@@ -352,7 +365,7 @@ class MainActivity : Activity() {
         }
         if (analysis != null) button(getString(R.string.last_result)) { result() }
         if (signedIn) pendingControls()
-        text(getString(R.string.coach_note), 14).setPadding(0, dp(18), 0, 0)
+        if (!signedIn) text(getString(R.string.coach_note), 14).setPadding(0, dp(18), 0, 0)
     }
 
     private fun more() {
@@ -428,6 +441,7 @@ class MainActivity : Activity() {
         val sessions = card()
         section(R.string.sessions_title, sessions)
         val status = text(getString(if (token().isEmpty()) R.string.club_sign_in else R.string.club_loading), 14, parent = sessions)
+        val placeholders = if (token().isNotEmpty()) skeleton(sessions) else null
         selectedSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 14, parent = sessions) }
         if (selectedSession != null) button(getString(R.string.session_clear), parent = sessions) {
             selectedSession = null; clubHome()
@@ -441,7 +455,8 @@ class MainActivity : Activity() {
                 val rows = parseSessions(api(savedBase, "/api/sessions?from=${Instant.now()}&limit=5", token = savedToken))
                 runOnUiThread {
                     if (current()) {
-                        status.text = if (rows.isEmpty()) getString(R.string.sessions_empty) else ""
+                        placeholders?.let { sessions.removeView(it) }
+                    status.text = if (rows.isEmpty()) getString(R.string.sessions_empty) else ""
                         selectedSession?.let { chosen ->
                             rows.firstOrNull { it.id == chosen.id }?.let { fresh ->
                                 if (fresh.cancelled) { selectedSession = null; home(); return@runOnUiThread }
@@ -455,7 +470,7 @@ class MainActivity : Activity() {
                         }
                     }
                 }
-            } catch (_: Exception) { runOnUiThread { if (current()) status.text = getString(R.string.sessions_offline) } }
+            } catch (_: Exception) { runOnUiThread { if (current()) { placeholders?.let { sessions.removeView(it) }; status.text = getString(R.string.sessions_offline) } } }
         }
         clubExecutor.submit {
             val queued = synchronized(uploadLock) { runCatching { pending().checkin(day) }.getOrNull() }
@@ -520,7 +535,7 @@ class MainActivity : Activity() {
                     group.findViewById<RadioButton>(id).tag as Int
                 },
                 minutes.text.toString(), rpe.text.toString()) } catch (e: AppError) {
-                Toast.makeText(this, errorMessage(e), Toast.LENGTH_LONG).show(); return@button
+                snack(errorMessage(e)); return@button
             }
             val queue = pending(); val savedToken = token(); val savedBase = base()
             work(getString(R.string.checkin_saving), {
@@ -535,7 +550,7 @@ class MainActivity : Activity() {
                 }
             }, {
                 home()
-                Toast.makeText(this, getString(R.string.checkin_saved), Toast.LENGTH_LONG).show()
+                snack(getString(R.string.checkin_saved))
             }, { checkinForm(day, body, getString(R.string.checkin_queued) + "\n" + it) })
         }
         button(getString(R.string.home)) { home() }
@@ -587,8 +602,8 @@ class MainActivity : Activity() {
         if (offset > 0) button(getString(R.string.feedback_newest)) { feedback() }
     }
 
-    private fun recordJump() {
-        launchVideo(Intent(this, JumpCaptureActivity::class.java).putExtra("test", test), 10)
+    private fun recordJump(whenReady: Boolean = false) {
+        launchVideo(Intent(this, JumpCaptureActivity::class.java).putExtra("test", test).putExtra("when_ready", whenReady), 10)
     }
 
     private fun pickJumpVideo() {
@@ -816,13 +831,13 @@ class MainActivity : Activity() {
             contentDescription = getString(R.string.skeleton_description)
         }
         page.addView(image, LinearLayout.LayoutParams(-1, dp(230)))
-        val timestamp = text("", 18)
+        val timestamp = text("", 18).apply { instrumentType(numeric = true) }
         timestamp.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         val loading = text("", 14)
         val steps = LinearLayout(this)
         page.addView(steps)
         val stepButtons = mutableListOf<Pair<Int, Button>>()
-        val edges = text(edgeTimes(selection.takeoffMs, selection.landingMs), 16)
+        val edges = text(edgeTimes(selection.takeoffMs, selection.landingMs), 16).apply { instrumentType(numeric = true) }
         val flight = text("", 16)
         flight.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         lateinit var apply: Button
@@ -902,7 +917,7 @@ class MainActivity : Activity() {
     internal fun pendingControls() {
         val count = if (token().isNotEmpty()) pending().count() else
             pendingRoot.walkTopDown().count { it.isFile && it.name.endsWith(".json") }
-        text(getString(R.string.pending_count, count), 14).setPadding(0, dp(18), 0, dp(8))
+        if (count > 0) text(getString(R.string.pending_count, count), 14).setPadding(0, dp(18), 0, dp(8))
         if (token().isNotEmpty()) {
             val rejected = pending().rejectedCount()
             if (rejected > 0) text(getString(R.string.pending_rejected, rejected), 14, warning)
@@ -991,8 +1006,8 @@ class MainActivity : Activity() {
                         if (screen == "result") result() else if (screen == "home") home() else if (screen == "profile") profile()
                         else if (screen == "form_result") lastForm?.let { formResult(it.metrics, it) }
                         if (error != null && error !is InterruptedException) {
-                            Toast.makeText(this, errorMessage(error!!), Toast.LENGTH_LONG).show()
-                        } else if (!automatic) Toast.makeText(this, getString(R.string.pending_sent), Toast.LENGTH_LONG).show()
+                            snack(errorMessage(error!!))
+                        } else if (!automatic) snack(getString(R.string.pending_sent))
                     }
                 }
             }

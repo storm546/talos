@@ -2,7 +2,6 @@ package jumpscan.app
 
 import android.app.AlertDialog
 import android.content.Intent
-import android.graphics.Typeface
 import android.text.InputType
 import android.widget.TableLayout
 import android.widget.TableRow
@@ -23,7 +22,11 @@ internal fun MainActivity.diagnostics(message: String? = null) {
     val sets = rows.filter { it.completedSquat() && it.has("human_reps") }.map { it.getInt("trial") }.toSet()
     val panel = card()
     section(R.string.diag_phone_test, panel)
-    text(getString(R.string.diag_progress, jumps.size, sets.size), 14, parent = panel)
+    val totals = row(panel, center = true)
+    totals.addView(Dial(this).apply { show((jumps.size + sets.size) * 100 / 23) }, android.widget.LinearLayout.LayoutParams(dp(80), dp(80)))
+    text(getString(R.string.diag_progress, jumps.size, sets.size), 14, parent = totals).apply {
+        layoutParams = android.widget.LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(12) }
+    }
     val next = (1..23).firstOrNull { it !in jumps && it !in sets }
     when (next) {
         null -> text(getString(R.string.diag_done), parent = panel)
