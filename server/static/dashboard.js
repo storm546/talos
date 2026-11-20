@@ -636,6 +636,7 @@ function team(content) {
   content.append(overviewHero(t(state.user.role === 'admin' ? 'adminDesk' : 'coachDesk'), t('team'), date(apiDay())));
   const hero = content.querySelector('.overview-hero');
   if (state.todayCheckins.length) {
+    hero.append(node('p',t('checkedToday')+' · '+state.todayCheckins.filter(row => row.checkin).length+' / '+state.todayCheckins.length,'team-count'));
     const strip = node('div', null, 'attendance-strip');
     strip.setAttribute('aria-hidden', 'true');
     for (const row of state.todayCheckins.slice(0, 32)) strip.append(node('i', null, row.checkin ? 'present' : 'absent'));
@@ -645,7 +646,7 @@ function team(content) {
   if (state.athletes.length) {
     const latest = new Map(); for (const jump of state.teamFlights) if (!latest.has(jump.athlete_id)) latest.set(jump.athlete_id,jump);
     const board = node('section',null,'flight-board'); board.append(node('h2',state.language === 'bg' ? 'Последен скок по спортист' : 'Latest flight by athlete'));
-    const lanes = node('div',null,'flight-lanes'); board.append(lanes); content.append(board);
+    const lanes = node('div',null,'flight-lanes'); board.append(lanes); hero.append(board);
     for (const athlete of state.athletes) {
       const lane = athleteLink(athlete,athlete.name); lane.className = 'flight-lane';
       const show = jump => lane.replaceChildren(flightGlyph(jump),node('span',athlete.name),node('strong',flightLabel(jump)));

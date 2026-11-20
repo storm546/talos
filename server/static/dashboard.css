@@ -176,8 +176,10 @@ svg polyline {stroke-linecap:round;stroke-linejoin:round}
 .brand {font-size:0;gap:0}
 .brand .brand-mark {width:126px;height:24px;background:var(--ink);mask:url(wordmark.svg) center/contain no-repeat;border-radius:0}
 .brand-mark::before {display:none}
-.flight-board {margin:24px 0}
-.flight-lanes {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr));gap:0 20px}
+.flight-board {margin:20px 0 0;color:var(--hero-ink);--accent:var(--signal);--muted:var(--hero-muted);--ink:var(--hero-ink);--line:#595552;--hover:#353234}
+.overview-hero .flight-board h2 {color:var(--hero-muted);font:600 .92rem Space,sans-serif;margin:0 0 5px}
+.team-count {color:var(--hero-ink);font:.9rem Timing,monospace}
+.flight-lanes {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr));gap:0 20px;max-height:182px;overflow:auto}
 .flight-lane,.flight-arrival {display:flex;align-items:center;gap:12px}
 .flight-lane {background:transparent;color:var(--ink);border:0;border-bottom:1px solid var(--line);border-radius:0;text-align:start;padding:8px 0}
 .flight-lane:hover {background:var(--hover)}
