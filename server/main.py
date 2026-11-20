@@ -1,5 +1,6 @@
 """Run with uvicorn server.main:app."""
 
+from collections import deque
 from contextlib import asynccontextmanager, contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 import asyncio
@@ -625,6 +626,59 @@ def validated_group_id(db, user, group_id, require_club=None):
     return group_id
 
 
+RESYNC_EVENT = {"type": "resync"}
+
+
+class EventBacklog:
+    def __init__(self, loop):
+        self.loop = loop
+        self.pending = deque()
+        self.ready = asyncio.Event()
+        self.lock = threading.Lock()
+        self.wake_pending = False
+        self.overflowed = False
+
+    def publish(self, event):
+        with self.lock:
+            if self.overflowed:
+                return
+            if len(self.pending) == 64:
+                self.pending.clear()
+                self.overflowed = True
+                event = RESYNC_EVENT
+            self.pending.append(event)
+            if self.loop is not None and not self.wake_pending and not self.ready.is_set():
+                self.wake_pending = True
+                try:
+                    self.loop.call_soon_threadsafe(self.wake)
+                except RuntimeError:
+                    if not self.loop.is_closed():
+                        raise
+
+    def wake(self):
+        with self.lock:
+            self.wake_pending = False
+            self.ready.set()
+
+    def empty(self):
+        with self.lock:
+            return not self.pending
+
+    def get_nowait(self):
+        with self.lock:
+            if not self.pending:
+                raise asyncio.QueueEmpty
+            return self.pending.popleft()
+
+    async def get(self):
+        while True:
+            with self.lock:
+                if self.pending:
+                    return self.pending.popleft()
+                self.ready.clear()
+            await self.ready.wait()
+
+
 class EventBus:
     """In-process fan-out for the /api/events stream (one worker)."""
 
@@ -641,14 +695,15 @@ class EventBus:
             subscriptions = self._subscribers.setdefault(int(user_id), [])
             if len(subscriptions) >= limit:
                 return None
-            queue = asyncio.Queue()
-            subscriptions.append((loop, queue))
+            queue = EventBacklog(loop)
+            subscriptions.append(queue)
             return queue
 
     def close(self, user_id, queue):
         with self._lock:
             subscriptions = self._subscribers.get(int(user_id), [])
-            subscriptions[:] = [(loop, stream) for loop, stream in subscriptions if stream is not queue]
+            if queue in subscriptions:
+                subscriptions.remove(queue)
             if not subscriptions:
                 self._subscribers.pop(int(user_id), None)
 
@@ -660,15 +715,8 @@ class EventBus:
         """Queue the event onto every open stream whose user id is in `viewers`."""
         with self._lock:
             queues = [subscription for user in viewers for subscription in self._subscribers.get(user, ())]
-        for loop, queue in queues:
-            if loop is None:
-                queue.put_nowait(event)
-                continue
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, event)
-            except RuntimeError:
-                if not loop.is_closed():
-                    raise
+        for queue in queues:
+            queue.publish(event)
 
 
 def jump_rows(db, athlete_id):
@@ -1725,6 +1773,8 @@ def create_app(db_path=None):
                         except HTTPException:
                             break
                     yield f"data: {json.dumps(event)}\n\n" if event is not None else ": keep-alive\n\n"
+                    if event is RESYNC_EVENT:
+                        break
             finally:
                 request.app.state.events.close(user["id"], queue)
 

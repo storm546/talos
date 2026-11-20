@@ -439,6 +439,30 @@ def test_events_stream_delivery(api, auth):
     asyncio.run(check())
 
 
+def test_events_slow_stream_resyncs_without_blocking_other_streams(api, auth):
+    client, path = api
+    coach = auth("coach")
+    uid = user_id(path, "coach")
+    bus = client.app.state.events
+
+    async def check():
+        slow = await event_response(client, coach)
+        fast = await event_response(client, coach)
+        try:
+            for index in range(65):
+                await asyncio.to_thread(bus.publish, {uid}, {"type": "jump", "id": index})
+                assert f'"id": {index}' in await asyncio.wait_for(anext(fast.body_iterator), 1)
+            assert await asyncio.wait_for(anext(slow.body_iterator), 1) == 'data: {"type": "resync"}\n\n'
+            with pytest.raises(StopAsyncIteration):
+                await anext(slow.body_iterator)
+            assert bus.open_count(uid) == 1
+        finally:
+            await slow.body_iterator.aclose()
+            await fast.body_iterator.aclose()
+
+    asyncio.run(check())
+
+
 def test_events_stream_limit_reserved_before_response(api, auth):
     client, path = api
     coach = auth("coach")
@@ -485,26 +509,21 @@ def test_events_stream_limit_reserved_before_response(api, auth):
 
 
 def test_events_data_shape_via_bus(api, auth):
-    bus = main.EventBus()
-    queue = bus.try_open(1, 3)
-    bus.publish({1}, {"type": "jump", "id": 1})
-    assert queue.get_nowait() == {"type": "jump", "id": 1}
-    bus.close(1, queue)
-    assert bus.open_count(1) == 0
+    async def verify():
+        bus = main.EventBus()
+        queue = bus.try_open(1, 3)
+        bus.publish({1}, {"type": "jump", "id": 1})
+        assert await queue.get() == {"type": "jump", "id": 1}
+        bus.close(1, queue)
+        assert bus.open_count(1) == 0
+
+    asyncio.run(verify())
 
 
 def test_event_bus_delivers_from_worker_to_waiting_stream():
     async def verify():
         bus = main.EventBus()
         stream = bus.try_open(1, 3)
-        owner = threading.get_ident()
-        enqueue = stream.put_nowait
-
-        def put_nowait(event):
-            assert threading.get_ident() == owner
-            enqueue(event)
-
-        stream.put_nowait = put_nowait
         next_event = asyncio.create_task(stream.get())
         await asyncio.sleep(0)
         event = {"type": "checkin", "id": 2}

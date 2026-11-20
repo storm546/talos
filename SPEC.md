@@ -322,7 +322,10 @@ limits 1–500. Unknown fields are rejected as in section 3.
 - The events stream authenticates with the same bearer header (the dashboard reads it with `fetch`, not
   `EventSource`, so the token never appears in a URL). Each keep-alive tick rechecks authentication;
   revocation, expiry or deactivation ends the stream. Stream slots are reserved before a response starts;
-  a fourth stream returns 429. Proxy buffering is disabled for events.
+  a fourth stream returns 429. Proxy buffering is disabled for events. Each stream holds up to 64 pending
+  events. On overflow it sends `{"type":"resync"}` and closes. There is no event replay: reconnect first,
+  then reload the current view through authorized REST reads. The dashboard refreshes after reconnecting
+  without replacing an active, unsent draft.
 
 ### 5.4 Dashboard (additions)
 

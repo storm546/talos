@@ -281,6 +281,7 @@ let liveController = null;
 async function streamLive() {
   const generation = ++state.liveGeneration;
   let delay = 1000;
+  let reconnect = false;
   while (state.token && generation === state.liveGeneration) {
     if (liveController) { try { liveController.abort(); } catch {} liveController = null; }
     setLive('connecting');
@@ -289,7 +290,10 @@ async function streamLive() {
     const reader = await fetch('/api/events', {headers:{Authorization:'Bearer '+state.token}, cache:'no-store', signal:controller.signal})
       .then(r => { if (!r.ok) return null; return r.body.getReader(); }).catch(() => null);
     if (!reader) { await new Promise(resolve => setTimeout(resolve, delay)); delay = Math.min(delay * 2, 15000); continue; }
+    if (generation !== state.liveGeneration) { controller.abort(); return; }
     delay = 1000; setLive('on');
+    if (reconnect) refreshFor({type:'resync'});
+    reconnect = true;
     const decoder = new TextDecoder();
     let buffer = '';
     try {
@@ -303,7 +307,7 @@ async function streamLive() {
           const data = block.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5)).join('\n');
           if (data) {
             let event; try {event = JSON.parse(data);} catch {event = null;}
-            if (event) refreshFor(event);
+            if (event && event.type !== 'resync') refreshFor(event);
           }
         }
         if (generation !== state.liveGeneration) { controller.abort(); return; }
@@ -330,6 +334,7 @@ function refreshFor(event) {
 }
 function relevant(event, view) {
   if (!state.user || !state.token) return false;
+  if (event.type === 'resync') return true;
   if (view === 'history') {
     const id = state.user.role === 'athlete' ? state.user.id : state.selected && state.selected.id;
     if (id == null) return false;
