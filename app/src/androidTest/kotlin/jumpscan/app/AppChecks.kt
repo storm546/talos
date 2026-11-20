@@ -4,7 +4,11 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import jumpscan.core.Frame
 import jumpscan.core.FormMetrics
 import jumpscan.core.FormRepetition
@@ -27,6 +31,7 @@ class AppChecks : Instrumentation() {
         val output = Bundle()
         try {
             clubChecks()
+            assistantConfirmationCheck()
             queueChecks()
             featureChecks()
             previewChecks()
@@ -37,6 +42,27 @@ class AppChecks : Instrumentation() {
             output.putString("stream", "App checks failed: ${e.stackTraceToString()}\n")
             finish(Activity.RESULT_CANCELED, output)
         }
+    }
+
+    private fun assistantConfirmationCheck() {
+        val activity = startActivitySync(Intent(targetContext, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        try {
+            runOnMainSync {
+                val summary = "Cancel Thursday for the under-18 group; note: bring water."
+                activity.assistantChat.proposal = JSONObject().put("proposal_id", "test").put("actions",
+                    org.json.JSONArray().put(JSONObject().put("tool", "future_action").put("human_summary", summary)))
+                activity.assistantScreen()
+                fun labels(view: View): List<String> = when (view) {
+                    is TextView -> listOf(view.text.toString())
+                    is ViewGroup -> (0 until view.childCount).flatMap { labels(view.getChildAt(it)) }
+                    else -> emptyList()
+                }
+                val review = labels(activity.page)
+                val confirm = review.indexOf(activity.getString(R.string.assistant_confirm))
+                check(review.indexOf(summary) in 0 until confirm)
+            }
+        } finally { runOnMainSync { activity.finish() } }
     }
 
     private fun featureChecks() {
