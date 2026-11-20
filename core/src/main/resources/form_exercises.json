@@ -1,119 +1,119 @@
 [
-  {"id": "squat", "hidden": true, "hidden_reason": "Repetition benchmark 2026-11-19 (core/VALIDATION.md): at the live-equivalent 15 fps the count was exact on 2 of 3 held-out sets and 8 of 9 development sets, below the 90% bar.", "name_en": "Squat", "name_bg": "Клек", "mode": "reps", "sided": false, "view": "either",
+  {"id": "squat", "name_en": "Squat", "name_bg": "Клек", "mode": "reps", "sided": false, "view": "either",
     "signal": {"metric": "legacy_hip_drop", "up": 0.025, "down": 0.05, "min_range": 0.05, "legacy": true, "depth_min": 45, "open_flexion": 45, "min_phase_ms": 150},
     "checks": [
       {"key": "knee_flexion_peak", "label_en": "Knee flexion", "label_bg": "Сгъване на коляното", "unit": "°", "metric": "flexion:knee", "min": 45, "cue_en": "Go a little lower.", "cue_bg": "Слезте малко по-ниско."},
       {"key": "knee_alignment", "label_en": "Knee alignment", "label_bg": "Подравняване на коляното", "unit": "°", "metric": "fppa", "max": 12, "cue_en": "Guide your knee over your foot.", "cue_bg": "Насочете коляното над стъпалото."}
     ]},
-  {"id": "single_leg_squat", "hidden": true, "hidden_reason": "Not benchmarked: no hand-counted openly licensed single-leg squat sets without camera cuts were found in the 2026-11-19 benchmark.", "name_en": "Single-leg squat", "name_bg": "Клек на един крак", "mode": "reps", "sided": true, "view": "either",
+  {"id": "single_leg_squat", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Single-leg squat", "name_bg": "Клек на един крак", "mode": "reps", "sided": true, "view": "either",
     "signal": {"metric": "legacy_hip_drop", "up": 0.025, "down": 0.05, "min_range": 0.05, "legacy": true, "depth_min": 45, "open_flexion": 30, "min_phase_ms": 150},
     "checks": [
       {"key": "knee_flexion_peak", "label_en": "Knee flexion", "label_bg": "Сгъване на коляното", "unit": "°", "metric": "flexion:knee", "min": 45, "cue_en": "Go a little lower.", "cue_bg": "Слезте малко по-ниско."},
       {"key": "knee_alignment", "label_en": "Knee alignment", "label_bg": "Подравняване на коляното", "unit": "°", "metric": "fppa", "max": 12, "cue_en": "Guide your knee over your foot.", "cue_bg": "Насочете коляното над стъпалото."}
     ]},
-  {"id": "lunge", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Reverse lunge", "name_bg": "Напад назад", "mode": "reps", "sided": true, "view": "side",
+  {"id": "lunge", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Reverse lunge", "name_bg": "Напад назад", "mode": "reps", "sided": true, "view": "side",
     "signal": {"metric": "angle:hip:knee:ankle", "up": 158, "down": 115, "min_range": 35},
     "checks": [
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "max": 125, "cue_en": "Bend your knee a little more.", "cue_bg": "Сгънете коляното малко повече."},
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "split_squat", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Split squat", "name_bg": "Статичен напад", "mode": "reps", "sided": true, "view": "side",
+  {"id": "split_squat", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Split squat", "name_bg": "Статичен напад", "mode": "reps", "sided": true, "view": "side",
     "signal": {"metric": "angle:hip:knee:ankle", "up": 153, "down": 112, "min_range": 32},
     "checks": [
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "max": 125, "cue_en": "Bend your knee a little more.", "cue_bg": "Сгънете коляното малко повече."},
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "lateral_lunge", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Lateral lunge", "name_bg": "Страничен напад", "mode": "reps", "sided": true, "view": "front",
+  {"id": "lateral_lunge", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Lateral lunge", "name_bg": "Страничен напад", "mode": "reps", "sided": true, "view": "front",
     "signal": {"metric": "angle:hip:knee:ankle", "up": 160, "down": 123, "min_range": 30},
     "checks": [
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "max": 125, "cue_en": "Bend your knee a little more.", "cue_bg": "Сгънете коляното малко повече."},
       {"key": "knee_alignment", "label_en": "Knee alignment", "label_bg": "Подравняване на коляното", "unit": "°", "metric": "fppa", "max": 12, "cue_en": "Guide your knee over your foot.", "cue_bg": "Насочете коляното над стъпалото."}
     ]},
-  {"id": "step_up", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Step-up", "name_bg": "Качване на пейка", "mode": "reps", "sided": true, "view": "side",
+  {"id": "step_up", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Step-up", "name_bg": "Качване на пейка", "mode": "reps", "sided": true, "view": "side",
     "signal": {"peak": "top", "metric": "angle:hip:knee:ankle", "up": 120, "down": 158, "min_range": 32},
     "checks": [
       {"key": "hip_angle", "label_en": "Hip angle", "label_bg": "Ъгъл в тазобедрената става", "unit": "°", "metric": "angle:shoulder:hip:knee", "min": 158, "cue_en": "Straighten through your hips.", "cue_bg": "Изправете се докрай горе."},
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "glute_bridge", "hidden": true, "hidden_reason": "Not benchmarked: only 2 hand-counted sets (2 people) in the 2026-11-19 benchmark; at least 8 sets from 3 people are needed.", "name_en": "Glute bridge", "name_bg": "Глутеус мост", "mode": "reps", "sided": false, "view": "side",
+  {"id": "glute_bridge", "experimental": true, "experimental_reason_en": "Only 2 counted test videos so far.", "experimental_reason_bg": "Засега само 2 тестови видеа с преброени повторения.", "name_en": "Glute bridge", "name_bg": "Глутеус мост", "mode": "reps", "sided": false, "view": "side",
     "signal": {"peak": "top", "metric": "angle:shoulder:hip:knee", "up": 140, "down": 164, "min_range": 23},
     "checks": [
       {"key": "hip_angle", "label_en": "Hip angle", "label_bg": "Ъгъл в тазобедрената става", "unit": "°", "metric": "angle:shoulder:hip:knee", "min": 158, "cue_en": "Straighten through your hips.", "cue_bg": "Повдигнете таза докрай."},
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "min": 65, "max": 115, "cue_en": "Keep your feet planted under your knees.", "cue_bg": "Дръжте стъпалата под коленете."}
     ]},
-  {"id": "romanian_deadlift", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Romanian deadlift", "name_bg": "Румънска тяга", "mode": "reps", "sided": false, "view": "side",
+  {"id": "romanian_deadlift", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Romanian deadlift", "name_bg": "Румънска тяга", "mode": "reps", "sided": false, "view": "side",
     "signal": {"metric": "angle:shoulder:hip:knee", "up": 159, "down": 118, "min_range": 32},
     "checks": [
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "min": 137, "max": 175, "cue_en": "Keep a slight bend in your knees.", "cue_bg": "Дръжте коленете леко сгънати."},
       {"key": "hip_angle", "label_en": "Hip angle", "label_bg": "Ъгъл в тазобедрената става", "unit": "°", "metric": "angle:shoulder:hip:knee", "max": 120, "cue_en": "Send your hips farther back.", "cue_bg": "Избутайте таза по-назад."}
     ]},
-  {"id": "calf_raise", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Calf raise", "name_bg": "Повдигане на пръсти", "mode": "reps", "sided": false, "view": "side",
+  {"id": "calf_raise", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Calf raise", "name_bg": "Повдигане на пръсти", "mode": "reps", "sided": false, "view": "side",
     "signal": {"peak": "top", "metric": "height:toe:heel", "up": 0.035, "down": 0.1, "min_range": 0.055},
     "checks": [
       {"key": "heel_lift", "label_en": "Heel lift", "label_bg": "Повдигане на петата", "unit": "×", "metric": "height:toe:heel", "min": 0.1, "cue_en": "Lift your heels higher.", "cue_bg": "Повдигнете петите по-високо."},
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "wall_sit", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Wall sit", "name_bg": "Клек до стена", "mode": "hold", "sided": false, "view": "side",
+  {"id": "wall_sit", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Wall sit", "name_bg": "Клек до стена", "mode": "hold", "sided": false, "view": "side",
     "signal": {"metric": "angle:hip:knee:ankle", "up": 116, "down": 110, "min_range": 0, "gate": {"metric": "angle:hip:knee:ankle", "min": 65, "max": 125}},
     "checks": [
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "max": 125, "cue_en": "Bend your knee a little more.", "cue_bg": "Сгънете коляното малко повече."},
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "push_up", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Push-up", "name_bg": "Лицеви опори", "mode": "reps", "sided": false, "view": "side",
+  {"id": "push_up", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 19% of 27 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 19% от 27 серии (нужни са 90%).", "name_en": "Push-up", "name_bg": "Лицеви опори", "mode": "reps", "sided": false, "view": "side",
     "signal": {"metric": "angle:shoulder:elbow:wrist", "up": 153, "down": 105, "min_range": 36, "gate": {"metric": "tilt:ankle:shoulder", "min": 45, "max": 90}},
     "checks": [
       {"key": "body_line", "label_en": "Body line", "label_bg": "Линия на тялото", "unit": "°", "metric": "angle:shoulder:hip:ankle", "min": 158, "cue_en": "Keep shoulders, hips and ankles in line.", "cue_bg": "Дръжте раменете, таза и глезените в една линия."},
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."}
     ]},
-  {"id": "overhead_press", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Overhead press", "name_bg": "Раменна преса", "mode": "reps", "sided": false, "view": "front",
+  {"id": "overhead_press", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 25% of 12 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 25% от 12 серии (нужни са 90%).", "name_en": "Overhead press", "name_bg": "Раменна преса", "mode": "reps", "sided": false, "view": "front",
     "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 113, "down": 155, "min_range": 33, "gate": {"metric": "angle:hip:shoulder:elbow", "min": 55, "max": 180}},
     "checks": [
       {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 148, "cue_en": "Reach higher with your arms.", "cue_bg": "Вдигнете ръцете по-високо."},
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "pull_up", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Pull-up", "name_bg": "Набирания", "mode": "reps", "sided": false, "view": "front",
+  {"id": "pull_up", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 47% of 17 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 47% от 17 серии (нужни са 90%).", "name_en": "Pull-up", "name_bg": "Набирания", "mode": "reps", "sided": false, "view": "front",
     "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 153, "down": 100, "min_range": 40, "gate": {"metric": "height:shoulder:wrist", "min": 0.1, "max": 3}},
     "checks": [
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."},
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "dip", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Dip", "name_bg": "Кофички", "mode": "reps", "sided": false, "view": "side",
+  {"id": "dip", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Dip", "name_bg": "Кофички", "mode": "reps", "sided": false, "view": "side",
     "signal": {"metric": "angle:shoulder:elbow:wrist", "up": 154, "down": 108, "min_range": 35, "gate": {"metric": "height:shoulder:wrist", "min": -3, "max": -0.05}},
     "checks": [
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."},
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
-  {"id": "bent_over_row", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Bent-over row", "name_bg": "Гребане от наклон", "mode": "reps", "sided": false, "view": "side",
+  {"id": "bent_over_row", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Bent-over row", "name_bg": "Гребане от наклон", "mode": "reps", "sided": false, "view": "side",
     "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 155, "down": 108, "min_range": 35, "gate": {"metric": "tilt:hip:shoulder", "min": 40, "max": 90}},
     "checks": [
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."},
       {"key": "knee_angle", "label_en": "Knee angle", "label_bg": "Ъгъл в коляното", "unit": "°", "metric": "angle:hip:knee:ankle", "min": 137, "max": 175, "cue_en": "Keep a slight bend in your knees.", "cue_bg": "Дръжте коленете леко сгънати."}
     ]},
-  {"id": "biceps_curl", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Biceps curl", "name_bg": "Сгъване за бицепс", "mode": "reps", "sided": false, "view": "side",
+  {"id": "biceps_curl", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Biceps curl", "name_bg": "Сгъване за бицепс", "mode": "reps", "sided": false, "view": "side",
     "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 150, "down": 85, "min_range": 50},
     "checks": [
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."},
       {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "max": 34, "cue_en": "Keep your upper arms near your sides.", "cue_bg": "Дръжте мишниците близо до тялото."}
     ]},
-  {"id": "lateral_raise", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Lateral raise", "name_bg": "Разтваряне встрани", "mode": "reps", "sided": false, "view": "front",
+  {"id": "lateral_raise", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 75% of 12 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 75% от 12 серии (нужни са 90%).", "name_en": "Lateral raise", "name_bg": "Разтваряне встрани", "mode": "reps", "sided": false, "view": "front",
     "signal": {"peak": "top", "metric": "angle:hip:shoulder:elbow", "up": 27, "down": 75, "min_range": 40},
     "checks": [
       {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 70, "max": 115, "cue_en": "Raise to about shoulder height.", "cue_bg": "Вдигнете до нивото на раменете."},
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "min": 137, "cue_en": "Keep only a slight bend in your elbows.", "cue_bg": "Дръжте лактите леко сгънати."}
     ]},
-  {"id": "plank", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Plank", "name_bg": "Планк", "mode": "hold", "sided": false, "view": "side",
+  {"id": "plank", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Plank", "name_bg": "Планк", "mode": "hold", "sided": false, "view": "side",
     "signal": {"metric": "angle:shoulder:hip:ankle", "up": 152, "down": 162, "min_range": 0, "gate": {"metric": "tilt:ankle:shoulder", "min": 55, "max": 90}, "support": {"metric": "height:wrist:shoulder", "min": 0.30}},
     "checks": [
       {"key": "body_line", "label_en": "Body line", "label_bg": "Линия на тялото", "unit": "°", "metric": "angle:shoulder:hip:ankle", "min": 158, "cue_en": "Keep shoulders, hips and ankles in line.", "cue_bg": "Дръжте раменете, таза и глезените в една линия."},
       {"key": "body_tilt", "label_en": "Body tilt", "label_bg": "Наклон на тялото", "unit": "°", "metric": "tilt:ankle:shoulder", "min": 55, "cue_en": "Keep your body close to horizontal.", "cue_bg": "Дръжте тялото почти хоризонтално."}
     ]},
-  {"id": "side_plank", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Side plank", "name_bg": "Страничен планк", "mode": "hold", "sided": true, "view": "front",
+  {"id": "side_plank", "experimental": true, "experimental_reason_en": "No test videos with counted repetitions yet.", "experimental_reason_bg": "Още няма тестови видеа с преброени повторения.", "name_en": "Side plank", "name_bg": "Страничен планк", "mode": "hold", "sided": true, "view": "front",
     "signal": {"metric": "angle:shoulder:hip:ankle", "up": 152, "down": 162, "min_range": 0, "gate": {"metric": "tilt:ankle:shoulder", "min": 55, "max": 90}, "support": {"metric": "height:wrist:shoulder", "min": 0.30}},
     "checks": [
       {"key": "body_line", "label_en": "Body line", "label_bg": "Линия на тялото", "unit": "°", "metric": "angle:shoulder:hip:ankle", "min": 158, "cue_en": "Keep shoulders, hips and ankles in line.", "cue_bg": "Дръжте раменете, таза и глезените в една линия."},
       {"key": "body_tilt", "label_en": "Body tilt", "label_bg": "Наклон на тялото", "unit": "°", "metric": "tilt:ankle:shoulder", "min": 55, "cue_en": "Keep your body close to horizontal.", "cue_bg": "Дръжте тялото почти хоризонтално."}
     ]},
-  {"id": "jumping_jack", "hidden": true, "hidden_reason": "Not benchmarked: the 2026-11-19 benchmark has no hand-counted openly licensed sets for this exercise yet.", "name_en": "Jumping jack", "name_bg": "Подскоци с разтваряне", "mode": "reps", "sided": false, "view": "front",
+  {"id": "jumping_jack", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 61% of 28 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 61% от 28 серии (нужни са 90%).", "name_en": "Jumping jack", "name_bg": "Подскоци с разтваряне", "mode": "reps", "sided": false, "view": "front",
     "signal": {"peak": "top", "metric": "span:ankle", "up": 0.65, "down": 1.05, "min_range": 0.37},
     "checks": [
       {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 148, "cue_en": "Reach higher with your arms.", "cue_bg": "Вдигнете ръцете по-високо."},

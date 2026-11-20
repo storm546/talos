@@ -83,7 +83,7 @@ internal fun MainActivity.formHome(message: String? = null) {
     layout(getString(R.string.form_title), "form")
     message?.let { notice(it, caution = true) }
     hero(getString(R.string.ui_form_hero), getString(R.string.form_modes_guide),
-        getString(R.string.ui_form_eyebrow, FormExercises.offered.size)).also { panel ->
+        getString(R.string.ui_form_eyebrow, FormExercises.validated.size)).also { panel ->
         val links = row(panel)
         if (token().isNotEmpty()) button(getString(R.string.ui_form_history), parent = links) { techniqueHistory() }
             .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(12) }
@@ -94,13 +94,25 @@ internal fun MainActivity.formHome(message: String? = null) {
     val replay = BuildConfig.DEBUG && File(filesDir, LIVE_REPLAY_FILE).isFile
     if (replay) text(getString(R.string.ui_replay_hint), 13)
     for (group in formGroups) {
-        val members = FormExercises.offered.filter { formGroup(it.id) == group }
+        val members = FormExercises.validated.filter { formGroup(it.id) == group }
         if (members.isEmpty()) continue
         section(group.label).setPadding(0, dp(20), 0, 0)
         members.forEach { exerciseCard(it, group.icon, replay) }
     }
+    // Exercises that have not passed the repetition benchmark stay usable, but only behind an explicit opt-in.
+    val experimental = FormExercises.all.filter { it.experimental }
+    if (experimental.isNotEmpty()) {
+        section(R.string.ui_form_experimental).setPadding(0, dp(20), 0, 0)
+        text(getString(R.string.ui_form_experimental_note), 13)
+        button(getString(if (showExperimental) R.string.ui_form_hide_experimental else R.string.ui_form_show_experimental,
+            experimental.size)) { showExperimental = !showExperimental; formHome() }
+        if (showExperimental) experimental.forEach { exerciseCard(it, formIcon(it.id), replay) }
+    }
     button(getString(R.string.home)) { home() }
 }
+
+/** Collapsed on every app start. */
+private var showExperimental = false
 
 private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, replay: Boolean) {
     val panel = card()
@@ -112,8 +124,12 @@ private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, repl
         setTypeface(null, Typeface.BOLD)
         setPadding(0, 0, 0, 0)
     }
-    chip(getString(if (exercise.mode == "hold") R.string.ui_mode_hold else R.string.ui_mode_reps), row(column))
+    val chips = row(column)
+    chip(getString(if (exercise.mode == "hold") R.string.ui_mode_hold else R.string.ui_mode_reps), chips)
+    if (exercise.experimental) chip(getString(R.string.ui_not_validated), chips, caution = true)
     text(exerciseFacts(exercise), 13, parent = column).setPadding(0, dp(6), 0, 0)
+    if (exercise.experimental) text((if (locale.language == "bg") exercise.reasonBg else exercise.reasonEn).orEmpty(), 13,
+        getColor(R.color.warning), column).setPadding(0, dp(4), 0, 0)
     var side = if (exercise.sided) formChoice.takeIf { it.exercise == exercise.id }?.side ?: "L" else null
     if (exercise.sided) {
         val sides = row(panel, 4)

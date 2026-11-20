@@ -71,9 +71,12 @@ class FormStreamTest {
     }
 
     @Test
-    fun hiddenExercisesKeepAReasonAndAreNotOffered() {
-        for (entry in FormExercises.all) assertEquals(entry.hidden, !entry.hiddenReason.isNullOrBlank(), entry.id)
-        assertEquals(FormExercises.all.filter { !it.hidden }, FormExercises.offered)
+    fun experimentalExercisesExplainWhyInBothLanguages() {
+        for (entry in FormExercises.all) {
+            assertEquals(entry.experimental, !entry.reasonEn.isNullOrBlank(), entry.id)
+            assertEquals(entry.experimental, !entry.reasonBg.isNullOrBlank(), entry.id)
+        }
+        assertEquals(FormExercises.all.filter { !it.experimental }, FormExercises.validated)
     }
 
     @Test
