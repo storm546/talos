@@ -1154,3 +1154,37 @@ UI and reset the stored rows and guide. The emulator was stopped afterward.
 These are emulator measurements, not Galaxy A54 results. The live camera opened on the emulator,
 but there was no person in frame; camera drop counts and battery behavior still need a physical
 test. The share sheet was tested with a local receiver, not with Taildrop, mail, or a messenger account.
+
+## 2026-11-20 — In-app jump capture and feedback
+
+The Android build kit passed `:core:test :app:assembleDebug :app:assembleDebugAndroidTest`.
+All 69 core tests passed with the private fixtures installed. The three private fixtures produced
+identical contact timestamps, flight counts and metrics JSON on `stage` and `capture`; flight times
+remain 280, 360 and 360 ms. No core detector or exercise catalogue changed.
+
+An API 34 emulator ran on `jumpscan-worker-a` under `/work/jumpscan-emu.lock`. We encoded a short
+excerpt of one reviewed jump at 30 fps and made a 60 fps copy by duplicating frames. The baseline
+APK was built directly from `stage`; it imported the same bytes as the new APK at both rates.
+
+| Input and path | Flight | Height | Comparison |
+| --- | ---: | ---: | --- |
+| 30 fps import | 325.19 ms | 12.97 cm | Entire metrics JSON matched `stage` |
+| 60 fps import | 321.18 ms | 12.65 cm | Entire metrics JSON matched `stage` |
+| 60 fps capture analysis | 321.18 ms | 12.65 cm | Same timestamp list, poses, result and edges as 60 fps import |
+
+The two rates did not give identical measurements to each other; the comparison is old versus new
+at each rate. The capture path rejected the 30 fps file when it was passed as a 60 fps recording.
+`AppChecks` also covered duration mismatch, duplicate and missing frames, headroom, cropped feet,
+landing detection and the two-of-three cue rule. The 60 fps analysis used all 142 video frames;
+the learned cross-check still uses its existing 30 fps resampling grid.
+
+The emulator camera reported at most 30 fps and no constrained high-speed mode. It exercised the
+real unavailable-rate screen. Visual checks drove framing, countdown and completed-rep UI with test
+fixtures, not a high-speed camera or a person in the emulator camera. The result screen used the
+measured 60 fps clip and a local test baseline response. Both English and Bulgarian screenshots
+were inspected and are stored under `/root/jumpscan/logs/capture/`.
+
+CameraX moved from 1.4.2 to 1.5.1 for the high-speed recording APIs. The Galaxy A54 still needs a physical
+test to confirm which fixed rates it exposes to this app, whether it sustains them, and whether live
+framing, the countdown audio and the post-landing stop work reliably with an athlete in view. The shown
+error bands come from the published 33 fps validation, not new calibration at 60, 120 or 240 fps.

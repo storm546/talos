@@ -35,7 +35,10 @@ class AppChecks : Instrumentation() {
     override fun onStart() {
         val output = Bundle()
         try {
-            if (only == "cutoff") videoCutoffCheck()
+            val capture = CaptureChecks(this)
+            if (only == "capture-parity") output.putString("parity", capture.parity())
+            else if (only == "capture-visual") capture.visual()
+            else if (only == "cutoff") videoCutoffCheck()
             else if (only == "timestamp") videoPreviewCheck()
             else {
                 clubChecks()
@@ -46,9 +49,10 @@ class AppChecks : Instrumentation() {
                 videoPreviewCheck()
                 videoCutoffCheck()
                 numberChecks()
+                capture.policies()
                 diagnosticChecks()
             }
-            output.putString("stream", "Club parsing, check-in validation, feature routing and ordering, queue migration, retry identity, isolation, durability, preview, number-format and diagnostic checks passed.\n")
+            output.putString("stream", "App checks passed.\n" + output.getString("parity").orEmpty())
             finish(Activity.RESULT_OK, output)
         } catch (e: Throwable) {
             output.putString("stream", "App checks failed: ${e.stackTraceToString()}\n")
