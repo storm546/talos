@@ -21,7 +21,7 @@ internal fun MainActivity.techniqueHistory(offset: Int = 0) {
             line.addView(column, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
             renderSetTitle(set, exercise, column)
             val summary = set.optJSONObject("summary") ?: JSONObject()
-            val hold = set.optString("mode", exercise?.optString("mode").orEmpty()) == "hold" || summary.has("hold_ms")
+            val hold = set.optString("mode", exercise?.optString("mode").orEmpty()) == "hold" || !summary.isNull("hold_ms")
             val total = android.widget.LinearLayout(this).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
                 gravity = android.view.Gravity.END
@@ -49,8 +49,6 @@ internal fun MainActivity.techniqueHistory(offset: Int = 0) {
         }
         if (offset > 0) button(getString(R.string.feedback_newest)) { techniqueHistory() }
         if (sets.size == 20) button(getString(R.string.form_older)) { techniqueHistory(offset + 20) }
-        button(getString(R.string.form_title), primary = true) { formHome() }
-        button(getString(R.string.home)) { home() }
     }, { home(it) })
 }
 
@@ -128,6 +126,4 @@ private fun MainActivity.techniqueDetail(set: JSONObject, exercise: JSONObject?,
                 if (values.isNull(key)) "—" else number(values, key)), 14, parent = panel)
         }
     }
-    button(getString(R.string.ui_form_history)) { techniqueHistory(offset) }
-    button(getString(R.string.home)) { home() }
 }
