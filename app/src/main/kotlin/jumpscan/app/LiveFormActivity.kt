@@ -430,7 +430,11 @@ class LiveFormActivity : ComponentActivity() {
             counter.text = String.format(appLocale, "%.1f", progress.holdMs / 1000.0)
             subcount.text = getString(R.string.form_in_band, progress.inBandMs / 1000.0)
         } else {
-            counter.text = String.format(appLocale, "%d", progress.complete)
+            val digits = String.format(appLocale, "%d", progress.complete)
+            if (counter.text.toString() != digits) {
+                counter.text = digits
+                if (progress.complete > 0) counter.bump()
+            }
             val counts = getString(R.string.form_counts, progress.complete, progress.partial, progress.unclear)
             subcount.text = if (stream == null) counts else getString(R.string.form_provisional_count, counts)
         }

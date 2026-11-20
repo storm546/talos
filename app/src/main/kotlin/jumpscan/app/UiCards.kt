@@ -36,6 +36,7 @@ internal fun Context.styleButton(button: Button, primary: Boolean) = button.appl
     minHeight = px(48)
     textSize = 15f
     stateListAnimator = null
+    pressFeedback()
 }
 
 internal fun MainActivity.card(parent: LinearLayout = page, hero: Boolean = false): LinearLayout = LinearLayout(this).apply {
@@ -44,6 +45,7 @@ internal fun MainActivity.card(parent: LinearLayout = page, hero: Boolean = fals
     setPadding(pad, pad, pad, pad)
     background = raisedSurface(hero)
     elevation = dp(if (hero) 3 else 1).toFloat()
+    if (parent === page && parent.childCount < 9) arrive((parent.childCount * 18L).coerceAtMost(90))
     parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
 }
 
@@ -147,10 +149,13 @@ internal fun MainActivity.stat(label: String, value: String, unit: String = "", 
             unit == "°" || unit == "%" -> "$value$unit"
             else -> "$value $unit"
         }
-        text(measurement, 32, getColor(R.color.ink), this).apply {
+        addView(Measurement(this@stat).apply {
+            text = measurement
+            textSize = 32f
+            setTextColor(getColor(R.color.ink))
             instrumentType(numeric = true)
             if (value == "—") contentDescription = getString(R.string.not_available)
-        }
+        })
     }
 
 internal fun MainActivity.targetBar(label: String, value: String, fraction: Double?, parent: LinearLayout) {
@@ -158,7 +163,7 @@ internal fun MainActivity.targetBar(label: String, value: String, fraction: Doub
     text(value, 20, green, parent).instrumentType(display = true)
     if (fraction != null) parent.addView(ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
         max = 100
-        progress = (fraction.coerceIn(0.0, 1.0) * 100).toInt()
+        setProgress((fraction.coerceIn(0.0, 1.0) * 100).toInt(), android.animation.ValueAnimator.areAnimatorsEnabled())
         progressTintList = ColorStateList.valueOf(green)
         progressBackgroundTintList = ColorStateList.valueOf(getColor(R.color.hover))
         importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO

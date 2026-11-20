@@ -307,6 +307,8 @@ class JumpCaptureActivity : ComponentActivity() {
         val number = (3 - elapsed / 1000).toInt()
         if (number != lastTick) {
             lastTick = number
+            status.instrumentType(numeric = true)
+            status.bump()
             status.textSize = 40f
             status.text = getString(R.string.jump_countdown, number)
             tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 150)

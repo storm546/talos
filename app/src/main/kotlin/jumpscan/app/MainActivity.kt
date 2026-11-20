@@ -162,6 +162,7 @@ class MainActivity : Activity() {
             insets
         }
         setContentView(scroll)
+        page.arrive()
         scroll.requestApplyInsets()
         text(getString(R.string.brand), 13, ink).apply {
             instrumentType(numeric = true)
@@ -645,7 +646,7 @@ class MainActivity : Activity() {
             runOnUiThread {
                 if (!isDestroyed && generation == expectedGeneration) {
                     progress?.isIndeterminate = false
-                    progress?.progress = value
+                    progress?.setProgress(value, android.animation.ValueAnimator.areAnimatorsEnabled())
                     progressText?.text = getString(R.string.progress, value)
                 }
             }
@@ -669,7 +670,7 @@ class MainActivity : Activity() {
             runOnUiThread {
                 if (screen == "busy" && !isDestroyed && generation == expectedGeneration) {
                     progress?.isIndeterminate = false
-                    progress?.progress = value
+                    progress?.setProgress(value, android.animation.ValueAnimator.areAnimatorsEnabled())
                     progressText?.text = getString(R.string.progress, value)
                 }
             }
