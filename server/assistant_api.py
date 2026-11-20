@@ -320,6 +320,14 @@ def install(app, h, operations):
             raise HTTPException(429, "Assistant request limit reached; try again later.", headers={"Retry-After": str(wait)})
         return user
 
+    def admit_work(user=Depends(rate_limit)):
+        if not app.state.heavy_slots.acquire(blocking=False):
+            raise HTTPException(503, h.BUSY_DETAIL, headers=h.BUSY_HEADERS)
+        try:
+            yield user
+        finally:
+            app.state.heavy_slots.release()
+
     def conversation(db, user_id, conversation_id):
         row = db.execute("SELECT * FROM assistant_conversations WHERE conversation_id = ? AND user_id = ? "
                          "AND updated_at > ?", (conversation_id, user_id, time.time() - RETENTION)).fetchone()
@@ -358,7 +366,7 @@ def install(app, h, operations):
         return {"pending_confirmation": action["human_summary"]}
 
     @app.post("/api/assistant")
-    def chat(body: Chat, authorization: Annotated[str, Header()], user=Depends(rate_limit), db=Depends(h.get_db)):
+    def chat(body: Chat, authorization: Annotated[str, Header()], user=Depends(admit_work), db=Depends(h.get_db)):
         user_id = user["id"]
         conversation_id = body.conversation_id or secrets.token_urlsafe(18)
         with db:
@@ -448,7 +456,7 @@ def install(app, h, operations):
         return {"conversation_id": conversation_id, "reply": reply, "proposal": proposal}
 
     @app.post("/api/assistant/confirm")
-    def confirm(body: Confirm, authorization: Annotated[str, Header()], user=Depends(rate_limit), db=Depends(h.get_db)):
+    def confirm(body: Confirm, authorization: Annotated[str, Header()], user=Depends(admit_work), db=Depends(h.get_db)):
         with h.write_transaction(db, app.state.events) as emit:
             fresh = h.current_user(authorization, db)
             proposal = db.execute("SELECT * FROM assistant_proposals WHERE proposal_id = ? AND user_id = ?",

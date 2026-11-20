@@ -13,6 +13,7 @@ from itertools import groupby
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import sqlite3
 import sys
@@ -116,6 +117,7 @@ def init_db(path):
                 id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor_id INTEGER,
                 action TEXT NOT NULL, target TEXT NOT NULL, detail TEXT NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS audit_deletions ON audit(actor_id, id) WHERE action = 'data_deleted';
             CREATE TABLE IF NOT EXISTS groups (
                 id INTEGER PRIMARY KEY,
                 club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
@@ -895,6 +897,36 @@ class RequestBodyLimit:
         await self.app(scope, buffered_receive, send)
 
 
+BUSY_DETAIL = "Server busy; try again later"
+BUSY_HEADERS = {"Retry-After": "2"}
+
+
+class ExpensiveRequests:
+    reads = re.compile(
+        r"/api/(?:checkins(?:/team)?|me/(?:export|calendar\.ics)|sessions/[^/]+/report|"
+        r"athletes/[^/]+/(?:export\.csv|form\.csv|training(?:\.csv)?|weights(?:\.csv)?|nutrition\.csv|"
+        r"nutrition/(?:estimate|summary|expenditure|program|target)))"
+    )
+    writes = re.compile(r"/api/athletes/[^/]+/nutrition/(?:program|target)")
+
+    def __init__(self, app, slots):
+        self.app = app
+        self.slots = slots
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "").removeprefix(scope.get("root_path", ""))
+        method = scope.get("method")
+        if not ((method == "GET" and self.reads.fullmatch(path)) or
+                (method == "PUT" and self.writes.fullmatch(path))):
+            return await self.app(scope, receive, send)
+        if not self.slots.acquire(blocking=False):
+            return await JSONResponse({"detail": BUSY_DETAIL}, status_code=503, headers=BUSY_HEADERS)(scope, receive, send)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            self.slots.release()
+
+
 def client_address(request):
     return request.client.host if request.client else "unknown"
 
@@ -909,6 +941,9 @@ def create_app(db_path=None):
                   description="Club landing mechanics, consent, personal baselines and coach discussions. No video is stored.",
                   lifespan=lifespan, debug=False)
     app.state.db_path = db_path if db_path is not None else database_path()
+    app.state.heavy_slots = threading.BoundedSemaphore(2)
+    login_slots = threading.BoundedSemaphore(4)
+    app.add_middleware(ExpensiveRequests, slots=app.state.heavy_slots)
     app.add_middleware(RequestBodyLimit)
     app.state.events = EventBus()
     training_tools = training_nutrition_api.install(app, sys.modules[__name__])
@@ -987,7 +1022,14 @@ def create_app(db_path=None):
             raise HTTPException(429, "Too many failed logins; try again later", headers={"Retry-After": "900"})
         user = db.execute("SELECT * FROM users WHERE email = ?", (body.email,)).fetchone()
         salt, expected = (user["password_salt"], user["password_hash"]) if user else (DUMMY_SALT, DUMMY_HASH)
-        matches = hmac.compare_digest(password_hash(body.password, salt), expected)
+        if not login_slots.acquire(blocking=False):
+            audit(db, None, "login_failure", body.email, {"reason": "busy"})
+            db.commit()
+            raise HTTPException(503, BUSY_DETAIL, headers=BUSY_HEADERS)
+        try:
+            matches = hmac.compare_digest(password_hash(body.password, salt), expected)
+        finally:
+            login_slots.release()
         # Recheck under the write lock so concurrent hashes cannot bypass the limits.
         now = time.time()
         db.execute("BEGIN IMMEDIATE")

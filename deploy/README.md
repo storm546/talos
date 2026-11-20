@@ -242,6 +242,16 @@ directory finishes the job — nothing else on the host was touched.
 - The API is HTTP inside the host. Do not expose `8171` on a public interface; the compose file binds it
   to `127.0.0.1` on purpose.
 - Login is rate limited to 5 failures per email and address pair and 30 failures per address per 15 minutes;
-  request bodies are capped at 16 KB. The address limit needs `--proxy-headers --forwarded-allow-ips`
+  request bodies are capped at 16 KiB (64 KiB for form uploads). The address limit needs `--proxy-headers --forwarded-allow-ips`
   (set in both startup paths using `FORWARDED_ALLOW_IPS`) to see through the reverse proxy.
+- Each process admits up to four simultaneous login hashes. Complete downloads, check-in lists and team
+  check-ins, session reports, training and nutrition calculations, nutrition target/program writes,
+  and assistant chat and confirmation share two slots.
+  Busy requests receive `503` and `Retry-After: 2`; busy login attempts are still audited. These limits
+  are independent of the existing login and assistant rate limits. Reserve disk space for complete
+  downloads in the service's temporary directory as well as for the database.
+- Audit entries have no automatic expiry. Keep them in the database and include the database in the
+  usual backups. Monitor database and backup storage during the event. Do not delete audit rows to
+  reclaim space. Changing retention or moving history offline requires an explicit owner-approved
+  policy, a verified archive, and a decision about administrator access to archived entries.
 - No video or image ever reaches the server, so there is nothing large to store and nothing to redact.
