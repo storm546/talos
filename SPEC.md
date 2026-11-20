@@ -386,8 +386,13 @@ published, general ones named below, apart from the owner's own weight-trend mod
 
 ### 6.1 Form tracker (on-device analysis; server stores numbers only)
 
-The form tracker offers live coaching and recorded-video analysis for all 20 entries in
-`core/src/main/resources/form_exercises.json`. The catalogue defines the English/Bulgarian names, mode,
+The form tracker offers live coaching and recorded-video analysis for every entry in
+`core/src/main/resources/form_exercises.json`. Entries that have passed the repetition benchmark in
+`core/VALIDATION.md` are listed normally. The bar is on held-out sets in the live 15 fps path: exact in at least 90%
+of sets, none off by more than one, at most 10% unclear, and at least 8 test sets from at least 3 people. Every other
+entry carries `experimental: true` with one-line `experimental_reason_en`/`experimental_reason_bg`. The app lists
+these in a collapsed "Experimental" section, each marked "Not validated" with its reason; live and recorded
+analysis work the same for them. The server accepts and lists every entry. The catalogue defines the English/Bulgarian names, mode,
 anatomical side selection, recommended view, joint or position signal, thresholds, checks, and bilingual
 cues. Live mode uses the MediaPipe lite model in `LIVE_STREAM` on the CPU; recorded video continues to use
 the heavy model in `VIDEO`. Both use `FormStream`. Given identical timestamped landmarks, aspect ratio,
@@ -406,13 +411,37 @@ The stream tracks rest-to-extremum-to-rest cycles with a minimum excursion and s
 It reports complete, partial, and unclear candidates separately. Repetition timing fields retain their
 legacy names; for movements that start low, descent/ascent fields refer to the first/second phase rather
 than physical vertical direction. Available checks are sampled at the signal extremum. Holds count observed
-time in the exercise posture and separately time inside the technique band; missing observations add no
-time. The two squat entries use the original whole-set calibration and measurement rules: live counts are
+time in the exercise posture and separately time inside the technique band; an unobserved stretch longer
+than 300 ms adds no time (shorter low-visibility or dropped-frame stretches are bridged). The two squat entries use the original whole-set calibration and measurement rules: live counts are
 provisional until `finish`. Depth is peak knee flexion (side: image plane; front: world), FPPA is measured
 at deepest flexion (front only), asymmetry uses both legs, and hips below knees is available from the side.
 
-All new exercises are experimental and unvalidated for real-world accuracy; see `core/VALIDATION.md` for
-synthetic coverage and real-clip comparisons. The two squat entries retain prior evidence and limitations.
+Validated status (benchmark of 20 November 2026, round 3; hand counts, Countix and MM-Fit; see `core/VALIDATION.md`):
+- **Squat** is validated: held-out live 15 fps, 21 of 22 sets exact, 12 people, none off by more than one, no
+  unclear repetitions.
+- **Plank** is validated for hold time: 9 of 9 held-out sets within max(1 s, 10%), 3 people. In-band time is
+  not validated (8 of 9 held-out sets live, below the bar).
+- **Experimental**, with their held-out exact rates:
+  - lateral raise 75% of 12;
+  - overhead press 67% of 12;
+  - biceps curl 62% of 13;
+  - jumping jack 61% of 28;
+  - pull-up 59% of 17;
+  - push-up 56% of 27;
+  - lunge 53% of 36;
+  - bent-over row 0% of 15;
+  - glute bridge, which has 2 counted sets;
+  - the other 9 entries, which have no counted or timed test videos.
+
+Catalogue signals may set:
+- `"limbs": "each"`: in a front view with no side chosen, each arm or leg is counted separately, and overlapping
+  repetitions on both sides count once;
+- `min_visibility` for the signal and its gate (checks keep 0.5);
+- `signal_front`: a driving signal used when the camera sees the athlete from the front. The metric `rise:a:b` is
+  the height of b above a, divided by the larger of shoulder width and torso length.
+
+In the squat counter, unusable frames are skipped, and only an unobserved stretch longer than max(200 ms, 1.5 median
+intervals) splits an observation. `FormStream` interrupts after 300 ms without a usable frame.
 Burpees are not included: the fast transition between upright and floor phases often hides joints, and
 push-up/jump variants cannot reliably be distinguished by the single cycle signal. No check measures load,
 contact with equipment, or medical outcomes. The checks are technique feedback only.

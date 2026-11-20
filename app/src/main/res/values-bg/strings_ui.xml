@@ -39,7 +39,12 @@
     <string name="ui_server_summary">Точните подробности от сървъра</string>
     <string name="ui_form_hero">Тренирайте техниката</string>
     <string name="ui_form_eyebrow">%1$d УПРАЖНЕНИЯ · НА ЖИВО ИЛИ ОТ ЗАПИС</string>
-    <string name="ui_form_validated_note">Само клекът е проверен срещу ръчно броене, на няколко клипа. Останалите упражнения са още експериментални.</string>
+    <string name="ui_form_experimental">Експериментални</string>
+    <string name="ui_form_experimental_note">Още не са валидирани: броят на повторенията и времето на задържане може да са грешни. На живо и от запис работят както обикновено.</string>
+    <string name="ui_form_show_experimental">Покажи експерименталните упражнения (%1$d)</string>
+    <string name="ui_form_hide_experimental">Скрий експерименталните упражнения (%1$d)</string>
+    <string name="ui_not_validated">Не е валидирано</string>
+    <string name="ui_form_validated_note">Проверени с отделени тестови видеа: броенето на клекове (точно в 21 от 22 видеа на 12 души, никога с повече от едно разминаване) и времето на задържане в планк (до секунда в 9 от 9 видеа). Останалите упражнения остават в „Експериментални“, докато не достигнат същото ниво (точен брой в поне 9 от 10 тестови видеа).</string>
     <string name="ui_replay_hint">Тестова версия: задръжте „На живо“, за да пуснете тестовия запис.</string>
     <string name="ui_group_legs">Крака</string>
     <string name="ui_group_hinge">Таз и наклони</string>

@@ -9,10 +9,15 @@ data class FormCheck(val key: String, val labelBg: String, val labelEn: String, 
 
 data class FormSignal(val metric: String, val up: Double, val down: Double, val minRange: Double,
     val gates: List<FormBand>, val peakAtTop: Boolean, val legacy: Boolean, val depthMin: Double?,
-    val openFlexion: Double?, val minPhaseMs: Long)
+    val openFlexion: Double?, val minPhaseMs: Long, val eachLimb: Boolean = false, val minVisibility: Float = 0.5f)
 
+/** [experimental] exercises have not passed the repetition benchmark (core/VALIDATION.md). The app lists them
+ *  apart, collapsed and marked as not validated, with the one-line [reasonEn]/[reasonBg]. */
 data class FormExercise(val id: String, val nameBg: String, val nameEn: String, val mode: String,
-    val sided: Boolean, val view: String, val signal: FormSignal, val checks: List<FormCheck>) {
+    val sided: Boolean, val view: String, val signal: FormSignal, val checks: List<FormCheck>,
+    val experimental: Boolean = false, val reasonEn: String? = null, val reasonBg: String? = null,
+    /** Driving signal used when the camera sees the athlete from the front, if it differs from [signal]. */
+    val signalFront: FormSignal? = null) {
     fun validateSide(side: String?) {
         require(if (sided) side == "L" || side == "R" else side == null) { "invalid exercise side" }
     }
@@ -25,22 +30,26 @@ object FormExercises {
         val json = FormJsonReader(text)
         json.array().map { entry ->
             val row = entry as Map<*, *>
-            val signal = row["signal"] as Map<*, *>
             fun band(item: Map<*, *>) = FormBand(item.string("metric"), item["min"] as? Double, item["max"] as? Double)
+            fun signal(signal: Map<*, *>) = FormSignal(signal.string("metric"), signal["up"] as Double, signal["down"] as Double,
+                signal["min_range"] as Double, listOfNotNull(signal["gate"] as? Map<*, *>,
+                    signal["support"] as? Map<*, *>).map(::band), signal["peak"] == "top", signal["legacy"] == true,
+                signal["depth_min"] as? Double, signal["open_flexion"] as? Double,
+                (signal["min_phase_ms"] as? Double)?.toLong() ?: 150, signal["limbs"] == "each",
+                (signal["min_visibility"] as? Double)?.toFloat() ?: 0.5f)
             FormExercise(row.string("id"), row.string("name_bg"), row.string("name_en"), row.string("mode"),
                 row["sided"] as Boolean, row.string("view"),
-                FormSignal(signal.string("metric"), signal["up"] as Double, signal["down"] as Double,
-                    signal["min_range"] as Double, listOfNotNull(signal["gate"] as? Map<*, *>,
-                        signal["support"] as? Map<*, *>).map(::band), signal["peak"] == "top", signal["legacy"] == true,
-                    signal["depth_min"] as? Double, signal["open_flexion"] as? Double,
-                    (signal["min_phase_ms"] as? Double)?.toLong() ?: 150),
+                signal(row["signal"] as Map<*, *>),
                 (row["checks"] as List<*>).map { entryCheck ->
                     val check = entryCheck as Map<*, *>
                     FormCheck(check.string("key"), check.string("label_bg"), check.string("label_en"), check.string("unit"),
                         check.string("cue_bg"), check.string("cue_en"), band(check))
-                })
+                }, row["experimental"] == true, row["experimental_reason_en"] as? String,
+                row["experimental_reason_bg"] as? String, (row["signal_front"] as? Map<*, *>)?.let(::signal))
         }
     }
+    /** Exercises that passed the repetition benchmark. */
+    val validated: List<FormExercise> by lazy { all.filter { !it.experimental } }
     private val byId by lazy { all.associateBy { it.id } }
     operator fun get(id: String): FormExercise = requireNotNull(byId[id]) { "unknown form exercise: $id" }
     private fun Map<*, *>.string(key: String) = get(key) as String

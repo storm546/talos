@@ -201,18 +201,25 @@ object FormAnalyzer {
             else if (initialOpen) unclear(fs.first().tMs, fs.last().tMs,
                 listOf(if (leftGap) "tracking_gap" else "incomplete_start"))
         }
-        var runStart = -1
+        // Live frames arrive irregularly, one dropped frame doubles an interval, and a pose model can lose a
+        // joint for a frame or two. Unusable frames are skipped; only an unobserved stretch longer than 200 ms
+        // (or 1.5 median intervals for slower cadences) between usable frames splits the observation.
+        val limit = maxOf(200.0, step * 1.5)
+        val run = mutableListOf<Frame>()
         var leftGap = false
         var hadGap = false
-        for (i in frames.indices) {
-            val gap = i > 0 && frames[i].tMs - frames[i - 1].tMs > minOf(150.0, step * 1.5)
-            if (!usable(frames[i]) || gap) {
-                if (runStart >= 0) segment(frames.subList(runStart, i), leftGap, true)
-                runStart = -1; leftGap = true; hadGap = true
+        for (f in frames) {
+            if (!usable(f)) continue
+            if (run.isEmpty() && f.tMs - frames.first().tMs > limit) { leftGap = true; hadGap = true }
+            if (run.isNotEmpty() && f.tMs - run.last().tMs > limit) {
+                segment(run.toList(), leftGap, true)
+                run.clear(); leftGap = true; hadGap = true
             }
-            if (usable(frames[i]) && runStart < 0) runStart = i
+            run += f
         }
-        if (runStart >= 0) segment(frames.subList(runStart, frames.size), leftGap, false)
+        val trailing = run.isNotEmpty() && frames.last().tMs - run.last().tMs > limit
+        if (trailing) hadGap = true
+        if (run.isNotEmpty()) segment(run.toList(), leftGap, trailing)
         // An unobserved interval can hide entire repetitions even when both surrounding poses are upright.
         if (hadGap && reps.none { "tracking_gap" in it.reasons })
             unclear(frames.first().tMs, frames.last().tMs, listOf("tracking_gap"))

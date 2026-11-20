@@ -39,7 +39,12 @@
     <string name="ui_server_summary">Exact details from the server</string>
     <string name="ui_form_hero">Coach your technique</string>
     <string name="ui_form_eyebrow">%1$d EXERCISES · LIVE OR FROM VIDEO</string>
-    <string name="ui_form_validated_note">Only the squat has been checked against hand counts, on a few clips. The other exercises are still experimental.</string>
+    <string name="ui_form_experimental">Experimental</string>
+    <string name="ui_form_experimental_note">Not validated yet: repetition counts and hold times may be wrong. Live and From video work as usual.</string>
+    <string name="ui_form_show_experimental">Show experimental exercises (%1$d)</string>
+    <string name="ui_form_hide_experimental">Hide experimental exercises (%1$d)</string>
+    <string name="ui_not_validated">Not validated</string>
+    <string name="ui_form_validated_note">Checked against held-out test videos: squat counting (exact in 21 of 22 videos of 12 people, never off by more than one) and plank hold time (within a second in 9 of 9 videos). Other exercises stay under Experimental until they reach the same bar (exact in at least 9 of 10 test videos).</string>
     <string name="ui_replay_hint">Debug build: press and hold Live to replay the test recording.</string>
     <string name="ui_group_legs">Legs</string>
     <string name="ui_group_hinge">Hinge and hips</string>

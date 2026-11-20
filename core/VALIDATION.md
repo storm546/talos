@@ -406,7 +406,7 @@ invalid exercise/side/aspect, malformed landmark shape or non-increasing timesta
 visibility is averaged across all input frames, rejected frames included; front measured joints use
 the lower of image/world visibility. Mean quality <0.7 or any rejected frame adds `low_visibility`.
 
-Rejected frames and timestamp gaps above min(1.5 median intervals, 150 ms) split observations;
+Unobserved stretches (rejected frames or timestamp gaps) longer than max(200 ms, 1.5 median intervals) split observations (before 2026-11-19: any rejected frame, or a gap above min(1.5 median intervals, 150 ms));
 smoothing never crosses them. Open boundaries (`incomplete_start`, `incomplete_end`), interruptions
 (`tracking_gap`), either phase shorter than 150 ms (`too_fast`), or zero-length segments
 (`degenerate_geometry`) produce `unclear` observations and `unclear_reps`. An initial mean flexion
@@ -555,3 +555,433 @@ phases need separate tracking and occlusion remains unresolved. The kit director
 distinct protocols; it was not used to validate this product. Countix/RepCount include YouTube-sourced
 clips without a verified reusable licence per clip. No usable Kaggle credentials were found in the
 kit builder environment, and no token was printed or copied.
+
+## 2026-11-19: Repetition benchmark, live cadence fix and hidden exercises
+
+### Protocol
+
+Sets are continuous camera shots of one person, cut from openly licensed videos: Creative Commons
+Attribution YouTube videos (downloaded one at a time, licence read from the video metadata), the Kaggle
+dataset `hasyimabdillah/workoutfitness-video` (CC BY-NC-SA 4.0, mostly re-cut from YouTube by the dataset
+author) and the existing Pexels 5034571 crops. 257 YouTube videos and 180 Kaggle clips were screened;
+automatic shot detection plus a whole-body-in-frame check (the app's framing rule) left 332 candidate
+shots (`/root/jumpscan/logs/reps/full-body-shots.csv`). Ground truth is a hand count from the frames:
+person-cropped contact sheets at 2 to 6 frames per second and pixel time slices through the person. The
+pose model only places the crop box; it never supplies the counted signal. A repetition counts when the
+person is visibly back at the start position inside the set. Sets whose count was not certain, or which
+start in the middle of a movement after a camera cut, are marked unclear and excluded. People are
+assigned to train or test by a hash of exercise and person (`SHA-1 mod 3 == 0` is test), so nobody is in
+both. Test results were not looked at until the engine was frozen.
+
+Every set is scored in three paths, all through the Kotlin engine (`FormBatch`, `AUTO` view):
+recorded (heavy model, every source frame, `VIDEO` mode, 720 px, no-pose frames kept as empty rows like
+`VideoAnalysis`), and live-equivalent at 15 and 24 frames per second (lite model on an irregular
+schedule: each interval is 1/rate times U(0.8, 1.2) and 5% of intervals are doubled, as when
+`LIVE_STREAM` drops frames while busy; tracking runs only on the frames taken). The bar for offering an
+exercise, on the held-out sets in the live 15 fps path: exact complete count in at least 90% of sets, no
+set off by more than one repetition, and at most 10% unclear repetitions. Holds would need the hold time
+within max(1 s, 10%) of the hand-timed hold on 90% of sets.
+
+### Why live counts were unstable
+
+The squat counter split an observation at any interval above min(150 ms, 1.5 median intervals) and at
+any single rejected frame. At live cadence one dropped frame doubles an interval (about 133 ms at 15 fps
+against a 100 ms limit), so sets fell apart into `tracking_gap` halves. Replaying the stock 4-repetition
+clip through the simulator reproduced the emulator's spread (0 to 1 complete with 7 to 11 unclear at 15 fps;
+the emulator gave 3 to 5 complete). Fixes, the same rule in both engines:
+
+- The squat analyzer skips unusable frames and only splits on an unobserved stretch longer than
+  max(200 ms, 1.5 median intervals) between usable frames. `FormStream` likewise skips frames without the
+  signal or gate joints and only interrupts after 300 ms without a usable frame (holds bridge the same
+  stretch). The new test `liveCadenceWithDroppedAndLowVisibilityFramesKeepsSquatCount` fails on the old rule.
+- Squat `open_flexion` 30 -> 45 degrees. Standing knee flexion read 27-38 degrees on the lite model for a
+  loaded squat (development set squat-002), which marked a standing start as open; real open starts in the
+  development sets read 51-120 degrees. Single-leg squat keeps 30 (no evidence).
+
+Two further ideas were tried on the development sets and dropped: deciding open starts from hip height
+(counted a start that was already mid-descent) and accepting a last repetition after 75% of its return
+(counted the stock clip's clipped final return). The relative-hysteresis rewrite of `FormStream` was not
+kept because no non-squat exercise has enough hand-counted sets to measure it.
+
+The public squat tracks archived by the earlier form work give byte-identical JSON before and after (squat,
+single-leg L and R). The private jump fixtures change only in unclear and boundary counts (jump1 squat
+2/0/3 -> 2/0/2, jump3 2/0/3 -> 3/0/1); they are jump recordings, not squat references.
+
+### Results (squat; complete count against hand count)
+
+| Engine | Split | Path | Sets | People | Exact | Mean abs. error | False reps | Missed reps | Unclear per hand rep | Off by >1 | Same count as recorded |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| before | train | recorded heavy | 9 | 8 | 44% | 1.56 | 0 | 14 | 0.51 | 3 | — |
+| before | train | live 15 fps | 9 | 8 | 11% | 2.78 | 0 | 25 | 1.83 | 6 | 0% |
+| before | train | live 24 fps | 9 | 8 | 0% | 3.78 | 0 | 34 | 8.06 | 8 | 11% |
+| before | test | recorded heavy | 3 | 3 | 67% | 0.33 | 0 | 1 | 0.14 | 0 | — |
+| before | test | live 15 fps | 3 | 3 | 0% | 3.33 | 0 | 10 | 1.50 | 2 | 0% |
+| before | test | live 24 fps | 3 | 3 | 0% | 4.67 | 0 | 14 | 6.36 | 3 | 0% |
+| after | train | recorded heavy | 9 | 8 | 56% | 1.44 | 0 | 13 | 0.46 | 3 | — |
+| after | train | live 15 fps | 9 | 8 | 89% | 0.11 | 0 | 1 | 0.20 | 0 | 67% |
+| after | train | live 24 fps | 9 | 8 | 89% | 0.11 | 0 | 1 | 0.20 | 0 | 67% |
+| after | test | recorded heavy | 3 | 3 | 67% | 0.33 | 0 | 1 | 0.14 | 0 | — |
+| after | test | live 15 fps | 3 | 3 | 67% | 0.33 | 0 | 1 | 0.14 | 0 | 100% |
+| after | test | live 24 fps | 3 | 3 | 67% | 0.33 | 0 | 1 | 0.14 | 0 | 100% |
+
+After the fix every remaining live unclear is a boundary flag (`incomplete_start` or `incomplete_end`) on a
+set that starts or ends mid-movement; there are no `tracking_gap` or `too_fast` unclears. The live misses
+are one final repetition that returns 0.2 s before the shot ends (squat-007) and one fast cycle of the
+Pexels woman (squat-013, test, 8 of 9, the miss already documented above). Recorded heavy is worse than
+live on this data: on two gym clips and one cut-out studio video the heavy model reports leg visibility
+below 0.5 while standing, so the frames are rejected (squat-002 and squat-008 split into tracking gaps,
+squat-003 is refused). The lite model sees the same frames with visibility above 0.8.
+
+Squat misses the bar (2 of 3 held-out sets exact; 8 of 9 development sets), and the held-out split is far too
+small to show 90% either way. Glute bridge has two hand-counted sets (both exact live). No other exercise
+has hand-counted sets yet: the candidate shots exist, but counting them reliably by hand is the remaining
+work. Every catalogue entry is therefore `hidden: true` with a `hidden_reason`; the app's picker lists only
+entries without it, the server still accepts uploads and lists every entry so older sets keep working. To
+offer an exercise again, remove its `hidden` flag after its held-out sets pass the bar.
+
+Per-set results, the index (source, licence, URL, person, split, view, segment, hand count, notes), the
+scripts and the raw `FormBatch` outputs are in `/root/jumpscan/logs/reps/` (`INDEX.csv`, `gt.csv`,
+`results-final.csv`, `results-baseline.csv`, `detail-*.txt`, `batch/`). Videos, set cuts and landmark tracks
+stay on the kit under `/work/jumpscan-data/form/reps/`. Reproduce on the kit: `run_tracks.sh INDEX.csv`, then
+`run_batch.sh <tag> <core.jar>`, then on openclaw `score.py INDEX.csv batch/<tag> out.csv train test`.
+
+Limits: 12 squat sets from 11 people is a small sample; the Kaggle squat clips hold one or two repetitions;
+none of this is from a phone camera; the live path is simulated from recorded video, not measured on a
+Galaxy A54.
+
+## 2026-11-20: Benchmark with Countix and MM-Fit, Experimental section
+
+The first round (above) had hand counts only for squat, so every exercise was hidden. This round adds two
+public repetition-count sources, reruns every path, and replaces hiding with an Experimental section.
+
+### Sources and licences
+
+- **Hand-counted sets** (the 12 squat and 2 glute-bridge sets above). Three squat sets are cut from the Kaggle
+  dataset "Workout/Exercises Video" by hasyimabdillah, licensed CC BY-NC-SA 4.0 (attribution, non-commercial,
+  share-alike); the owner approved keeping them on 2026-11-19. The clips stay on the build kit and are not
+  redistributed in this repository. Attribution: hasyimabdillah, Workout/Exercises Video, Kaggle,
+  https://www.kaggle.com/datasets/hasyimabdillah/workoutfitness-video, CC BY-NC-SA 4.0.
+- **Countix** (Dwibedi et al., "Counting Out Time", CVPR 2020; Google Research): YouTube id, Kinetics clip and
+  repetition start and end with a count. Only the train and validation files carry a class column; the
+  Kinetics-700-2020 test annotations have no labels, so the Countix test file could not be mapped and is unused.
+  No licence statement was found in the Countix archive README, on sites.google.com/view/repnet or on the CVDF
+  Kinetics page, nor in the Kinetics-700-2020 annotation archive or its readme; the videos belong to their
+  YouTube uploaders. INDEX.csv records this per set. Classes used: squat, push up, pull ups, jumping jacks.
+  Lunge was not used: Countix counts alternating legs, the catalogue lunge is one side at a time.
+- **MM-Fit** (Strömbäck, Huang and Radu, IMWUT 2020), RGB video from Zenodo record 7672767 under CC BY 4.0,
+  labels (start frame, end frame, count) from the project archive at mmfit.github.io. Downloaded on the kit only.
+  The label frame f is video time f/30 s: the videos are 30 fps and the pose frame indices end at the video's
+  last frame (w19: 52 561 frames), and the squat and jumping-jack sets checked on time slices start and stop
+  where the labels say. Used: squat, push_up, jumping_jack, overhead_press (seated dumbbell press) and
+  lateral_raise (seated). Not used: curls (MM-Fit alternates arms, the catalogue counts both together), rows
+  (single-arm), lunges (alternating) and the exercises without a catalogue entry. Held out by subject: the
+  dataset authors' unseen-subject sessions w00, w05, w12, w13 and w20 are the test split; tuning used the first
+  set of each exercise in w01-w04 and w19. Sets are cut with 1 s before and after the labelled frames.
+
+### Countix filtering and spot-check
+
+Each annotated span was downloaded with yt-dlp (`--download-sections`, keyframes forced at the cuts), one at a
+time on openclaw, and moved to the kit: 492 of the 527 selected rows were still online. Filters, in order: the joints the
+exercise needs visible and inside the image on at least 75% of frames sampled at 4 fps (`visible.py`); the
+downloaded file starts at 0 and lasts the requested span within 0.2 s (`probe.csv`; about a third failed, mostly
+videos that end before the Kinetics clip or start at a later keyframe); no camera cut inside the span
+(`shots.py`); and a look at two frames of every remaining clip to drop other exercises and scenes with two
+people (`countix/screen-exclude.csv`: inverted rows and kipping in "pull ups", pike and wall push-ups in "push up",
+Olympic lifts and split squats in "squat", trampolines in "jumping jacks").
+
+Labels were spot-checked on pixel time slices of 12 segments per exercise (`countix/spotcheck.csv`):
+- jumping jacks 10 exact and 2 within one of 12;
+- pull ups 7 exact and 3 within one of 10 countable (3 of the 12 were inverted rows, now screened out);
+- push up 8 exact and 3 within one of 11 countable;
+- squat 10 exact of 11 countable (the twelfth had a camera cut, now filtered).
+
+The disagreements are all at the edges of the span. No exercise's Countix data was dropped.
+
+Countix spans start at the first counted movement and end at the last, often mid-cycle, and Countix counts
+those edge cycles. A rest-to-rest counter reports them as boundary observations (`incomplete_start` or
+`incomplete_end`). For Countix sets only, one boundary observation per edge is therefore counted as a repetition.
+Hand-counted and MM-Fit sets start and end at rest (MM-Fit with 1 s of margin), so there only complete repetitions
+count. Boundary flags are reported separately and are not counted as unclear; the unclear rate in the bar covers
+`tracking_gap`, `too_fast` and `degenerate_geometry`.
+
+### Results
+
+Exact = complete count equals the label (Countix: plus edge observations, as above). Live is the lite model at
+an irregular 15 fps, recorded is the heavy model at every frame. "Before" is the engine and catalogue at f172120.
+Unclear counts interior unclear observations per labelled repetition; boundary flags are left out.
+
+| Exercise | Source | Split | Sets | People | Live exact (before) | Live MAE | Live off by >1 | Live unclear | Recorded exact (before) | Live = recorded |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| glute_bridge | all | test | 1 | 1 | 100% (100%) | 0.0 | 0 | 0% | 100% (100%) | 100% |
+| glute_bridge | all | train | 1 | 1 | 100% (100%) | 0.0 | 0 | 0% | 0% (0%) | 0% |
+| jumping_jack | all | test | 28 | 18 | 61% (39%) | 1.29 | 7 | 1% | 61% (57%) | 64% |
+| jumping_jack | all | train | 24 | 24 | 46% (38%) | 1.33 | 4 | 4% | 46% (38%) | 50% |
+| jumping_jack | countix | test | 16 | 14 | 69% (62%) | 1.25 | 3 | 0% | 69% (69%) | 50% |
+| jumping_jack | countix | train | 21 | 21 | 48% (43%) | 1.1 | 3 | 3% | 52% (43%) | 52% |
+| jumping_jack | mmfit | test | 12 | 4 | 50% (8%) | 1.33 | 4 | 2% | 50% (42%) | 83% |
+| jumping_jack | mmfit | train | 3 | 3 | 33% (0%) | 3.0 | 1 | 7% | 0% (0%) | 33% |
+| lateral_raise | all | test | 12 | 4 | 75% (33%) | 0.5 | 3 | 0% | 50% (33%) | 75% |
+| lateral_raise | all | train | 4 | 4 | 75% (25%) | 1.0 | 1 | 0% | 0% (0%) | 25% |
+| overhead_press | all | test | 12 | 4 | 25% (25%) | 3.17 | 7 | 1% | 0% (0%) | 25% |
+| overhead_press | all | train | 5 | 5 | 80% (80%) | 0.6 | 1 | 0% | 80% (80%) | 80% |
+| pull_up | all | test | 17 | 17 | 47% (35%) | 0.76 | 1 | 13% | 35% (41%) | 24% |
+| pull_up | all | train | 29 | 29 | 45% (24%) | 1.34 | 9 | 25% | 41% (31%) | 24% |
+| push_up | all | test | 27 | 17 | 18% (7%) | 5.74 | 20 | 6% | 15% (18%) | 26% |
+| push_up | all | train | 27 | 25 | 48% (30%) | 2.67 | 14 | 8% | 30% (22%) | 15% |
+| push_up | countix | test | 12 | 12 | 33% (17%) | 1.33 | 6 | 6% | 17% (25%) | 33% |
+| push_up | countix | train | 22 | 20 | 50% (32%) | 2.05 | 11 | 6% | 32% (23%) | 14% |
+| push_up | mmfit | test | 15 | 5 | 7% (0%) | 9.27 | 14 | 6% | 13% (13%) | 20% |
+| push_up | mmfit | train | 5 | 5 | 40% (20%) | 5.4 | 3 | 12% | 20% (20%) | 20% |
+| squat | all | test | 22 | 12 | 96% (0%) | 0.05 | 0 | 0% | 96% (77%) | 86% |
+| squat | all | train | 29 | 28 | 76% (7%) | 0.34 | 1 | 5% | 55% (48%) | 41% |
+| squat | hand | test | 3 | 3 | 67% (0%) | 0.33 | 0 | 0% | 67% (67%) | 100% |
+| squat | hand | train | 9 | 8 | 89% (11%) | 0.11 | 0 | 0% | 56% (44%) | 67% |
+| squat | countix | test | 4 | 4 | 100% (0%) | 0.0 | 0 | 0% | 100% (75%) | 25% |
+| squat | countix | train | 15 | 15 | 60% (7%) | 0.6 | 1 | 16% | 47% (47%) | 13% |
+| squat | mmfit | test | 15 | 5 | 100% (0%) | 0.0 | 0 | 0% | 100% (80%) | 100% |
+| squat | mmfit | train | 5 | 5 | 100% (0%) | 0.0 | 0 | 0% | 80% (60%) | 80% |
+
+### Engine and catalogue changes (chosen on the training split only)
+
+- jumping_jack: `down` 1.05 -> 0.75 torso widths and `min_phase_ms` 150 -> 80. Countix jumping jacks peak at 0.9-1.0
+  torso widths and switch phase in under 150 ms. Train, live: exact 4 -> 10 of 18 Countix sets at the time of tuning.
+- pull_up: `up` 153 -> 130 degrees and gate `height:shoulder:wrist` min 0.1 -> -0.2. A dead hang reads 146-150
+  degrees in 2D, so rest was never reached, and at the top the wrists are level with the shoulders, so the gate
+  aborted the cycle. Train, live: exact 7 -> 10 of 25.
+- push_up: `up` 153 -> 140 degrees (locked-out arms read below 153 in many views). Train, live: exact 7 -> 11 of 22.
+- lateral_raise: `up` 27 -> 35 degrees (seated arms hang wider). Train, live: exact 1 -> 3 of 4 MM-Fit sets.
+- Tried and not shipped:
+  - a relative return level (end a repetition after it undoes a share of its own range): no gain on train;
+  - time-constant smoothing of the counting signal (`smooth_ms`, an exponential filter after the median-of-3
+    filter, reset after gaps). It was chosen on train (60 ms for jumping jacks, 120 ms for pull-ups) and then
+    compared once on the held-out split: jumping jacks 61% -> 61% exact, pull-ups 47% -> 47%, recorded MAE
+    slightly worse. No improvement, so it is not in the engine;
+  - rest bands from the athlete's first complete repetition (`adapt_rest`, clamped to the catalogue value and below
+    the midpoint): worse on train for all three exercises, so it was not taken to the held-out split.
+- Squat is unchanged from the first round (gap bridging, `open_flexion` 45).
+
+### Decision
+
+Bar, on the held-out split at live 15 fps: exact on at least 90% of sets, none off by more than one, unclear at most
+10%, and at least 8 test sets from at least 3 people.
+
+| Exercise | Held-out sets / people | Live exact | Off by >1 | Unclear | Status |
+|---|---|---:|---:|---:|---|
+| squat | 22 / 12 | 95.5% (21 of 22) | 0 | 0% | **validated**, offered normally |
+| lateral_raise | 12 / 4 | 75% | 3 | 0% | experimental |
+| jumping_jack | 28 / 18 | 61% | 7 | 1% | experimental |
+| pull_up | 17 / 17 | 47% | 1 | 13% | experimental |
+| overhead_press | 12 / 4 | 25% | 7 | 1% | experimental |
+| push_up | 27 / 17 | 19% | 20 | 6% | experimental |
+| glute_bridge | 1 / 1 | – | – | – | experimental (too few sets) |
+| the other 13 | 0 | – | – | – | experimental (no counted test videos) |
+
+Push-ups fail mostly on MM-Fit's frontal camera (the catalogue asks for a side view) and on refusals where the
+body-tilt gate never opens. Overhead press and lateral raise come from seated MM-Fit sets only, filmed from the
+front by one camera. These are data and view limits as much as engine limits; the experimental reason in the
+catalogue states the held-out number.
+
+The app no longer hides anything. Validated exercises are listed as before. All others sit in a collapsed
+"Experimental" ("Експериментални") section at the end of the picker. It is closed on every start and is opened
+with a "Show experimental exercises (N)" button. Each card has a "Not validated" chip and the one-line reason
+from the catalogue (`experimental_reason_en`/`_bg`). Live and From video work the same. The server keeps
+accepting and listing every catalogue entry.
+
+Files are in `/root/jumpscan/logs/reps/`:
+- `INDEX.csv`, which records for every set its source, licence, URL, person or session, split and label;
+- `results-final.csv` and `results-baseline.csv`;
+- the Countix work in `countix/` (selection, fetch log, visibility, timing probe, screening, spot-check);
+- the MM-Fit set list in `mmfit/sets.csv`;
+- the scripts.
+
+Countix and MM-Fit videos, cut sets and tracks stay on the kit under `/work/jumpscan-data/form/reps/`. None of
+this is phone footage, and the live path is simulated from recorded video.
+
+## 2026-11-20 (later): Views, per-limb counting, more ground truth
+
+Goal: bring the remaining exercises to the same bar as squat. The bar and the rules are unchanged: choose on the
+training split, ship only if the held-out split improves, and use squat (21 of 22) as the regression guard.
+
+### New ground truth
+
+- **MM-Fit curls, rows and lunges.** In the first round these were dropped because the athletes alternate arms or
+  legs. They are now used, with the same unseen-subject split (w00, w05, w12, w13, w20 held out).
+  - Curls and rows count each arm; see the engine changes below.
+  - A lunge bends both knees, so the one measured leg (side L) sees every lunge, whichever leg steps.
+  - Each set is counted as MM-Fit labels it: the total number of arm or leg repetitions.
+- **Countix "lunge".** 142 of 155 spans were still online. After the same visibility, timing, camera-cut and
+  screening filters, 68 sets remain. Ten more were screened out: lateral lunges, two-person scenes and cropped legs.
+  Spot-check of 12 segments: 9 exact, 2 within one, and 1 not countable (moving camera).
+- **Plank, hand-timed.** 15 segments from the Kaggle dataset "Workout/Exercises Video" by hasyimabdillah (CC BY-NC-SA
+  4.0) and from Creative Commons YouTube videos. The label is the time in the hold, read off pixel time slices at
+  5 fps.
+  - Most segments are continuous shots in which the athlete holds the plank throughout.
+  - Two YouTube segments include getting into or out of the hold.
+  - In-band time (body line) was not labelled; only hold time is benchmarked. A hold set counts as exact when the
+    measured hold is within max(1 s, 10%) of the label.
+  - The three held-out plank people all come from the Kaggle clips, and 6 of the 9 test segments are one person.
+- **Not found or not used.**
+  - RepCount/RepCount-A (TransRAC): its videos are YouTube-sourced with no reusable licence per clip, the
+    same situation as Countix. Not used in this round.
+  - Countix front raises: not a catalogue exercise. Countix situp: not in the catalogue. Deadlifting: no Countix
+    class.
+  - Glute bridge, dip, wall sit, side plank, split squat, lateral lunge, step-up, Romanian deadlift, calf raise and
+    single-leg squat: still fewer than the 8 held-out sets from 3 people the bar needs. Of 30 glute-bridge shots only
+    2 were countable tutorial segments.
+
+### Engine changes
+
+- **Per-limb counting** (`"limbs": "each"`). In a front view with no side chosen, each arm or leg gets its own
+  repetition tracker.
+  - A repetition on one limb that overlaps at least half of a repetition already counted on the other limb is the
+    same movement and counts once. So alternating curls count every arm, and a two-arm curl counts once.
+  - A unit test covers both cases.
+  - The single-tracker path gives byte-identical results to before on every set.
+- **View-specific driving signal** (`signal_front`), used when the camera sees the athlete from the front.
+  - Push-up from the front: `rise:wrist:nose`, the nose height above the wrists divided by the larger of
+    shoulder width and torso length. That scale survives a horizontal body seen head-on, where the torso length
+    collapses.
+- **Per-signal visibility threshold** (`min_visibility`). MediaPipe's visibility for the arms of a push-up seen
+  from the front is often 0.1–0.2 while the coordinates stay smooth.
+  - The signal and its gate may use a lower threshold. Technique checks keep 0.5.
+- **Catalogue changes, all chosen on the training split:**
+  - push-up: side signal at visibility 0.1, plus the frontal signal (rest above 0.8, bottom below 0.3, range 0.4);
+  - biceps curl: per-limb, rest at 140 degrees;
+  - lateral raise: per-limb;
+  - pull-up: signal visibility 0.2.
+- **Dropped.**
+  - Lunge rest at 145 degrees: live exact rose from 53% to 58% on the held-out split, but recorded fell from 22% to
+    19%.
+  - A frontal row signal without the trunk-tilt gate: MM-Fit's single-arm rows stayed at 0–1 of 5 on train.
+
+### Results (held-out split)
+
+"Start" is the engine at the beginning of this round. "f172120" is the engine before any benchmark work.
+
+| Exercise | Held-out sets / people | Live exact: f172120 / start / now | Live off by >1 | Live unclear | Recorded exact: f172120 / start / now | Status |
+|---|---|---|---:|---:|---|---|
+| squat | 22 / 12 | 0% / 95.5% / 95.5% | 0 | 0% | 77% / 95.5% / 95.5% | validated |
+| plank (hold time) | 9 / 3 | 100% / 100% / 100% | 0 | – | 89% / 89% / 89% | validated (hold time only; Kaggle NC data) |
+| lateral_raise | 12 / 4 | 33% / 75% / 75% | 3 | 0% | 33% / 50% / 67% | experimental |
+| biceps_curl | 13 / 5 | 0% / 0% / 62% | 1 | 2% | 0% / 0% / 54% | experimental |
+| jumping_jack | 28 / 18 | 39% / 61% / 61% | 7 | 1% | 57% / 61% / 61% | experimental |
+| pull_up | 17 / 17 | 35% / 47% / 59% | 1 | 2% | 41% / 35% / 41% | experimental |
+| push_up | 27 / 17 | 7% / 18% / 56% | 8 | 5% | 18% / 15% / 56% | experimental |
+| lunge | 36 / 25 | 53% / 53% / 53% | 13 | 31% | 14% / 22% / 22% | experimental |
+| overhead_press | 12 / 4 | 25% / 25% / 25% | 7 | 1% | 0% / 0% / 0% | experimental |
+| bent_over_row | 15 / 5 | 0% / 0% / 0% | 15 | 1% | 0% / 0% / 0% | experimental |
+| glute_bridge | 1 / 1 | – | – | – | – | experimental (2 counted sets) |
+| 9 others | 0 | – | – | – | – | experimental (no counted or timed test videos) |
+
+Per view (live, held-out): no exercise passes in a single view either.
+- push-up: front 59% of 17, side 50% of 10;
+- pull-up: front 70% of 10, side 43% of 7;
+- lunge: front 58% of 26, side 40% of 10;
+- jumping jack: front 59% of 27.
+
+By source:
+- push-up: MM-Fit 73% of 15, Countix 33% of 12;
+- lunge: MM-Fit 80% of 15, Countix 33% of 21.
+
+Countix's mid-cycle span edges remain the main source of error for push-ups, lunges and jumping jacks.
+
+Full per-source and per-view tables, the index and the scripts are in `/root/jumpscan/logs/reps/`:
+- `results2-final.csv`, `results2-start.csv`, `results2-baseline.csv`;
+- `INDEX.csv`;
+- `countix/`, `mmfit/`.
+
+## 2026-11-20 (round 3): Countix edges, failure analysis, plank in-band time
+
+### Countix edge repetitions
+
+Countix sets already run exactly from `repetition_start` to `repetition_end`. Three ways of treating the
+mid-cycle movements at the two edges were compared on the training clips only:
+- complete repetitions only;
+- one boundary observation per edge counted (`any`, the rule since round 2);
+- an edge counted only if it lasts at least half the set's typical repetition (`half`).
+
+`any` was best on training clips for every Countix exercise, so it stays. For example, push-up live went from 9%
+(complete only) to 45% (`half`) and 59% (`any`). The rule is in `score.py` (`EDGE`, default `any`).
+
+Held-out live exact, complete-only versus the `any` rule:
+
+| Exercise | Countix sets | Complete only | `any` | MM-Fit sets | MM-Fit | Hand sets | Hand |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| squat | 4 | 25% | 100% | 15 | 100% | 3 | 67% |
+| push_up | 12 | 33% | 33% | 15 | 73% | – | – |
+| jumping_jack | 16 | 44% | 69% | 12 | 50% | – | – |
+| lunge | 21 | 10% | 33% | 15 | 80% | – | – |
+
+### Failure analysis (training sets only)
+
+More MM-Fit training data: every set of the training sessions w01-w04 and w19 is now used for lateral raise,
+curls, push-up, jumping jack, lunge and overhead press, not just the first set of each.
+
+- **Overhead press.** Seated presses often stop short of full lockout in the image (2D elbow angle 140-150
+  degrees at the top). The completion threshold moves from 155 to 140 degrees.
+  - Train: live 8 to 11 of 11, recorded 8 to 9 of 12.
+  - Held-out: live 25% to 67%, recorded 0% to 75%, no set off by more than one. **Shipped.**
+- **Jumping jack.** The rest band (0.65) and the completion threshold (0.75 torso widths) cut off MM-Fit jumps
+  that open to 0.8-0.9.
+  - Train: 0.45 / 0.70 with range 0.3 raised live from 11 to 18 of 28.
+  - Held-out: exact fell from 61% to 57% (mean error 1.29 to 1.07). **Not shipped.**
+- **Lunge.** Rest at 150 degrees.
+  - Train: live 30 to 32, recorded 23 to 25.
+  - Held-out: live 53% to 58%, recorded 22% to 19%. **Not shipped** (mixed, the same call as round 2).
+- **Biceps curl.** The two training sets that missed half their repetitions were filmed at an angle the view
+  detector called "side", which turned per-limb counting off.
+  - Counting each limb in any view fixed them on train (10 to 12 of 12).
+  - Held-out unchanged at 62%. **Not shipped**, by the improvement rule.
+- **Lateral raise.** Some athletes rest their arms at 45-55 degrees and never reach the 35-degree rest band.
+  - A relative mode (rest is the lowest point since the last repetition; a repetition ends after 65% of its own
+    range is undone) helped the recorded path on train but not the live one. **Not taken further.**
+- **Pull-up.** Tested rest 120-145 degrees and top 90-110 degrees. None beat the current 130/100 on train.
+- **Push-up.**
+  - The MM-Fit failures are sets whose diagonal camera the view detector calls "side". The frontal signal,
+    which is perfect on the sets detected as front, is then not used.
+  - A lower frontal rest band gained 1 training set.
+  - Nothing was shipped.
+
+The relative mode and the any-view per-limb option were removed again, since neither is used. The engine code is
+the same as in round 2.
+
+### Plank in-band time
+
+Each plank segment was labelled "in band" for its whole hold when the body is visibly straight on the frames. One
+segment with an ambiguous hip line was left unlabelled. This is a visual judgement, not a measured 158-degree line.
+
+| Path | Held-out in-band within max(1 s, 10%) |
+|---|---|
+| live 15 fps | 8 of 9 |
+| recorded | 5 of 8 (1 refused) |
+
+This fails the bar. The measured body line sits at 150-165 degrees on visibly straight planks and differs by up to
+10 degrees between the left and right sides, so in-band time flickers around the 158-degree threshold. Hold time
+stays validated; in-band time is not. Changing the 158-degree technique threshold to fit coarse visual labels was
+not done.
+
+### Wall sit, side plank, learned model
+
+- **Wall sit and side plank.** The downloaded material holds 9 people each, mostly one hold per video. The person
+  split would give about 3 test sets, below the 8 the bar needs, so no labels were made.
+- **Learned per-frame phase signal.** Skipped. MM-Fit and Countix give only spans and counts, not per-frame phase.
+  Training labels would have to come from the threshold engine itself, so a learned model could not clearly beat
+  it on independent ground truth.
+
+### Results (held-out, now)
+
+| Exercise | Sets / people | Live exact | Live off by >1 | Recorded exact | Status |
+|---|---|---:|---:|---:|---|
+| squat | 22 / 12 | 95.5% | 0 | 95.5% | validated |
+| plank, hold time | 9 / 3 | 100% | 0 | 89% | validated |
+| plank, in-band time | 9 / 3 | 89% | – | 63% | not validated |
+| lateral_raise | 12 / 4 | 75% | 3 | 67% | experimental |
+| overhead_press | 12 / 4 | 67% | 0 | 75% | experimental |
+| biceps_curl | 13 / 5 | 62% | 1 | 54% | experimental |
+| jumping_jack | 28 / 18 | 61% | 7 | 61% | experimental |
+| pull_up | 17 / 17 | 59% | 1 | 41% | experimental |
+| push_up | 27 / 17 | 56% | 8 | 56% | experimental |
+| lunge | 36 / 25 | 53% | 13 | 22% | experimental |
+| bent_over_row | 15 / 5 | 0% | 15 | 0% | experimental |
+
+Tables are in `/root/jumpscan/logs/reps/`: `results3-final.csv`, `results3-start.csv` and `results3-baseline.csv`.
