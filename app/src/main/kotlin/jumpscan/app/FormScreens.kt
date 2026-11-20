@@ -296,13 +296,15 @@ private fun MainActivity.saveFormResult(result: FormResult, done: (Int?, String)
 }
 
 @Suppress("DEPRECATION")
-private fun MainActivity.openLiveForm(replay: Boolean) {
+internal fun MainActivity.openLiveForm(replay: Boolean, trial: PhoneTrial? = null) {
     val tag = "live_form_result"
     val bridge = fragmentManager.findFragmentByTag(tag) as? FormResultBridge ?: FormResultBridge().also {
         fragmentManager.beginTransaction().add(it, tag).commitNow()
     }
-    bridge.startActivityForResult(Intent(this, LiveFormActivity::class.java).putExtra("exercise", formChoice.exercise)
-        .putExtra("side", formChoice.side).putExtra("replay", replay), 1)
+    val choice = if (trial == null) formChoice else FormChoice("squat", null)
+    bridge.startActivityForResult(Intent(this, LiveFormActivity::class.java).putExtra("exercise", choice.exercise)
+        .putExtra("side", choice.side).putExtra("replay", replay).putExtra("phone_trial", trial?.number ?: 0),
+        if (trial == null) 1 else 2)
 }
 
 @Suppress("DEPRECATION")
@@ -310,11 +312,12 @@ class FormResultBridge : Fragment() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         val host = activity as? MainActivity ?: return
         val json = data?.getStringExtra("metrics")
-        if (requestCode == 1 && resultCode == Activity.RESULT_OK && json != null) {
+        if (resultCode == Activity.RESULT_OK && json != null) {
             val result = FormResult(JSONObject(json))
             host.lastForm = result
-            host.formResult(result.metrics, result)
-        } else host.formHome()
+            if (requestCode != 2) host.formResult(result.metrics, result)
+        } else if (requestCode != 2) host.formHome()
+        if (requestCode == 2) host.diagnostics()
     }
 }
 

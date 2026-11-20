@@ -16,8 +16,8 @@ android {
         applicationId 'jumpscan.app'
         minSdk 26
         targetSdk 35
-        versionCode 6
-        versionName '1.2.0-beta2'
+        versionCode 8
+        versionName '1.2.0-beta4'
         testInstrumentationRunner 'jumpscan.app.AppChecks'
     }
     signingConfigs {
@@ -51,7 +51,9 @@ dependencies {
     // Debug builds retain x86_64 libraries for the emulator.
     implementation 'com.google.mediapipe:tasks-vision:1.2.3'
     implementation 'androidx.activity:activity:1.9.3'
-    implementation 'androidx.camera:camera-core:1.4.2'
-    implementation 'androidx.camera:camera-camera2:1.4.2'
-    implementation 'androidx.camera:camera-lifecycle:1.4.2'
+    implementation 'androidx.camera:camera-core:1.5.1'
+    implementation 'androidx.camera:camera-camera2:1.5.1'
+    implementation 'androidx.camera:camera-lifecycle:1.5.1'
+    implementation 'androidx.camera:camera-video:1.5.1'
+    implementation 'androidx.camera:camera-view:1.5.1'
 }

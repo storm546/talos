@@ -147,7 +147,7 @@ Wang) и двете публикации, посочени в 4.1. DOI: 10.5281/
 ### 4.6 Описание на приложението
 
 Стартиране на сървъра: `pip install -r server/requirements.txt` (Python 3.13), после
-`python -m server.seed` за демонстрационните данни и `uvicorn server.main:app`. Базата се намира на
+`python -m server.seed` за демонстрационните данни и `uvicorn server.main:app --no-server-header`. Базата се намира на
 пътя от променливата `JUMPSCAN_DB`, по подразбиране `server/jumpscan.db`.
 
 За постоянно работещ сървър има `Dockerfile`, `docker-compose.yml` (базата в том, публикувано само на

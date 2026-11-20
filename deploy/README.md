@@ -104,8 +104,8 @@ unset JSPW
 The password is passed as an environment variable, not as an argument, so it does not land in your shell
 history. Then log in on the dashboard with that email and password.
 
-Login is limited both per email (5 failures per 15 minutes) and per client address (30 failures per
-15 minutes). Behind a reverse proxy the address is taken from the proxy's `X-Forwarded-For` header, so
+Login is limited per email and client-address pair (5 failures per 15 minutes) and per client address
+across all emails (30 failures per 15 minutes). Behind a reverse proxy the address is taken from the proxy's `X-Forwarded-For` header, so
 configure `FORWARDED_ALLOW_IPS` as described above. Uvicorn accepts forwarded headers only from the
 listed proxy addresses; untrusted clients cannot set their own rate-limit address through that header.
 
@@ -118,14 +118,23 @@ athletes in their own club. An admin, or a coach for athletes of their own club,
 Synthetic data only — no real athlete is involved:
 
 ```sh
-docker compose exec jumpscan python -m server.seed
+docker compose exec -T jumpscan python -m server.seed --reset-demo
 ```
 
 Creates club "Демо клуб" with `admin@demo.test`, `coach@demo.test` and six athletes
 (`athlete1@demo.test`, `athlete2@demo.test`, `athlete4@demo.test` to `athlete7@demo.test`), and
 "Втори демо клуб" with `coach2@demo.test`, `athlete3@demo.test`. Password for all of them: `demo1234`.
-Ten generated jumps per athlete, four days apart over the last forty days, so the trend view has
-something to show. Running it twice is safe; existing rows are left alone.
+The reset replaces records for the exact demo accounts above, not all accounts in either club or at
+`@demo.test`. It restores their passwords, consent and sample data, and signs out existing demo
+sessions. It preserves non-demo accounts and their data, shared sessions or plans used by non-demo
+accounts, and the audit log. Plain `python -m server.seed` is the non-destructive initial seed.
+
+For a jury sandbox, schedule the reset nightly outside judging hours (for example at 03:00 in
+`Europe/Sofia`). Run the Compose command from the checkout directory; for a systemd deployment,
+run `python -m server.seed --reset-demo` from the checkout with the service's virtual environment,
+user and `JUMPSCAN_DB` setting. Do not install it on a real club's database. The reset regenerates
+recent jumps, technique sets and food logs, today's wellbeing check-ins, a test from one week ago
+with a report, and an upcoming test. Warn testers that their demo changes are removed each night.
 
 The rules ask for a test account for every role. Keep these, and give the credentials to the jury in the
 documentation pack. Treat them as public credentials.
@@ -232,7 +241,17 @@ directory finishes the job — nothing else on the host was touched.
 - Single uvicorn process, no workers: fine for a club, and it keeps SQLite writes simple.
 - The API is HTTP inside the host. Do not expose `8171` on a public interface; the compose file binds it
   to `127.0.0.1` on purpose.
-- Login is rate limited to 5 failures per email and 30 failures per client address per 15 minutes;
-  request bodies are capped at 16 KB. The address limit needs `--proxy-headers --forwarded-allow-ips`
+- Login is rate limited to 5 failures per email and address pair and 30 failures per address per 15 minutes;
+  request bodies are capped at 16 KiB (64 KiB for form uploads). The address limit needs `--proxy-headers --forwarded-allow-ips`
   (set in both startup paths using `FORWARDED_ALLOW_IPS`) to see through the reverse proxy.
+- Each process admits up to four simultaneous login hashes. Complete downloads, check-in lists and team
+  check-ins, session reports, training and nutrition calculations, nutrition target/program writes,
+  and assistant chat and confirmation share two slots.
+  Busy requests receive `503` and `Retry-After: 2`; busy login attempts are still audited. These limits
+  are independent of the existing login and assistant rate limits. Reserve disk space for complete
+  downloads in the service's temporary directory as well as for the database.
+- Audit entries have no automatic expiry. Keep them in the database and include the database in the
+  usual backups. Monitor database and backup storage during the event. Do not delete audit rows to
+  reclaim space. Changing retention or moving history offline requires an explicit owner-approved
+  policy, a verified archive, and a decision about administrator access to archived entries.
 - No video or image ever reaches the server, so there is nothing large to store and nothing to redact.

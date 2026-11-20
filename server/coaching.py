@@ -12,6 +12,7 @@ complete day (which may be an empty day with no food) contributes, and the serie
 incomplete, a bodyweight measurement is missing, or the trend cannot cover the window.
 """
 
+from bisect import bisect_left, bisect_right
 from datetime import date as Date, timedelta
 import math
 
@@ -43,7 +44,7 @@ def _model(observations):
     return {row["date_us"]: row["trend_kg"] for row in weight_trend_pipeline(observations)}
 
 
-def step(t, previous, mode, snaps, weights):
+def step(t, previous, mode, snaps, weights, *, weight_days=None):
     """One day of the expenditure series; returns a row with value_kcal and a status of updating or holding.
 
     snaps: {iso day: {status, calories, changed}} for prior diary days. weights: {iso day: kg}.
@@ -63,7 +64,11 @@ def step(t, previous, mode, snaps, weights):
         return hold("Needs 14 explicitly complete diary days.")
     if t not in weights:
         return hold("Needs a bodyweight measurement on this date.")
-    retained = [(d, kg) for d, kg in sorted(weights.items()) if _lookback(t, WEIGHT_DAYS - 1) <= d <= t]
+    if weight_days is None:
+        weight_days = sorted(weights)
+    start = bisect_left(weight_days, _lookback(t, WEIGHT_DAYS - 1))
+    end = bisect_right(weight_days, t)
+    retained = [(day, weights[day]) for day in weight_days[start:end]]
     if len(retained) < 2 or retained[0][0] > _shift(t, -WINDOW_DAYS):
         return hold("Bodyweight history does not cover the 14-day window.")
     try:
@@ -98,10 +103,14 @@ def compute(seed_date, seed_kcal, mode, snaps, weights, as_of):
     series = [{"date": seed_date, "value_kcal": previous, "status": "holding", "reason": "Seed value.",
                "complete_days": 0, "window_start": _lookback(seed_date, WINDOW_DAYS),
                "window_end": _lookback(seed_date, 1)}]
-    t = seed_date
+    history_start = max(seed_date, _lookback(as_of, HISTORY_DAYS - 1))
+    weight_days = sorted(weights) if mode != "holding" else []
+    for t in weight_days[bisect_right(weight_days, seed_date):bisect_left(weight_days, history_start)]:
+        previous = step(t, previous, mode, snaps, weights, weight_days=weight_days)["value_kcal"]
+    t = seed_date if history_start == seed_date else _shift(history_start, -1)
     while t < as_of:
         t = _shift(t, 1)
-        entry = step(t, previous, mode, snaps, weights)
+        entry = step(t, previous, mode, snaps, weights, weight_days=weight_days)
         previous = entry["value_kcal"]
         series.append(entry)
     history_keys = ("date", "value_kcal", "status", "reason", "complete_days")

@@ -15,6 +15,7 @@ logs
 docs
 app
 core
+!core/src/main/resources/form_exercises.json
 gradle
 gradlew
 gradlew.bat

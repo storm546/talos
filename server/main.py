@@ -1,5 +1,6 @@
-"""Run with uvicorn server.main:app."""
+"""Run with uvicorn server.main:app --no-server-header."""
 
+from collections import deque
 from contextlib import asynccontextmanager, contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 import asyncio
@@ -12,6 +13,7 @@ from itertools import groupby
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import sqlite3
 import sys
@@ -30,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from . import assistant_api, training_nutrition_api
 from .input_bounds import Offset, SQLITE_MAX, SqliteInt, SqlitePath
+from .response_data import complete_json, spooled_response
 
 
 def database_path():
@@ -86,9 +89,8 @@ def init_db(path):
                 expires_at REAL NOT NULL
             );
             CREATE TABLE IF NOT EXISTS login_failures (
-                email TEXT NOT NULL, failed_at REAL NOT NULL
+                email TEXT NOT NULL, address TEXT NOT NULL, failed_at REAL NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS failures_email ON login_failures(email, failed_at);
             CREATE TABLE IF NOT EXISTS address_failures (
                 address TEXT NOT NULL, failed_at REAL NOT NULL
             );
@@ -115,6 +117,7 @@ def init_db(path):
                 id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor_id INTEGER,
                 action TEXT NOT NULL, target TEXT NOT NULL, detail TEXT NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS audit_deletions ON audit(actor_id, id) WHERE action = 'data_deleted';
             CREATE TABLE IF NOT EXISTS groups (
                 id INTEGER PRIMARY KEY,
                 club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
@@ -168,6 +171,11 @@ def init_db(path):
             );
             CREATE INDEX IF NOT EXISTS comments_athlete ON comments(athlete_id, id);
         """)
+        if not any(row["name"] == "address" for row in db.execute("PRAGMA table_info(login_failures)")):
+            db.execute("ALTER TABLE login_failures ADD COLUMN address TEXT NOT NULL DEFAULT ''")
+            db.execute("DELETE FROM login_failures WHERE address = ''")
+        db.execute("DROP INDEX IF EXISTS failures_email")
+        db.execute("CREATE INDEX IF NOT EXISTS failures_email_address ON login_failures(email, address, failed_at)")
         columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
         for name, declaration in {
             "active": "INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1))",
@@ -621,6 +629,59 @@ def validated_group_id(db, user, group_id, require_club=None):
     return group_id
 
 
+RESYNC_EVENT = {"type": "resync"}
+
+
+class EventBacklog:
+    def __init__(self, loop):
+        self.loop = loop
+        self.pending = deque()
+        self.ready = asyncio.Event()
+        self.lock = threading.Lock()
+        self.wake_pending = False
+        self.overflowed = False
+
+    def publish(self, event):
+        with self.lock:
+            if self.overflowed:
+                return
+            if len(self.pending) == 64:
+                self.pending.clear()
+                self.overflowed = True
+                event = RESYNC_EVENT
+            self.pending.append(event)
+            if self.loop is not None and not self.wake_pending and not self.ready.is_set():
+                self.wake_pending = True
+                try:
+                    self.loop.call_soon_threadsafe(self.wake)
+                except RuntimeError:
+                    if not self.loop.is_closed():
+                        raise
+
+    def wake(self):
+        with self.lock:
+            self.wake_pending = False
+            self.ready.set()
+
+    def empty(self):
+        with self.lock:
+            return not self.pending
+
+    def get_nowait(self):
+        with self.lock:
+            if not self.pending:
+                raise asyncio.QueueEmpty
+            return self.pending.popleft()
+
+    async def get(self):
+        while True:
+            with self.lock:
+                if self.pending:
+                    return self.pending.popleft()
+                self.ready.clear()
+            await self.ready.wait()
+
+
 class EventBus:
     """In-process fan-out for the /api/events stream (one worker)."""
 
@@ -637,14 +698,15 @@ class EventBus:
             subscriptions = self._subscribers.setdefault(int(user_id), [])
             if len(subscriptions) >= limit:
                 return None
-            queue = asyncio.Queue()
-            subscriptions.append((loop, queue))
+            queue = EventBacklog(loop)
+            subscriptions.append(queue)
             return queue
 
     def close(self, user_id, queue):
         with self._lock:
             subscriptions = self._subscribers.get(int(user_id), [])
-            subscriptions[:] = [(loop, stream) for loop, stream in subscriptions if stream is not queue]
+            if queue in subscriptions:
+                subscriptions.remove(queue)
             if not subscriptions:
                 self._subscribers.pop(int(user_id), None)
 
@@ -656,28 +718,21 @@ class EventBus:
         """Queue the event onto every open stream whose user id is in `viewers`."""
         with self._lock:
             queues = [subscription for user in viewers for subscription in self._subscribers.get(user, ())]
-        for loop, queue in queues:
-            if loop is None:
-                queue.put_nowait(event)
-                continue
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, event)
-            except RuntimeError:
-                if not loop.is_closed():
-                    raise
+        for queue in queues:
+            queue.publish(event)
 
 
 def jump_rows(db, athlete_id):
-    return [{**json.loads(row["metrics"]), "id": row["id"], "athlete_id": row["athlete_id"],
+    return ({**json.loads(row["metrics"]), "id": row["id"], "athlete_id": row["athlete_id"],
              "created_at": row["created_at"], "session_id": row["session_id"],
              "client_id": row["client_id"]}
             for row in db.execute(
-                "SELECT * FROM jumps WHERE athlete_id = ? ORDER BY created_at, id", (athlete_id,))]
+                "SELECT * FROM jumps WHERE athlete_id = ? ORDER BY created_at, id", (athlete_id,)))
 
 
 def form_set_rows(rows):
-    return [{"id": row["id"], "athlete_id": row["athlete_id"], "created_at": row["created_at"],
-             "client_id": row["client_id"], **json.loads(row["metrics"])} for row in rows]
+    return ({"id": row["id"], "athlete_id": row["athlete_id"], "created_at": row["created_at"],
+             "client_id": row["client_id"], **json.loads(row["metrics"])} for row in rows)
 
 
 def athlete_form_sets(db, athlete_id):
@@ -732,6 +787,26 @@ def csv_cell(value):
     # Whitespace/control prefixes can hide formulas from a spreadsheet importer.
     stripped = value.lstrip(" \t\r\n\v\f\ufeff")
     return "'" + value if stripped.startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")) else value
+
+
+def csv_export(db, user, athlete_id, filename, fields, rows, detail=None):
+    def chunks():
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(fields)
+        yield output.getvalue()
+        for row in rows:
+            output.seek(0)
+            output.truncate()
+            writer.writerow([csv_cell(row.get(field)) for field in fields])
+            yield output.getvalue()
+
+    def record_export():
+        audit(db, user["id"], "csv_export", athlete_id, detail)
+        db.commit()
+
+    return spooled_response(chunks(), "text/csv", {"Content-Disposition": f'attachment; filename="{filename}"'},
+                            record_export)
 
 
 def ical_escape(text):
@@ -822,6 +897,36 @@ class RequestBodyLimit:
         await self.app(scope, buffered_receive, send)
 
 
+BUSY_DETAIL = "Server busy; try again later"
+BUSY_HEADERS = {"Retry-After": "2"}
+
+
+class ExpensiveRequests:
+    reads = re.compile(
+        r"/api/(?:checkins(?:/team)?|me/(?:export|calendar\.ics)|sessions/[^/]+/report|"
+        r"athletes/[^/]+/(?:export\.csv|form\.csv|training(?:\.csv)?|weights(?:\.csv)?|nutrition\.csv|"
+        r"nutrition/(?:estimate|summary|expenditure|program|target)))"
+    )
+    writes = re.compile(r"/api/athletes/[^/]+/nutrition/(?:program|target)")
+
+    def __init__(self, app, slots):
+        self.app = app
+        self.slots = slots
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "").removeprefix(scope.get("root_path", ""))
+        method = scope.get("method")
+        if not ((method == "GET" and self.reads.fullmatch(path)) or
+                (method == "PUT" and self.writes.fullmatch(path))):
+            return await self.app(scope, receive, send)
+        if not self.slots.acquire(blocking=False):
+            return await JSONResponse({"detail": BUSY_DETAIL}, status_code=503, headers=BUSY_HEADERS)(scope, receive, send)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            self.slots.release()
+
+
 def client_address(request):
     return request.client.host if request.client else "unknown"
 
@@ -836,6 +941,9 @@ def create_app(db_path=None):
                   description="Club landing mechanics, consent, personal baselines and coach discussions. No video is stored.",
                   lifespan=lifespan, debug=False)
     app.state.db_path = db_path if db_path is not None else database_path()
+    app.state.heavy_slots = threading.BoundedSemaphore(2)
+    login_slots = threading.BoundedSemaphore(4)
+    app.add_middleware(ExpensiveRequests, slots=app.state.heavy_slots)
     app.add_middleware(RequestBodyLimit)
     app.state.events = EventBus()
     training_tools = training_nutrition_api.install(app, sys.modules[__name__])
@@ -901,44 +1009,52 @@ def create_app(db_path=None):
         db.execute("DELETE FROM login_failures WHERE failed_at <= ?", (now - 900,))
         db.execute("DELETE FROM address_failures WHERE failed_at <= ?", (now - 900,))
         failures = db.execute(
-            "SELECT COUNT(*) FROM login_failures WHERE email = ? AND failed_at > ?",
-            (body.email, now - 900)).fetchone()[0]
+            "SELECT COUNT(*) FROM login_failures WHERE email = ? AND address = ? AND failed_at > ?",
+            (body.email, address, now - 900)).fetchone()[0]
         address_failures = db.execute(
             "SELECT COUNT(*) FROM address_failures WHERE address = ? AND failed_at > ?",
             (address, now - 900)).fetchone()[0]
         db.commit()
         if failures >= 5 or address_failures >= 30:
             audit(db, None, "login_failure", body.email,
-                  {"reason": "rate_limit", "scope": "address" if failures < 5 else "email"})
+                  {"reason": "rate_limit", "scope": "address" if failures < 5 else "email_address"})
             db.commit()
             raise HTTPException(429, "Too many failed logins; try again later", headers={"Retry-After": "900"})
         user = db.execute("SELECT * FROM users WHERE email = ?", (body.email,)).fetchone()
         salt, expected = (user["password_salt"], user["password_hash"]) if user else (DUMMY_SALT, DUMMY_HASH)
-        matches = hmac.compare_digest(password_hash(body.password, salt), expected)
+        if not login_slots.acquire(blocking=False):
+            audit(db, None, "login_failure", body.email, {"reason": "busy"})
+            db.commit()
+            raise HTTPException(503, BUSY_DETAIL, headers=BUSY_HEADERS)
+        try:
+            matches = hmac.compare_digest(password_hash(body.password, salt), expected)
+        finally:
+            login_slots.release()
         # Recheck under the write lock so concurrent hashes cannot bypass the limits.
         now = time.time()
         db.execute("BEGIN IMMEDIATE")
         failures = db.execute(
-            "SELECT COUNT(*) FROM login_failures WHERE email = ? AND failed_at > ?", (body.email, now - 900),
+            "SELECT COUNT(*) FROM login_failures WHERE email = ? AND address = ? AND failed_at > ?",
+            (body.email, address, now - 900),
         ).fetchone()[0]
         address_failures = db.execute(
             "SELECT COUNT(*) FROM address_failures WHERE address = ? AND failed_at > ?",
             (address, now - 900)).fetchone()[0]
         if failures >= 5 or address_failures >= 30:
             audit(db, None, "login_failure", body.email,
-                  {"reason": "rate_limit", "scope": "address" if failures < 5 else "email"})
+                  {"reason": "rate_limit", "scope": "address" if failures < 5 else "email_address"})
             db.commit()
             raise HTTPException(429, "Too many failed logins; try again later", headers={"Retry-After": "900"})
         # Read again under the lock: a reset or deactivation during scrypt must win.
         fresh = db.execute("SELECT * FROM users WHERE email = ?", (body.email,)).fetchone()
         if (not matches or fresh is None or not fresh["active"] or
                 fresh["password_hash"] != expected):
-            db.execute("INSERT INTO login_failures(email, failed_at) VALUES (?, ?)", (body.email, now))
+            db.execute("INSERT INTO login_failures(email, address, failed_at) VALUES (?, ?, ?)", (body.email, address, now))
             db.execute("INSERT INTO address_failures(address, failed_at) VALUES (?, ?)", (address, now))
             audit(db, None, "login_failure", body.email)
             db.commit()
             raise HTTPException(401, "Invalid email or password")
-        db.execute("DELETE FROM login_failures WHERE email = ?", (body.email,))
+        db.execute("DELETE FROM login_failures WHERE email = ? AND address = ?", (body.email, address))
         token = secrets.token_urlsafe(32)
         db.execute("INSERT INTO tokens(token_hash, user_id, expires_at) VALUES (?, ?, ?)",
                    (token_hash(token), user["id"], now + 30 * 86400))
@@ -1019,9 +1135,13 @@ def create_app(db_path=None):
         if body.session_id is not None:
             session = db.execute("SELECT * FROM sessions WHERE id = ?", (body.session_id,)).fetchone()
             if session is None or not session_visible(db, user, session):
-                raise HTTPException(422, "Session not found")
-            if session["cancelled"]:
-                raise HTTPException(422, "Cannot upload to a cancelled session")
+                detail = "Session not found"
+            elif session["cancelled"]:
+                detail = "Cannot upload to a cancelled session"
+            else:
+                detail = None
+            if detail is not None:
+                return JSONResponse(status_code=422, content={"detail": detail, "code": "jump_session_unavailable"})
         created_at = now_iso()
         metrics = {key: value for key, value in body.model_dump().items()
                    if key not in ("session_id", "client_id")}
@@ -1057,6 +1177,34 @@ def create_app(db_path=None):
         return [{**json.loads(row["metrics"]), "id": row["id"], "athlete_id": row["athlete_id"],
                  "created_at": row["created_at"], "session_id": row["session_id"],
                  "client_id": row["client_id"]} for row in rows]
+
+    @app.get("/api/jumps/baseline")
+    def jump_baseline(test: Literal["cmj", "drop_jump"], user=Depends(current_user), db=Depends(get_db),
+                      before_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
+                      exclude_client_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None):
+        if user["role"] != "athlete":
+            raise HTTPException(403, "Athlete account required")
+        cutoff = ()
+        if before_id is not None:
+            jump = db.execute("SELECT created_at, id FROM jumps WHERE athlete_id = ? AND id = ?",
+                              (user["id"], before_id)).fetchone()
+            if jump is None:
+                raise HTTPException(404, "Jump not found")
+            cutoff = tuple(jump)
+        rows = db.execute(
+            "SELECT metrics FROM jumps WHERE athlete_id = ? AND json_extract(metrics, '$.test') = ? "
+            "AND json_extract(metrics, '$.flight_time_ms') > 0 AND client_id IS NOT ? "
+            "AND NOT EXISTS (SELECT 1 FROM json_each(metrics, '$.warnings') "
+            "WHERE value = 'no_flight_detected') "
+            + ("AND (created_at, id) < (?, ?) " if cutoff else "")
+            + "ORDER BY created_at, id LIMIT 3",
+            (user["id"], test, exclude_client_id or "", *cutoff),
+        ).fetchall()
+        if len(rows) != 3:
+            return {}
+        metrics = [json.loads(row["metrics"]) for row in rows]
+        keys = ("jump_height_cm", "flight_time_ms", "knee_flexion_peak_l", "knee_flexion_peak_r", "flexion_asymmetry_pct")
+        return {key: median(row[key] for row in metrics) for key in keys if all(row.get(key) is not None for row in metrics)}
 
     @app.post("/api/form", status_code=201, dependencies=[Depends(current_user)])
     def add_form_set(body: FormSet, request: Request, db=Depends(get_db)):
@@ -1099,11 +1247,11 @@ def create_app(db_path=None):
             athlete_id = user["id"]
         if athlete_id is not None:
             athlete_access(db, user, athlete_id)
-        return form_set_rows(db.execute(
+        return list(form_set_rows(db.execute(
             "SELECT form_sets.* FROM form_sets JOIN users ON users.id = form_sets.athlete_id "
             "WHERE (? IS NULL OR form_sets.athlete_id = ?) AND (? != 'coach' OR users.club_id = ?) "
             "ORDER BY form_sets.created_at DESC, form_sets.id DESC LIMIT ? OFFSET ?",
-            (athlete_id, athlete_id, user["role"], user["club_id"], limit, offset)))
+            (athlete_id, athlete_id, user["role"], user["club_id"], limit, offset))))
 
     @app.delete("/api/me/data", status_code=204)
     def delete_data(user=Depends(current_user), db=Depends(get_db)):
@@ -1143,57 +1291,50 @@ def create_app(db_path=None):
     @app.get("/api/me/export")
     def export_me(user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "athlete")
+        db.execute("BEGIN")
         profile = {**public_user(user), "email": user["email"], "active": bool(user["active"]), **consent_fields(user)}
-        checkins = [dict(row) for row in db.execute(
+        checkins = (dict(row) for row in db.execute(
             "SELECT day, sleep, fatigue, soreness, stress, mood, training_minutes, rpe, "
-            "created_at, updated_at FROM checkins WHERE athlete_id = ? ORDER BY day", (user["id"],))]
-        comments = [dict(row) for row in db.execute(
+            "created_at, updated_at FROM checkins WHERE athlete_id = ? ORDER BY day", (user["id"],)))
+        comments = (dict(row) for row in db.execute(
             "SELECT id, author_id, jump_id, session_id, body, created_at, read_at FROM comments "
-            "WHERE athlete_id = ? ORDER BY created_at, id", (user["id"],))]
+            "WHERE athlete_id = ? ORDER BY created_at, id", (user["id"],)))
         profile["under_18"] = bool(user["under_18"])
         result = {"user": profile, "jumps": jump_rows(db, user["id"]), "checkins": checkins,
                   "comments": comments, "form_sets": athlete_form_sets(db, user["id"]),
                   **training_nutrition_api.export_data(db, user["id"]),
                   "exported_at": now_iso()}
-        audit(db, user["id"], "json_export", user["id"])
-        db.commit()
-        return JSONResponse(result, headers={"Content-Disposition": 'attachment; filename="jumpscan-data.json"'})
+        def record_export():
+            db.rollback()
+            audit(db, user["id"], "json_export", user["id"])
+            db.commit()
+
+        return complete_json(result, {"Content-Disposition": 'attachment; filename="jumpscan-data.json"'},
+                             record_export)
 
     @app.get("/api/athletes/{athlete_id}/export.csv")
     def export_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = athlete_access(db, user, athlete_id)
-        output = io.StringIO(newline="")
-        writer = csv.writer(output)
         metric_fields = [key for key in Jump.model_fields if key not in ("session_id", "client_id")]
         fields = ["id", "athlete_id", "athlete_name", "created_at", "session_id", *metric_fields]
-        writer.writerow(fields)
-        for row in jump_rows(db, athlete_id):
-            row["athlete_name"] = athlete["name"]
-            writer.writerow([csv_cell(row.get(field)) for field in fields])
-        audit(db, user["id"], "csv_export", athlete_id)
-        db.commit()
-        return Response(output.getvalue(), media_type="text/csv",
-                        headers={"Content-Disposition": f'attachment; filename="athlete-{athlete_id}.csv"'})
+        rows = ({**row, "athlete_name": athlete["name"]} for row in jump_rows(db, athlete_id))
+        return csv_export(db, user, athlete_id, f"athlete-{athlete_id}.csv", fields, rows)
 
     @app.get("/api/athletes/{athlete_id}/form.csv")
     def form_csv(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "admin", "coach")
         athlete = athlete_access(db, user, athlete_id)
-        output = io.StringIO(newline="")
-        writer = csv.writer(output)
         hold_fields = ("hold_ms", "in_band_ms")
         fields = ["id", "athlete_id", "athlete_name", "created_at", "client_id", "exercise", "side", "view",
                   "fps", "quality", *(key for key in FormSummary.model_fields if key not in hold_fields),
                   "warnings", "repetitions", "mode", "source", *hold_fields]
-        writer.writerow(fields)
-        for row in athlete_form_sets(db, athlete_id):
-            row.update(row.pop("summary"), athlete_name=athlete["name"])
-            writer.writerow([csv_cell(row.get(field)) for field in fields])
-        audit(db, user["id"], "csv_export", athlete_id, {"kind": "form"})
-        db.commit()
-        return Response(output.getvalue(), media_type="text/csv",
-                        headers={"Content-Disposition": f'attachment; filename="athlete-{athlete_id}-form.csv"'})
+        def rows():
+            for row in athlete_form_sets(db, athlete_id):
+                row.update(row.pop("summary"), athlete_name=athlete["name"])
+                yield row
+
+        return csv_export(db, user, athlete_id, f"athlete-{athlete_id}-form.csv", fields, rows(), {"kind": "form"})
 
     @app.get("/api/clubs")
     def clubs(user=Depends(current_user), db=Depends(get_db)):
@@ -1464,37 +1605,31 @@ def create_app(db_path=None):
         sessions = db.execute(
             "SELECT * FROM sessions WHERE julianday(starts_at) >= julianday(?) AND "
             + clause + " ORDER BY julianday(starts_at), id",
-            (from_day, *params)).fetchall()
-        now = datetime.now(timezone.utc)
-        lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//JumpScan//Club Platform//EN"]
-        for session in sessions:
-            try:
-                start = datetime.fromisoformat(session["starts_at"].replace("Z", "+00:00"))
-                if start.utcoffset() is None:
+            (from_day, *params))
+        dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+        def lines():
+            yield from ("BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//JumpScan//Club Platform//EN")
+            for session in sessions:
+                try:
+                    start = datetime.fromisoformat(session["starts_at"].replace("Z", "+00:00"))
+                    if start.utcoffset() is None:
+                        continue
+                    start = start.astimezone(timezone.utc)
+                except (ValueError, OverflowError):
                     continue
-                start = start.astimezone(timezone.utc)
-            except (ValueError, OverflowError):
-                continue  # Invalid timestamps saved before validation must not break the feed.
-            dtstart = start.strftime("%Y%m%dT%H%M%SZ")
-            dtstamp = now.strftime("%Y%m%dT%H%M%SZ")
-            summary = ical_escape(session["title"])
-            location = ical_escape(session["place"])
-            description = ical_escape(session["notes"])
-            lines += ["BEGIN:VEVENT",
-                      "UID:session-" + str(session["id"]) + "@jumpscan",
-                      "DTSTAMP:" + dtstamp,
-                      "DTSTART:" + dtstart,
-                      "DURATION:PT1H",
-                      "SUMMARY:" + summary,
-                      "LOCATION:" + location,
-                      "DESCRIPTION:" + description]
-            if session["cancelled"]:
-                lines += ["STATUS:CANCELLED"]
-            lines += ["END:VEVENT"]
-        lines += ["END:VCALENDAR", ""]
-        body = "\r\n".join(ical_fold(line) for line in lines)
-        return Response(body + "\r\n", media_type="text/calendar",
-                        headers={"Content-Disposition": 'attachment; filename="jumpscan.ics"'})
+                yield from ("BEGIN:VEVENT", f"UID:session-{session['id']}@jumpscan", f"DTSTAMP:{dtstamp}",
+                            f"DTSTART:{start:%Y%m%dT%H%M%SZ}", "DURATION:PT1H",
+                            "SUMMARY:" + ical_escape(session["title"]), "LOCATION:" + ical_escape(session["place"]),
+                            "DESCRIPTION:" + ical_escape(session["notes"]))
+                if session["cancelled"]:
+                    yield "STATUS:CANCELLED"
+                yield "END:VEVENT"
+            yield "END:VCALENDAR"
+            yield ""
+
+        return spooled_response((ical_fold(line) + "\r\n" for line in lines()), "text/calendar",
+                                {"Content-Disposition": 'attachment; filename="jumpscan.ics"'})
 
     @app.put("/api/me/checkins/{day}", status_code=201, dependencies=[Depends(current_user)])
     def put_checkin(day: str, body: Checkin, request: Request, db=Depends(get_db)):
@@ -1537,6 +1672,9 @@ def create_app(db_path=None):
                       from_: Annotated[str | None, Query(alias="from")] = None,
                       to: Annotated[str | None, Query()] = None,
                       user=Depends(current_user), db=Depends(get_db)):
+        return complete_json(checkin_rows(athlete_id, from_, to, user, db))
+
+    def checkin_rows(athlete_id, from_, to, user, db):
         if user["role"] == "athlete":
             if athlete_id is not None and athlete_id != user["id"]:
                 raise HTTPException(403, "Athletes can read their own data only")
@@ -1561,8 +1699,8 @@ def create_app(db_path=None):
             where.append("checkins.day <= ?")
             params.append(to)
         clause = " AND ".join(where) if where else "1"
-        return [dict(row) for row in db.execute(
-            "SELECT * FROM checkins WHERE " + clause + " ORDER BY day DESC, id DESC", params)]
+        return (dict(row) for row in db.execute(
+            "SELECT * FROM checkins WHERE " + clause + " ORDER BY day DESC, id DESC", params))
 
     @app.get("/api/checkins/team")
     def team_checkins(day: Annotated[str | None, Query()] = None, club_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
@@ -1692,15 +1830,17 @@ def create_app(db_path=None):
                         except HTTPException:
                             break
                     yield f"data: {json.dumps(event)}\n\n" if event is not None else ": keep-alive\n\n"
+                    if event is RESYNC_EVENT:
+                        break
             finally:
                 request.app.state.events.close(user["id"], queue)
 
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"X-Accel-Buffering": "no"})
 
-    assistant_api.install(app, sys.modules[__name__], {**training_tools, **{
+    assistant_api.install(app, sys.modules[__name__], {**training_tools, "list_checkins": checkin_rows, **{
         operation.__name__: operation for operation in (
-            athletes, athlete_summary, jumps, list_form_sets, list_sessions, session_report, list_checkins,
+            athletes, athlete_summary, jumps, list_form_sets, list_sessions, session_report,
             team_checkins, list_comments, create_session, update_session, save_checkin, write_comment,
         )
     }})

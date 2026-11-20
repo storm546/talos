@@ -157,6 +157,7 @@ required consent gate on uploads. Login and `/api/me` still expose only `id`, `n
 | `GET /api/athletes?limit=100&offset=0` | coach, admin | own club (admin: all); identity, jump count, last date, active state, consent fields and `changes` for the three headline metrics |
 | `POST /api/jumps` (section 1 JSON) | athlete | requires recorded consent, otherwise 403 with a clear message; stores a jump for the caller; returns `{id, created_at}` |
 | `GET /api/jumps?athlete_id=&limit=100&offset=0` | all | athlete: own only; coach: athletes of own club; admin: any. Newest first, ID descending for tied dates |
+| `GET /api/jumps/baseline?test=cmj` | athlete | Median of the athlete's first three measured jumps of the requested kind. Omits metrics missing from any of the three. `before_id` limits it to earlier jumps; `exclude_client_id` excludes an upload still awaiting confirmation. |
 | `GET /api/athletes/{id}/summary` | same scope as jumps | counts, first/last jump dates, baseline completeness and all numeric metric summaries |
 | `GET /api/me/export` | athlete | JSON attachment with own public profile, email, active state, consent, all jumps and export time; no passwords or tokens |
 | `GET /api/athletes/{id}/export.csv` | admin, coach of club | CSV attachment with all athlete jumps, metric fields and athlete name; oldest first; cells protected against spreadsheet formulas |
@@ -191,10 +192,12 @@ the target is the submitted normalized email. Other targets are string IDs. Pass
 included. Mutations, exports and their audit entries commit before a success response.
 
 Security: bearer token in `Authorization`; parameterized SQL; strict validation and unknown-field rejection;
-object checks on every read and management operation; login limit of 5 failures per email per 15 minutes;
+object checks on every read and management operation; login limit of 5 failures per email and client address pair per 15 minutes;
 constant-time credential checks; no stack traces or submitted secrets in errors; 16 KiB body limit
 (64 KiB for form uploads, section 6.1).
 Paginated lists accept limits 1–500 and nonnegative offsets. Exports and summaries include all jumps.
+Complete downloads and the check-in list are never truncated: serialized output beyond 256 KiB
+rolls to temporary storage before delivery. Use the available page or date filters for smaller histories.
 CSV quotes text cells starting with formula characters (`=`, `+`, `-`, `@`), including hidden whitespace
 prefixes, and leading tab/newline controls with an apostrophe; CSV quoting handles delimiters and newlines.
 Responses include `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`
@@ -235,7 +238,7 @@ All original 131 test cases are retained. Existing tests adjusted for the expand
 `test_dashboard_is_public_static_and_uses_safe_dom` now reads the external JavaScript.
 Other existing behavior assertions remain unchanged. Validation: `server/.venv/bin/python -m pytest server -q`.
 
-Run: `uvicorn server.main:app`. Database path from `JUMPSCAN_DB`, default `server/jumpscan.db`.
+Run: `uvicorn server.main:app --no-server-header`. Database path from `JUMPSCAN_DB`, default `server/jumpscan.db`.
 
 ## 4. app (Android, Kotlin, package `jumpscan.app`)
 
@@ -245,15 +248,37 @@ core/appcompat and `com.google.mediapipe:tasks-vision`. Networking with `HttpURL
 
 Screens:
 1. Login: server URL, email, password. Token kept in app-private storage.
-2. Home: choose test type, then "Record" (system camera via `ACTION_VIDEO_CAPTURE`) or
-   "Pick video" (system photo picker). Shows a one-line filming guide: camera at knee height,
-   facing the athlete, whole body in frame.
+2. Home: choose a test type, then record in the app or pick a video with the system photo picker.
+   CameraX targets a fixed 60 fps and offers 120 or 240 fps only when supported by the rear camera's
+   recording session. The live framing check looks for the whole body and headroom before a three-second
+   audible countdown. Recording stops about two seconds after detected landing, at the recording limit, or
+   when the athlete taps Stop. Imports remain available if fixed-rate capture is unavailable. Recordings
+   are checked against their actual presentation timestamps and duration before analysis.
 3. Analysis: decode the clip frame by frame on a background thread, run Pose Landmarker
    (`pose_landmarker_heavy.task` bundled in assets, VIDEO mode), pass frames to `JumpAnalyzer`,
    show progress.
-4. Result: the numbers of section 1 with plain labels and the warnings; "Upload" sends the JSON to
-   `POST /api/jumps`. The video is never uploaded.
+4. Result: measured flight time and height show the view-specific typical error from `docs/validacia.md`
+   §4.8 (mean absolute error at 33 fps, not a confidence interval). The flight-time error is propagated
+   through the height formula at the measured flight time. The athlete's own same-test baseline and
+   difference appear alongside the estimates when available. Contact flexion of 30° or more triggers a
+   technique reminder, not a diagnostic threshold. "Upload" sends only the metrics JSON to `POST /api/jumps`.
 5. History: the athlete's own jumps from `GET /api/jumps`.
+6. Profile → Diagnostics (also available offline): the latest 200 local jump and form runs. The Android
+   share sheet exports a CSV and a plain-text summary, with no video, landmarks, or account data.
+   The guided test pairs selected clips with 20 jump trials and collects manual counts for three squat sets.
+   A jump step advances when analysis completes and the clip is within 5 fps of the selected rate; failed
+   attempts and analyses with no flight are visible in the report. The trial view is the instructed view.
+
+Diagnostic wall times use a monotonic clock. Decode time includes frame preparation (for live camera,
+copy and rotation of the delivered RGBA buffer); pose time is the synchronous video call or the live
+submit-to-result interval. Frames analysed count completed pose calls used by the run, not necessarily
+frames with a visible person. Jump preview extraction adds a decode but no pose call. Manual jump
+corrections and landmark fixtures do not rerun pose; model and delegate are blank. Live FPS is the
+number of analysed frames divided by the set duration. Live drops are completed camera captures during
+the set minus frames analysed, including backpressure and frames still in flight at Stop; callback
+delivery near the two boundaries can affect the count. Debug live replay uses 50 ms sample slots instead
+of camera captures and is labelled separately. Battery percentage and temperature (°C) are snapshots;
+unavailable readings or empty timing samples are blank, not zero.
 
 Errors (no person found, too few frames, network failure, expired token) show a clear message and
 never crash.
@@ -297,7 +322,7 @@ or injury wording; texts speak of training, testing and how the athlete feels.
 | `POST /api/sessions`, `PATCH /api/sessions/{id}` | admin, coach of club | create or change (also `cancelled: true`); `group_id` must belong to the same club; audit `session_created` / `session_changed` |
 | `GET /api/sessions/{id}/report` | admin, coach of club; athlete (own row only) | per athlete in scope: `trials_done`, `trials` and the median of each section 1 numeric field over that athlete's jumps in the session, plus `warnings_count`; athletes of the group without jumps appear with `trials_done: 0` |
 | `GET /api/me/calendar.ics` | all | iCalendar (RFC 5545) `text/calendar` file of the caller's visible sessions from 30 days ago on: one `VEVENT` per session with `UID`, `DTSTAMP`, `DTSTART` (UTC), 1 h `DURATION`, `SUMMARY`, `LOCATION`, `DESCRIPTION`, `STATUS:CANCELLED` when cancelled; CRLF line endings, lines folded at 75 octets, text escaped |
-| `POST /api/jumps` | athlete | section 3 behaviour plus optional `session_id` (must be visible to the athlete and not cancelled, else 422) and optional `client_id` (section 5.6) |
+| `POST /api/jumps` | athlete | section 3 behaviour plus optional `session_id` (must be visible to the athlete and not cancelled, else 422 with `code: "jump_session_unavailable"` in addition to `detail`) and optional `client_id` (section 5.6) |
 | `PUT /api/me/checkins/{day}` | athlete | create or replace the caller's check-in for `day`, from 6 days before today (UTC) through today+1 (UTC), inclusive, else 422; the app sends the phone's local calendar date and displays it in the locale's date format without a UTC label; requires consent like jumps; returns the stored check-in; 201 on create, 200 on replace |
 | `GET /api/checkins?athlete_id=&from=&to=` | scope as jumps | check-ins, newest day first |
 | `GET /api/checkins/team?day=` | admin, coach | for each active athlete of the coach's club (admin: filter `club_id`): the check-in for `day` (default today) or null, `wellbeing` = sum of the five items (5–25), `load` = `rpe × training_minutes` (session RPE in arbitrary units), and `below_usual: true` when `wellbeing` is at least 3 below the median of the athlete's previous 14 days with at least 5 check-ins (null otherwise) |
@@ -313,7 +338,7 @@ limits 1–500. Unknown fields are rejected as in section 3.
 
 ### 5.3 Security additions
 
-- Login is limited both per email (section 3) and per client address: 30 failures per address per
+- In addition to the email and client address pair limit (section 3), login is limited to 30 failures per address per
   15 minutes. Behind a reverse proxy the address comes from the proxy's `X-Forwarded-For` only when the
   server is started with `--proxy-headers --forwarded-allow-ips <proxy address>` (deploy notes).
 - Expired tokens and login failures older than 15 minutes are deleted on each login.
@@ -321,7 +346,10 @@ limits 1–500. Unknown fields are rejected as in section 3.
 - The events stream authenticates with the same bearer header (the dashboard reads it with `fetch`, not
   `EventSource`, so the token never appears in a URL). Each keep-alive tick rechecks authentication;
   revocation, expiry or deactivation ends the stream. Stream slots are reserved before a response starts;
-  a fourth stream returns 429. Proxy buffering is disabled for events.
+  a fourth stream returns 429. Proxy buffering is disabled for events. Each stream holds up to 64 pending
+  events. On overflow it sends `{"type":"resync"}` and closes. There is no event replay: reconnect first,
+  then reload the current view through authorized REST reads. The dashboard refreshes after reconnecting
+  without replacing an active, unsent draft.
 
 ### 5.4 Dashboard (additions)
 
@@ -370,9 +398,12 @@ cues. Live mode uses the MediaPipe lite model in `LIVE_STREAM` on the CPU; recor
 the heavy model in `VIDEO`. Both use `FormStream`. Given identical timestamped landmarks, aspect ratio,
 and view policy, final metrics agree; different models or frame cadences can produce different inputs and
 results. The live screen overlays a skeleton, checks framing and view before starting, displays a rep or
-hold counter and technique cues, and speaks with an offline Android voice when available. If the app
-language has no offline voice, an installed fallback speaks counts only; with no offline voice, feedback
-is visual. Live sets end at 60 seconds of tracked input or when stopped. No video, audio or landmarks are
+hold counter and technique cues, and speaks with an offline Android voice when available. Rep counts
+are provisional until the set ends. A technique cue follows a completed attempt only if a fault on that
+attempt also occurred in one of the previous two. At most one cue is presented per attempt; athletes can
+mute technique cues without muting counts. If no matching offline voice is installed, technique feedback
+is visual and completed repetitions are marked with a beep. Live sets end at 60 seconds of tracked input
+or when stopped. No video, audio or landmarks are
 uploaded. Recorded results retain the existing pending-upload queue; live results use the same authenticated,
 idempotent endpoint and can be retried from the result screen, but are not queued offline.
 

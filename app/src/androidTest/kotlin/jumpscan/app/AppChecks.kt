@@ -2,9 +2,17 @@ package jumpscan.app
 
 import android.app.Activity
 import android.app.Instrumentation
+import android.content.ContextWrapper
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.content.Intent
+import android.media.MediaExtractor
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import jumpscan.core.Frame
 import jumpscan.core.FormMetrics
 import jumpscan.core.FormRepetition
@@ -22,21 +30,82 @@ import java.time.LocalDate
 
 /** Small platform-only checks; no test library is needed. */
 class AppChecks : Instrumentation() {
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); start() }
+    private var only: String? = null
+    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); only = arguments?.getString("only"); start() }
     override fun onStart() {
         val output = Bundle()
         try {
-            clubChecks()
-            queueChecks()
-            featureChecks()
-            previewChecks()
-            numberChecks()
-            output.putString("stream", "Club parsing, check-in validation, feature routing and ordering, queue migration, retry identity, isolation, durability, preview and number-format checks passed.\n")
+            val capture = CaptureChecks(this)
+            if (only == "capture-parity") output.putString("parity", capture.parity())
+            else if (only == "capture-visual") capture.visual()
+            else if (only == "cutoff") videoCutoffCheck()
+            else if (only == "timestamp") videoPreviewCheck()
+            else {
+                clubChecks()
+                assistantConfirmationCheck()
+                queueChecks()
+                featureChecks()
+                previewChecks()
+                videoPreviewCheck()
+                videoCutoffCheck()
+                numberChecks()
+                capture.policies()
+                diagnosticChecks()
+            }
+            output.putString("stream", "App checks passed.\n" + output.getString("parity").orEmpty())
             finish(Activity.RESULT_OK, output)
         } catch (e: Throwable) {
             output.putString("stream", "App checks failed: ${e.stackTraceToString()}\n")
             finish(Activity.RESULT_CANCELED, output)
         }
+    }
+
+    private fun assistantConfirmationCheck() {
+        val activity = startActivitySync(Intent(targetContext, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        try {
+            runOnMainSync {
+                val summary = "Cancel Thursday for the under-18 group; note: bring water."
+                activity.assistantChat.proposal = JSONObject().put("proposal_id", "test").put("actions",
+                    org.json.JSONArray().put(JSONObject().put("tool", "future_action").put("human_summary", summary)))
+                activity.assistantScreen()
+                fun labels(view: View): List<String> = when (view) {
+                    is TextView -> listOf(view.text.toString())
+                    is ViewGroup -> (0 until view.childCount).flatMap { labels(view.getChildAt(it)) }
+                    else -> emptyList()
+                }
+                val review = labels(activity.page)
+                val confirm = review.indexOf(activity.getString(R.string.assistant_confirm))
+                check(review.indexOf(summary) in 0 until confirm)
+            }
+        } finally { runOnMainSync { activity.finish() } }
+    }
+
+    private fun diagnosticChecks() {
+        check(p95Ms(emptyList()) == null && p95Ms((20 downTo 1).map { it * 1_000_000L }) == 19.0)
+        val at30 = JSONObject().put("kind", "jump").put("status", "no_flight").put("clip_fps", 29.97)
+            .put("trial", 11).put("trial_target_fps", 60)
+        check(!at30.completedJump())
+        check(at30.put("trial_target_fps", 30).completedJump())
+        check(PhoneTrial(5).view == "front" && PhoneTrial(6).view == "side" && PhoneTrial(16).plannedFps == 60)
+        val csv = diagnosticsCsv(listOf(at30.put("device_model", "=Model, \"test\"")))
+        check("\"'=Model, \"\"test\"\"\"" in csv && ",29.970," in csv && csv.endsWith("\r\n"))
+        val isolated = object : ContextWrapper(targetContext) {
+            override fun getSharedPreferences(name: String, mode: Int) = super.getSharedPreferences("$name-checks", mode)
+            override fun getCacheDir() = File(super.getCacheDir(), "diagnostic-checks")
+        }
+        val log = DiagnosticLog(isolated)
+        log.clear()
+        try {
+            repeat(201) { index -> log.append(JSONObject().put("index", index)) }
+            val restored = DiagnosticLog(isolated)
+            check(restored.read().size == 200 && restored.read().first().getInt("index") == 1)
+            restored.append(JSONObject().put("trial", 21).put("status", "ok").put("app_reps", 4))
+            restored.saveCount(21, 5)
+            restored.saveCount(21, 9)
+            check(log.read().last().getInt("human_reps") == 5)
+        } finally { log.clear() }
+        check(log.read().isEmpty())
     }
 
     private fun featureChecks() {
@@ -254,10 +323,19 @@ class AppChecks : Instrumentation() {
             queue.sendJump(rejectedSessionName) { body ->
                 attempts++
                 check(body.getString("client_id") == rejectedSessionId)
-                if (body.has("session_id")) throw ApiError(422)
+                if (body.has("session_id")) throw ApiError(422,
+                    """{"detail":"Session not found","code":"jump_session_unavailable"}""")
                 6L
             }
             check(queue.count() == 0 && attempts == 2)
+            val invalidMetricsName = queue.enqueue(metrics, sessionId = 999)
+            attempts = 0
+            val invalid = ApiError(422, """{"detail":[{"loc":["body","fps"],"type":"less_than_equal"}]}""")
+            check(runCatching { queue.sendJump(invalidMetricsName) {
+                attempts++
+                throw invalid
+            } }.exceptionOrNull() === invalid && attempts == 1 && queue.count() == 1)
+            queue.sendJump(invalidMetricsName) { 7L }
             // Every permanent 4xx is set aside, including a failed session fallback.
             val permanentNames = listOf(400, 403, 404, 422).associate { status ->
                 queue.enqueue(metrics, sessionId = 999).removeSuffix(".json") to status
@@ -307,5 +385,48 @@ class AppChecks : Instrumentation() {
         check(!unclearPreview(frame) && unclearPreview(hidden))
         check(hiddenPreview.getPixel(40, 70) == Color.WHITE) { "An unclear leg must not leave floating ankle markers" }
         raw.recycle(); preview.recycle(); hiddenPreview.recycle()
+    }
+
+    private fun videoPreviewCheck() {
+        val file = File.createTempFile("reordered", ".mp4", targetContext.cacheDir)
+        try {
+            context.assets.open("reordered.mp4").use { source -> file.outputStream().use { source.copyTo(it) } }
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(file.path)
+                val timeUs = 2_000_000L
+                val expected = checkNotNull(retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST))
+                val actual = videoFrame(targetContext, Uri.fromFile(file), listOf(timeUs), 0, 128f / 96f)
+                check((0 until expected.height).all { row -> (0 until expected.width).all { column ->
+                    actual.getPixel(column, row) == expected.getPixel(column, row)
+                } }) { "A preview must use its presentation timestamp, not its list index" }
+                actual.recycle(); expected.recycle()
+            } finally { retriever.release() }
+        } finally { file.delete() }
+    }
+
+    private fun videoCutoffCheck() {
+        val file = File.createTempFile("reordered", ".mp4", targetContext.cacheDir)
+        try {
+            context.assets.open("reordered.mp4").use { source -> file.outputStream().use { source.copyTo(it) } }
+            val uri = Uri.fromFile(file)
+            val cutoff = 10_000_000L
+            val extractor = MediaExtractor()
+            val decodeOrder = try {
+                extractor.setDataSource(file.path)
+                extractor.selectTrack(0)
+                buildList {
+                    while (extractor.sampleTime >= 0) {
+                        add(extractor.sampleTime)
+                        if (!extractor.advance()) break
+                    }
+                }
+            } finally { extractor.release() }
+            val prefix = decodeOrder.takeWhile { it < cutoff }
+            val expected = decodeOrder.filter { it < cutoff }.distinct().sorted()
+            check(expected.size == 120 && prefix.size == 118) { "Fixture must cross the cutoff in decode order" }
+            val actual = videoSampleTimes(targetContext, uri, cutoff)
+            check(actual == expected) { "Expected ${expected.size} presentations before cutoff, got ${actual.size}" }
+        } finally { file.delete() }
     }
 }
