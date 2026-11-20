@@ -60,7 +60,7 @@
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
   {"id": "push_up", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 19% of 27 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 19% от 27 серии (нужни са 90%).", "name_en": "Push-up", "name_bg": "Лицеви опори", "mode": "reps", "sided": false, "view": "side",
-    "signal": {"metric": "angle:shoulder:elbow:wrist", "up": 153, "down": 105, "min_range": 36, "gate": {"metric": "tilt:ankle:shoulder", "min": 45, "max": 90}},
+    "signal": {"metric": "angle:shoulder:elbow:wrist", "up": 140, "down": 105, "min_range": 36, "gate": {"metric": "tilt:ankle:shoulder", "min": 45, "max": 90}},
     "checks": [
       {"key": "body_line", "label_en": "Body line", "label_bg": "Линия на тялото", "unit": "°", "metric": "angle:shoulder:hip:ankle", "min": 158, "cue_en": "Keep shoulders, hips and ankles in line.", "cue_bg": "Дръжте раменете, таза и глезените в една линия."},
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."}
@@ -72,7 +72,7 @@
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
     ]},
   {"id": "pull_up", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 47% of 17 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 47% от 17 серии (нужни са 90%).", "name_en": "Pull-up", "name_bg": "Набирания", "mode": "reps", "sided": false, "view": "front",
-    "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 153, "down": 100, "min_range": 40, "gate": {"metric": "height:shoulder:wrist", "min": 0.1, "max": 3}},
+    "signal": {"peak": "top", "metric": "angle:shoulder:elbow:wrist", "up": 130, "down": 100, "min_range": 40, "gate": {"metric": "height:shoulder:wrist", "min": -0.2, "max": 3}},
     "checks": [
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "max": 110, "cue_en": "Bend your elbows a little more.", "cue_bg": "Сгънете лактите малко повече."},
       {"key": "torso_tilt", "label_en": "Torso tilt", "label_bg": "Наклон на торса", "unit": "°", "metric": "tilt:hip:shoulder", "max": 42, "cue_en": "Keep your chest more upright.", "cue_bg": "Дръжте торса по-изправен."}
@@ -96,7 +96,7 @@
       {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "max": 34, "cue_en": "Keep your upper arms near your sides.", "cue_bg": "Дръжте мишниците близо до тялото."}
     ]},
   {"id": "lateral_raise", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 75% of 12 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 75% от 12 серии (нужни са 90%).", "name_en": "Lateral raise", "name_bg": "Разтваряне встрани", "mode": "reps", "sided": false, "view": "front",
-    "signal": {"peak": "top", "metric": "angle:hip:shoulder:elbow", "up": 27, "down": 75, "min_range": 40},
+    "signal": {"peak": "top", "metric": "angle:hip:shoulder:elbow", "up": 35, "down": 75, "min_range": 40},
     "checks": [
       {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 70, "max": 115, "cue_en": "Raise to about shoulder height.", "cue_bg": "Вдигнете до нивото на раменете."},
       {"key": "elbow_angle", "label_en": "Elbow angle", "label_bg": "Ъгъл в лакътя", "unit": "°", "metric": "angle:shoulder:elbow:wrist", "min": 137, "cue_en": "Keep only a slight bend in your elbows.", "cue_bg": "Дръжте лактите леко сгънати."}
@@ -114,7 +114,7 @@
       {"key": "body_tilt", "label_en": "Body tilt", "label_bg": "Наклон на тялото", "unit": "°", "metric": "tilt:ankle:shoulder", "min": 55, "cue_en": "Keep your body close to horizontal.", "cue_bg": "Дръжте тялото почти хоризонтално."}
     ]},
   {"id": "jumping_jack", "experimental": true, "experimental_reason_en": "Held-out test: exact count in 61% of 28 sets (90% needed).", "experimental_reason_bg": "Тестова проверка: точен брой в 61% от 28 серии (нужни са 90%).", "name_en": "Jumping jack", "name_bg": "Подскоци с разтваряне", "mode": "reps", "sided": false, "view": "front",
-    "signal": {"peak": "top", "metric": "span:ankle", "up": 0.65, "down": 1.05, "min_range": 0.37},
+    "signal": {"peak": "top", "metric": "span:ankle", "up": 0.65, "down": 0.75, "min_range": 0.37, "min_phase_ms": 80},
     "checks": [
       {"key": "arm_angle", "label_en": "Upper arm angle", "label_bg": "Ъгъл в рамото", "unit": "°", "metric": "angle:hip:shoulder:elbow", "min": 148, "cue_en": "Reach higher with your arms.", "cue_bg": "Вдигнете ръцете по-високо."},
       {"key": "foot_span", "label_en": "Foot span", "label_bg": "Разстояние между стъпалата", "unit": "× torso", "metric": "span:ankle", "min": 1.05, "cue_en": "Land with your feet farther apart.", "cue_bg": "Приземете се с по-раздалечени стъпала."}
