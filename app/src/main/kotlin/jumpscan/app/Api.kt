@@ -1,11 +1,14 @@
 package jumpscan.app
 
 import org.json.JSONObject
+import org.json.JSONException
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
 
-internal class ApiError(val status: Int) : IOException()
+internal class ApiError(val status: Int, response: String = "") : IOException() {
+    val code = try { JSONObject(response).opt("code") as? String } catch (_: JSONException) { null }
+}
 internal class AppError(val resource: Int) : IOException()
 
 internal fun serverUrl(input: String): String {
@@ -47,7 +50,7 @@ internal fun api(base: String, path: String, method: String = "GET", token: Stri
             result.toString()
         }.orEmpty()
         if (status !in 200..299) {
-            throw ApiError(status)
+            throw ApiError(status, response)
         }
         return response
     } finally { connection.disconnect() }

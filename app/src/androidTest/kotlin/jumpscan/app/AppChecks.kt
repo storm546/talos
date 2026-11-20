@@ -280,10 +280,19 @@ class AppChecks : Instrumentation() {
             queue.sendJump(rejectedSessionName) { body ->
                 attempts++
                 check(body.getString("client_id") == rejectedSessionId)
-                if (body.has("session_id")) throw ApiError(422)
+                if (body.has("session_id")) throw ApiError(422,
+                    """{"detail":"Session not found","code":"jump_session_unavailable"}""")
                 6L
             }
             check(queue.count() == 0 && attempts == 2)
+            val invalidMetricsName = queue.enqueue(metrics, sessionId = 999)
+            attempts = 0
+            val invalid = ApiError(422, """{"detail":[{"loc":["body","fps"],"type":"less_than_equal"}]}""")
+            check(runCatching { queue.sendJump(invalidMetricsName) {
+                attempts++
+                throw invalid
+            } }.exceptionOrNull() === invalid && attempts == 1 && queue.count() == 1)
+            queue.sendJump(invalidMetricsName) { 7L }
             // Every permanent 4xx is set aside, including a failed session fallback.
             val permanentNames = listOf(400, 403, 404, 422).associate { status ->
                 queue.enqueue(metrics, sessionId = 999).removeSuffix(".json") to status

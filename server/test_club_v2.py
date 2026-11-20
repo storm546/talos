@@ -202,7 +202,9 @@ def test_cancelled_session_rejects_upload(api, auth):
     gid = group_id(path)
     client.put(f"/api/groups/{gid}/members", json={"athlete_ids": [user_id(path, "athlete1")]}, headers=coach)
     sid = client.post("/api/sessions", json=session_body(group_id=gid, cancelled=True), headers=coach).json()["id"]
-    assert client.post("/api/jumps", json={**METRICS, "session_id": sid}, headers=athlete1).status_code == 422
+    response = client.post("/api/jumps", json={**METRICS, "session_id": sid}, headers=athlete1)
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Cannot upload to a cancelled session", "code": "jump_session_unavailable"}
 
 
 # --- idempotent uploads ---
@@ -833,6 +835,16 @@ def test_review_upload_retry_after_cancellation(api, auth):
                         json=session_body(cancelled=True)).status_code == 200
     repeat = client.post("/api/jumps", headers=athlete, json=body)
     assert repeat.status_code == 200 and repeat.json() == first.json()
+
+
+def test_jump_validation_distinguishes_unavailable_sessions(api, auth):
+    client, _ = api
+    headers = auth("athlete1")
+    missing = client.post("/api/jumps", headers=headers, json={**METRICS, "session_id": 99999})
+    assert missing.status_code == 422
+    assert missing.json() == {"detail": "Session not found", "code": "jump_session_unavailable"}
+    invalid = client.post("/api/jumps", headers=headers, json={**METRICS, "session_id": "invalid"})
+    assert invalid.status_code == 422 and "code" not in invalid.json()
 
 
 def test_review_checkin_canonical_day(api, auth, monkeypatch):

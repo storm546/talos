@@ -1072,9 +1072,13 @@ def create_app(db_path=None):
         if body.session_id is not None:
             session = db.execute("SELECT * FROM sessions WHERE id = ?", (body.session_id,)).fetchone()
             if session is None or not session_visible(db, user, session):
-                raise HTTPException(422, "Session not found")
-            if session["cancelled"]:
-                raise HTTPException(422, "Cannot upload to a cancelled session")
+                detail = "Session not found"
+            elif session["cancelled"]:
+                detail = "Cannot upload to a cancelled session"
+            else:
+                detail = None
+            if detail is not None:
+                return JSONResponse(status_code=422, content={"detail": detail, "code": "jump_session_unavailable"})
         created_at = now_iso()
         metrics = {key: value for key, value in body.model_dump().items()
                    if key not in ("session_id", "client_id")}
