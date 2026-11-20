@@ -1,5 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="jump_capture_title">Record your jump</string>
+    <string name="jump_capture_tips">Set the phone on a stable support at knee to hip height. Face the camera and leave room above your head. Jump in place, hands on hips. Land with legs extended, then bend to absorb the landing.</string>
+    <string name="jump_capture_drop_tips">Set the phone on a stable support at knee to hip height. Leave room above your head. Hands on hips: step off the platform, then jump in place. Land with legs extended, then bend to absorb the landing.</string>
+    <string name="jump_frame_body">Step back until your whole body, including both feet, is visible.</string>
+    <string name="jump_frame_space">Leave more space above your head for the jump.</string>
+    <string name="jump_frame_hold">Hold still while we check the framing.</string>
+    <string name="jump_frame_ready">Framing ready · whole body and room to jump</string>
+    <string name="jump_camera_permission">Allow camera access to record, or pick a video.</string>
+    <string name="jump_camera_error">Could not record at this rate. Try another rate or pick a video.</string>
+    <string name="jump_rate_unavailable">This camera does not offer a supported fixed rate (60, 120 or 240 fps). Pick a video instead.</string>
+    <string name="jump_capture_rate">%1$d fps</string>
+    <string name="jump_record_start">Start countdown</string>
+    <string name="jump_record_stop">Stop recording</string>
+    <string name="jump_capture_starting">Starting the camera…</string>
+    <string name="jump_countdown">%1$d</string>
+    <string name="jump_capture_go">Go!</string>
+    <string name="jump_capture_landed">Landing detected. Stay still.</string>
+    <string name="jump_capture_saving">Finishing recording…</string>
+    <string name="jump_capture_timing">The recording did not keep the selected frame rate or its timestamps do not match its duration. Record again in good light or pick a video.</string>
+    <string name="jump_bent_landing">Your knee was already noticeably bent at first contact. This can make the flight time and estimated height look larger.</string>
+    <string name="jump_error_front">Front view · typical error from a 33 fps lab comparison. Not a confidence interval or a guarantee at this frame rate.</string>
+    <string name="jump_error_side">Side view · larger typical error from a 33 fps lab comparison. Not a confidence interval. Prefer a front view for comparison.</string>
+    <string name="jump_error_band">Approx. ±%1$s\u00a0%2$s</string>
+    <string name="jump_baseline_value">Your starting point: %1$s\u00a0%2$s. %3$s</string>
+    <string name="form_mute_technique">Mute technique cues (keep counts)</string>
+    <string name="form_provisional_count">Provisional until set ends · %1$s</string>
     <string name="suggested_edges">These take-off and landing frames are a suggestion. Confirm them before applying.</string>
     <string name="app_name">JumpScan</string>
     <string name="brand">JUMPSCAN</string>
@@ -134,7 +160,7 @@
     <string name="manual_edges">Frames set by hand.</string>
     <string name="no_flight_help">We could not see the take-off and landing. Check the video frames or film the jump again.</string>
     <string name="jump_comparison">Your jump</string>
-    <string name="jump_baseline_info">Your starting point is the middle value from your first three measured jumps of this kind.</string>
+    <string name="jump_baseline_info">Your starting point is the middle value from your first three measured jumps of this kind. Use the same camera view for comparisons.</string>
     <string name="jump_baseline_sign_in">Sign in to compare with your first three measured jumps of this kind.</string>
     <string name="jump_baseline_offline">No comparison offline.</string>
     <string name="jump_baseline_loading">Checking your earlier jumps…</string>

@@ -23,6 +23,7 @@ import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -35,7 +36,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import jumpscan.core.FormExercise
 import jumpscan.core.FormExercises
+import jumpscan.core.FormEvent
 import jumpscan.core.FormProgress
+import jumpscan.core.FormRepetition
 import jumpscan.core.FormStream
 import jumpscan.core.Frame
 import jumpscan.core.JumpAnalyzer
@@ -44,6 +47,16 @@ import jumpscan.core.toJson
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+
+internal class RepeatCue {
+    private val recent = ArrayDeque<Collection<String>>(3)
+
+    fun record(faults: Collection<String>): String? {
+        if (recent.size == 3) recent.removeFirst()
+        recent.addLast(faults)
+        return faults.firstOrNull { fault -> recent.count { fault in it } >= 2 }
+    }
+}
 
 class LiveFormActivity : ComponentActivity() {
     private lateinit var exercise: FormExercise
@@ -72,8 +85,9 @@ class LiveFormActivity : ComponentActivity() {
     private val calibration = ArrayDeque<Frame>(10)
     private var stream: FormStream? = null
     private var setStarted = -1L
-    private var feedbackAt = Long.MIN_VALUE / 2
-    private var spokenCue: String? = null
+    private var cues = RepeatCue()
+    private var cuesMuted = false
+    private var shownCueUntil = 0L
     private var spokenCount = 0
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -153,6 +167,21 @@ class LiveFormActivity : ComponentActivity() {
             }
         }
         header.addView(voice, LinearLayout.LayoutParams(-1, -2))
+        if (exercise.mode == "reps") {
+            val settings = getSharedPreferences("live-form", MODE_PRIVATE)
+            cuesMuted = settings.getBoolean("mute-technique", false)
+            header.addView(Switch(this).apply {
+                setText(R.string.form_mute_technique)
+                setTextColor(getColor(R.color.on_hero))
+                minHeight = dp(48)
+                isChecked = cuesMuted
+                setOnCheckedChangeListener { _, muted ->
+                    cuesMuted = muted
+                    settings.edit().putBoolean("mute-technique", muted).apply()
+                    if (muted) shownCueUntil = 0L
+                }
+            })
+        }
         root.addView(preview, LinearLayout.LayoutParams(-1, 0, 1f))
         action = styleButton(Button(this), primary = true).apply {
             text = getString(R.string.form_start); isAllCaps = false; isEnabled = false; minHeight = dp(48); textSize = 16f
@@ -322,18 +351,26 @@ class LiveFormActivity : ComponentActivity() {
         if (run == null || run !== timing) return
         if (setStarted < 0) setStarted = frame.tMs
         run.analysed(latency)
-        active.feed(frame.copy(tMs = frame.tMs - setStarted))
-        showProgress(active.progress)
-        val key = if (inFrame) active.progress.cue else "tracking_gap"
-        val message = cue(key)
-        banner.text = message
-        tone(when (key) {
-            null -> Tone.GOOD
-            "ready_position", "hold_position" -> Tone.NEUTRAL
-            else -> Tone.WARNING
-        })
-        speak(active.progress, key, message)
+        val events = active.feed(frame.copy(tMs = frame.tMs - setStarted))
+        updateFeedback(active.progress, events, inFrame)
         if (frame.tMs - setStarted >= 60_000) finishSet()
+    }
+
+    private fun updateFeedback(progress: FormProgress, events: List<FormEvent>, inFrame: Boolean) {
+        showProgress(progress)
+        val now = SystemClock.elapsedRealtime()
+        val key = if (!inFrame) "tracking_gap" else progress.cue.takeIf { it == "ready_position" || it == "hold_position" }
+        val terminalCue = events.filterIsInstance<FormEvent.End>().map { cues.record(faults(it.repetition)) }.lastOrNull()
+            .takeUnless { cuesMuted }
+        if (terminalCue != null) {
+            banner.text = cue(terminalCue)
+            tone(Tone.WARNING)
+            shownCueUntil = now + 2_500
+        } else if (!inFrame || now >= shownCueUntil) {
+            banner.text = cue(key)
+            tone(if (!inFrame) Tone.WARNING else if (key == null) Tone.GOOD else Tone.NEUTRAL)
+        }
+        speak(progress, terminalCue)
     }
 
     private fun startSet() {
@@ -341,7 +378,10 @@ class LiveFormActivity : ComponentActivity() {
         voice.visibility = View.GONE
         stream = FormStream(exercise.id, side, aspect)
         setStarted = -1
-        spokenCount = 0; spokenCue = null; feedbackAt = Long.MIN_VALUE / 2
+        spokenCount = 0
+        cues = RepeatCue()
+        shownCueUntil = 0L
+        showProgress(FormProgress())
         timing = RunTiming(applicationContext, if (replay) "form_replay" else "form_live", "lite", phoneTrial)
         action.setText(R.string.form_stop)
         banner.setText(R.string.form_begin)
@@ -386,7 +426,20 @@ class LiveFormActivity : ComponentActivity() {
             subcount.text = getString(R.string.form_in_band, progress.inBandMs / 1000.0)
         } else {
             counter.text = String.format(appLocale, "%d", progress.complete)
-            subcount.text = getString(R.string.form_counts, progress.complete, progress.partial, progress.unclear)
+            val counts = getString(R.string.form_counts, progress.complete, progress.partial, progress.unclear)
+            subcount.text = if (stream == null) counts else getString(R.string.form_provisional_count, counts)
+        }
+    }
+
+    private fun faults(rep: FormRepetition): Collection<String> = buildList {
+        addAll(rep.reasons.filter { it == "too_fast" || it == "below_min_depth" })
+        if (rep.status != "unclear") for (check in exercise.checks) {
+            val value = rep.checks?.get(check.key) ?: when (check.key) {
+                "knee_flexion_peak" -> rep.depth
+                "knee_alignment" -> listOfNotNull(rep.fppaL, rep.fppaR).maxOrNull()
+                else -> null
+            }
+            if (value != null && !check.band.contains(value)) add(check.key)
         }
     }
 
@@ -425,20 +478,20 @@ class LiveFormActivity : ComponentActivity() {
         }
     }
 
-    private fun speak(progress: FormProgress, key: String?, message: String) {
-        val now = SystemClock.elapsedRealtime()
+    private fun speak(progress: FormProgress, key: String?) {
+        var counted = false
         if (progress.complete > spokenCount) {
             spokenCount = progress.complete
-            if (!ttsReady || tts?.speak(spokenCount.toString(), TextToSpeech.QUEUE_FLUSH, null, "rep-$spokenCount") != TextToSpeech.SUCCESS) {
+            counted = ttsReady && tts?.speak(spokenCount.toString(), TextToSpeech.QUEUE_FLUSH, null, "rep-$spokenCount") == TextToSpeech.SUCCESS
+            if (!counted) {
                 if (countTone == null) countTone = runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 65) }.getOrNull()
                 countTone?.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
             }
-            feedbackAt = now
-        } else if (ttsReady && key != null && key != spokenCue && now - feedbackAt >= 2500) {
-            tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "cue-$now")
-            spokenCue = key
-            feedbackAt = now
-        } else if (key == null) spokenCue = null
+        }
+        if (ttsReady && key != null) {
+            tts?.speak(cue(key), if (counted) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH,
+                null, "cue-${SystemClock.elapsedRealtime()}")
+        }
     }
 
     private fun failed() {

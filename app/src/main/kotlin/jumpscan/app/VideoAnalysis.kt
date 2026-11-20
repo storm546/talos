@@ -23,6 +23,7 @@ import jumpscan.core.Landmark
 import jumpscan.core.readLandmarkCsv
 import jumpscan.core.toJson
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -70,8 +71,9 @@ internal fun applyEdges(context: Context, analysis: Analysis, takeoffMs: Long, l
     }
     var status = "error"
     try {
-        val landing = JumpAnalyzer.analyzeWithLanding(analysis.frames, analysis.metrics.test, analysis.aspect,
+        val result = JumpAnalyzer.analyzeWithLanding(analysis.frames, analysis.metrics.test, analysis.aspect,
             takeoffMs = takeoffMs, landingMs = landingMs)
+        val landing = result.copy(metrics = result.metrics.copy(fps = analysis.metrics.fps))
         val index = analysis.timesUs.indexOfFirst { it / 1000 == landingMs }
         val raw = timing.decode { videoFrame(context, analysis.uri, analysis.timesUs, index, analysis.aspect) }
         val frame = analysis.frames.first { it.tMs == landingMs }
@@ -82,10 +84,12 @@ internal fun applyEdges(context: Context, analysis: Analysis, takeoffMs: Long, l
 }
 
 internal fun analyzeVideo(context: Context, uri: Uri, test: String, mode: String = "full", trial: PhoneTrial? = null,
+    captureFps: Int? = null,
     progress: (Int) -> Unit): Analysis =
-    withVideoPose(context, uri, mode, 10_000L, trial, progress) { retriever, frames, timesUs, aspect, truncated, timing ->
-        val landing = try { JumpAnalyzer.analyzeWithLanding(frames, test, aspect) }
+    withVideoPose(context, uri, mode, 10_000L, trial, progress, captureFps) { retriever, frames, timesUs, aspect, truncated, timing ->
+        val result = try { JumpAnalyzer.analyzeWithLanding(frames, test, aspect) }
             catch (_: IllegalArgumentException) { throw AppError(R.string.too_few_clear_frames) }
+        val landing = if (captureFps == null) result else result.copy(metrics = result.metrics.copy(fps = timing.clipFps!!))
         val previewFrame = landing.contactMs?.let { time -> frames.first { it.tMs == time } } ?: peakFlexionFrame(frames)
         val previewIndex = timesUs.indexOfFirst { it / 1000 == previewFrame.tMs }
         val raw = timing.decode { videoFrame(retriever, timesUs, previewIndex, aspect) }
@@ -104,7 +108,7 @@ internal fun analyzeFormVideo(context: Context, uri: Uri, choice: FormChoice, tr
         catch (_: IllegalArgumentException) { throw AppError(R.string.too_few_clear_frames) }
     }
 
-internal fun videoSampleTimes(context: Context, uri: Uri, limitUs: Long): List<Long> {
+internal fun videoSampleTimes(context: Context, uri: Uri, limitUs: Long, distinct: Boolean = true): List<Long> {
     val extractor = MediaExtractor()
     return try {
         extractor.setDataSource(context, uri, null)
@@ -119,11 +123,26 @@ internal fun videoSampleTimes(context: Context, uri: Uri, limitUs: Long): List<L
             if (time < limitUs) times += time
             if (!extractor.advance()) break
         }
-        times.distinct().sorted()
+        (if (distinct) times.distinct() else times).sorted()
     } finally { extractor.release() }
 }
 
+internal fun checkedCaptureRate(timesUs: List<Long>, durationUs: Long, target: Int): Double? {
+    if (timesUs.size < 2 || target !in listOf(60, 120, 240)) return null
+    val span = timesUs.last() - timesUs.first()
+    val period = 1_000_000.0 / target
+    val rate = (timesUs.size - 1) * 1_000_000.0 / span
+    val timestampDuration = span + 1_000_000.0 / rate
+    return rate.takeIf {
+        abs(rate - target) <= target * .03 &&
+            timesUs.first() <= 2 * period &&
+            abs(timestampDuration - durationUs) <= maxOf(5_000.0, 2 * period) &&
+            timesUs.zipWithNext().all { (previous, next) -> (next - previous).toDouble() in (.5 * period)..(1.5 * period) }
+    }
+}
+
 private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: Long, trial: PhoneTrial?, progress: (Int) -> Unit,
+    captureFps: Int? = null,
     finish: (MediaMetadataRetriever, List<Frame>, List<Long>, Float, Boolean, RunTiming) -> T): T {
     val replay = BuildConfig.DEBUG && mode == "replay"
     val kind = if (mode == "form") "form_recorded" else if (replay) "jump_replay" else "jump"
@@ -146,11 +165,16 @@ private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: L
         val aspect = displayWidth.toFloat() / displayHeight
         if (mode == "form" && duration > maxMs) throw AppError(R.string.form_clip_limit)
         val limit = minOf(duration, maxMs)
-        val timesUs = videoSampleTimes(context, uri, limit * 1000)
+        if (captureFps != null && duration > maxMs) throw AppError(R.string.jump_capture_timing)
+        val timesUs = videoSampleTimes(context, uri, if (captureFps == null) limit * 1000 else Long.MAX_VALUE,
+            distinct = captureFps == null)
         if (timesUs.size < 2) throw AppError(R.string.too_few_frames)
         val fps = (timesUs.size - 1) * 1_000_000.0 / (timesUs.last() - timesUs.first())
         if (!fps.isFinite() || fps !in 10.0..480.0) throw AppError(R.string.fps_error)
         timing.clipFps = fps
+        if (captureFps != null && checkedCaptureRate(timesUs, duration * 1000, captureFps) == null) {
+            throw AppError(R.string.jump_capture_timing)
+        }
         if (!timesUs.zipWithNext().all { (a, b) -> b / 1000 > a / 1000 })
             throw AppError(R.string.timestamps_error)
 

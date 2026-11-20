@@ -248,14 +248,20 @@ core/appcompat and `com.google.mediapipe:tasks-vision`. Networking with `HttpURL
 
 Screens:
 1. Login: server URL, email, password. Token kept in app-private storage.
-2. Home: choose test type, then "Record" (system camera via `ACTION_VIDEO_CAPTURE`) or
-   "Pick video" (system photo picker). Shows a one-line filming guide: camera at knee height,
-   facing the athlete, whole body in frame.
+2. Home: choose a test type, then record in the app or pick a video with the system photo picker.
+   CameraX targets a fixed 60 fps and offers 120 or 240 fps only when supported by the rear camera's
+   recording session. The live framing check looks for the whole body and headroom before a three-second
+   audible countdown. Recording stops about two seconds after detected landing, at the safety limit, or
+   when the athlete taps Stop. Imports remain available if fixed-rate capture is unavailable. Recordings
+   are checked against their actual presentation timestamps and duration before analysis.
 3. Analysis: decode the clip frame by frame on a background thread, run Pose Landmarker
    (`pose_landmarker_heavy.task` bundled in assets, VIDEO mode), pass frames to `JumpAnalyzer`,
    show progress.
-4. Result: the numbers of section 1 with plain labels and the warnings; "Upload" sends the JSON to
-   `POST /api/jumps`. The video is never uploaded.
+4. Result: measured flight time and height show the view-specific typical error from `docs/validacia.md`
+   §4.8 (mean absolute error at 33 fps, not a confidence interval). The flight-time error is propagated
+   through the height formula at the measured flight time. The athlete's own same-test baseline and
+   difference appear alongside the estimates when available. Contact flexion of 30° or more triggers a
+   technique reminder, not a diagnostic threshold. "Upload" sends only the metrics JSON to `POST /api/jumps`.
 5. History: the athlete's own jumps from `GET /api/jumps`.
 6. Profile → Diagnostics (also available offline): the latest 200 local jump and form runs. The Android
    share sheet exports a CSV and a plain-text summary, with no video, landmarks, or account data.
@@ -387,7 +393,10 @@ cues. Live mode uses the MediaPipe lite model in `LIVE_STREAM` on the CPU; recor
 the heavy model in `VIDEO`. Both use `FormStream`. Given identical timestamped landmarks, aspect ratio,
 and view policy, final metrics agree; different models or frame cadences can produce different inputs and
 results. The live screen overlays a skeleton, checks framing and view before starting, displays a rep or
-hold counter and technique cues, and speaks with an offline Android voice when available. If the app
+hold counter and technique cues, and speaks with an offline Android voice when available. Rep counts
+are provisional until the set ends. A technique cue follows a completed attempt only if a fault on that
+attempt also occurred in one of the previous two. At most one cue is presented per attempt; athletes can
+mute technique cues without muting counts. If the app
 language has no offline voice, an installed fallback speaks counts only; with no offline voice, feedback
 is visual. Live sets end at 60 seconds of tracked input or when stopped. No video, audio or landmarks are
 uploaded. Recorded results retain the existing pending-upload queue; live results use the same authenticated,

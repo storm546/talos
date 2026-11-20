@@ -311,9 +311,7 @@ class MainActivity : Activity() {
         jump.addView(types)
         button(getString(R.string.record), primary = true, parent = jump) { recordJump() }
         button(getString(R.string.pick_video), parent = jump) {
-            val pick = if (Build.VERSION.SDK_INT >= 33) Intent(MediaStore.ACTION_PICK_IMAGES)
-                else Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-            filmingGuide { launchVideo(pick.setType("video/*"), 11) }
+            filmingGuide { pickJumpVideo() }
         }
         section(R.string.ui_tools).setPadding(0, dp(14), 0, dp(3))
         if (signedIn) {
@@ -560,7 +558,13 @@ class MainActivity : Activity() {
     }
 
     private fun recordJump() {
-        filmingGuide { launchVideo(Intent(MediaStore.ACTION_VIDEO_CAPTURE).putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1), 10) }
+        launchVideo(Intent(this, JumpCaptureActivity::class.java).putExtra("test", test), 10)
+    }
+
+    private fun pickJumpVideo() {
+        val pick = if (Build.VERSION.SDK_INT >= 33) Intent(MediaStore.ACTION_PICK_IMAGES)
+            else Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+        launchVideo(pick.setType("video/*"), 11)
     }
 
     private fun filmingGuide(continueAction: () -> Unit) {
@@ -600,7 +604,16 @@ class MainActivity : Activity() {
     @Deprecated("Uses the platform activity result API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode in 10..11 && resultCode == RESULT_OK) {
+        if (requestCode == 10 && resultCode == RESULT_FIRST_USER) pickJumpVideo()
+        if (requestCode == 10 && resultCode == RESULT_OK) {
+            val name = data?.getStringExtra("clip")?.takeIf { it.matches(Regex("jump-[0-9]+\\.mp4")) }
+            val fps = data?.getIntExtra("fps", 0)
+            val file = name?.let { java.io.File(cacheDir, "jump-capture/$it") }
+            if (file?.isFile == true && fps in listOf(60, 120, 240)) {
+                startAnalysis(Uri.fromFile(file), captureFps = fps)
+            } else home(getString(R.string.no_video_returned))
+        }
+        if (requestCode == 11 && resultCode == RESULT_OK) {
             val uri = data?.data
             if (uri != null) startAnalysis(uri) else home(getString(R.string.no_video_returned))
         }
@@ -637,7 +650,7 @@ class MainActivity : Activity() {
         }, { if (trial != null) diagnostics(it) else formHome(it) }, phoneTest = trial != null)
     }
 
-    private fun startAnalysis(uri: Uri, mode: String = "full", trial: PhoneTrial? = null) {
+    private fun startAnalysis(uri: Uri, mode: String = "full", trial: PhoneTrial? = null, captureFps: Int? = null) {
         analysis = null
         edits = null
         uploadedId = null
@@ -646,7 +659,7 @@ class MainActivity : Activity() {
         resultSession = if (trial == null) selectedSession else null
         val expectedGeneration = generation + 1
         val jumpTest = if (trial == null) test else "cmj"
-        work(getString(R.string.analysing), { analyzeVideo(this, uri, jumpTest, mode, trial) { value ->
+        work(getString(R.string.analysing), { analyzeVideo(this, uri, jumpTest, mode, trial, captureFps) { value ->
             runOnUiThread {
                 if (screen == "busy" && !isDestroyed && generation == expectedGeneration) {
                     progress?.isIndeterminate = false
@@ -973,10 +986,27 @@ class MainActivity : Activity() {
         val auth = token()
         val host = page
         val address = base()
+        val warnings = json.optJSONArray("warnings")
+        val side = warnings != null && (0 until warnings.length()).any { warnings.optString(it) == "single_leg_view" }
+        val errorMs = if (side) 87.9 else 32.1
+        val durationMs = json.optDouble("flight_time_ms")
+        val textLocale = resources.configuration.locales[0]
+        if (listOf("knee_flexion_contact_l", "knee_flexion_contact_r").any { json.optDouble(it) >= 30 }) {
+            notice(getString(R.string.jump_bent_landing), caution = true)
+        }
         section(R.string.jump_comparison, host)
+        text(getString(if (side) R.string.jump_error_side else R.string.jump_error_front), 14, parent = host)
         text(getString(if (auth.isEmpty()) R.string.jump_baseline_sign_in else R.string.jump_baseline_info), 14, parent = host)
         val comparisons = highlights.associateWith { metric ->
             val panel = stat(getString(metric.label), number(json, metric.key), metric.unit, host)
+            val band = when (metric.key) {
+                "flight_time_ms" -> errorMs
+                "jump_height_cm" -> 9.81 / 4 * (durationMs / 1000) * (errorMs / 1000) * 100
+                else -> null
+            }
+            if (band != null && band.isFinite()) {
+                text(getString(R.string.jump_error_band, String.format(textLocale, "%.1f", band), metric.unit), 14, parent = panel)
+            }
             text(getString(metric.meaning), 14, parent = panel)
             text(getString(if (auth.isEmpty()) R.string.jump_baseline_offline else R.string.jump_baseline_loading), 14, parent = panel)
         }
@@ -998,11 +1028,13 @@ class MainActivity : Activity() {
                             val change = json.getDouble(metric.key) - baseline.getDouble(metric.key)
                             val value = metricNumber(kotlin.math.abs(change), metric.key, locale)
                             val unit = if (metric.unit == "%") getString(R.string.jump_percentage_points) else metric.unit
-                            when {
+                            val comparison = when {
                                 value == metricNumber(0.0, metric.key, locale) -> getString(R.string.jump_baseline_equal)
                                 change > 0 -> getString(R.string.jump_baseline_higher, value, unit)
                                 else -> getString(R.string.jump_baseline_lower, value, unit)
                             }
+                            val reference = metricNumber(baseline.getDouble(metric.key), metric.key, locale)
+                            getString(R.string.jump_baseline_value, reference, metric.unit, comparison)
                         }
                     }
                 }

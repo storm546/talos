@@ -1,5 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="jump_capture_title">Запишете скока си</string>
+    <string name="jump_capture_tips">Закрепете телефона стабилно, на височина между коленете и таза. Застанете с лице към камерата и оставете място над главата си. Скочете на място с ръце на кръста. Докоснете пода с изпънати крака, после сгънете коленете, за да омекотите приземяването.</string>
+    <string name="jump_capture_drop_tips">Закрепете телефона стабилно, на височина между коленете и таза. Оставете място над главата си. С ръце на кръста стъпете от платформата и веднага скочете на място. Докоснете пода с изпънати крака, после сгънете коленете, за да омекотите приземяването.</string>
+    <string name="jump_frame_body">Отстъпете назад, докато в кадъра се вижда цялото Ви тяло, включително двете стъпала.</string>
+    <string name="jump_frame_space">Оставете повече място над главата си за скока.</string>
+    <string name="jump_frame_hold">Стойте неподвижно, докато проверяваме кадъра.</string>
+    <string name="jump_frame_ready">Кадърът е готов · вижда се цялото Ви тяло и има място за скок</string>
+    <string name="jump_camera_permission">Разрешете достъп до камерата за запис или изберете видео.</string>
+    <string name="jump_camera_error">Записът с тази кадрова честота не е възможен. Опитайте друга честота или изберете видео.</string>
+    <string name="jump_rate_unavailable">Камерата не поддържа запис при фиксирани 60, 120 или 240 кадъра/сек. Изберете видео.</string>
+    <string name="jump_capture_rate">%1$d кадъра/сек.</string>
+    <string name="jump_record_start">Започнете отброяването</string>
+    <string name="jump_record_stop">Спрете записа</string>
+    <string name="jump_capture_starting">Камерата се включва…</string>
+    <string name="jump_countdown">%1$d</string>
+    <string name="jump_capture_go">Скочете!</string>
+    <string name="jump_capture_landed">Отчетено е приземяване. Стойте неподвижно.</string>
+    <string name="jump_capture_saving">Записът приключва…</string>
+    <string name="jump_capture_timing">Записът не е с избраната кадрова честота или времената на кадрите не съответстват на продължителността му. Запишете отново при добра светлина или изберете видео.</string>
+    <string name="jump_bent_landing">При първия допир с пода коляното Ви вече е било осезаемо сгънато. Това може да завиши отчетеното време във въздуха и изчислената височина.</string>
+    <string name="jump_error_front">Изглед отпред · типична грешка от лабораторно сравнение при 33 кадъра/сек. Това не е доверителен интервал или гаранция за точност при тази кадрова честота.</string>
+    <string name="jump_error_side">Страничен изглед · по-голяма типична грешка от лабораторно сравнение при 33 кадъра/сек. Това не е доверителен интервал. За сравнение предпочитайте изглед отпред.</string>
+    <string name="jump_error_band">Приблизително ±%1$s\u00a0%2$s</string>
+    <string name="jump_baseline_value">Вашата изходна стойност: %1$s\u00a0%2$s. %3$s</string>
+    <string name="form_mute_technique">Изключете насоките, без да спирате броенето</string>
+    <string name="form_provisional_count">Предварителен брой до края на серията · %1$s</string>
     <string name="suggested_edges">Тези кадри за отскока и приземяването са предложение. Потвърдете ги, преди да ги приложите.</string>
     <string name="app_name">JumpScan</string>
     <string name="brand">JUMPSCAN</string>
@@ -134,7 +160,7 @@
     <string name="manual_edges">Кадрите са избрани ръчно.</string>
     <string name="no_flight_help">Не успяхме да разпознаем отскока и приземяването. Проверете кадрите или заснемете скока отново.</string>
     <string name="jump_comparison">Вашият скок</string>
-    <string name="jump_baseline_info">За сравнение ползваме средното по големина измерване от първите Ви три скока от същия вид.</string>
+    <string name="jump_baseline_info">За изходна стойност ползваме средното по големина измерване от първите Ви три скока от същия вид. За сравнение използвайте същия изглед.</string>
     <string name="jump_baseline_sign_in">Влезте, за да сравните резултата с първите си три измерени скока от същия вид.</string>
     <string name="jump_baseline_offline">Няма сравнение без връзка.</string>
     <string name="jump_baseline_loading">Зареждаме предишните Ви скокове…</string>
