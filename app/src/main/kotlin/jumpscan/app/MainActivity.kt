@@ -304,6 +304,7 @@ class MainActivity : Activity() {
             }, { (newToken, name, id) ->
                 val prior = prefs.getLong("user_id", 0)
                 if (prior != id || base() != address) {
+                    prefs.edit().remove("flight_strip").apply()
                     selectedSession = null
                     resultSession = null
                     if (prior != 0L) lastForm = null
@@ -340,14 +341,7 @@ class MainActivity : Activity() {
         text(if (signedIn) "$day  ·  $name" else day, 14)
         if (message != null) notice(message, caution = true)
         val jump = card(hero = true)
-        val head = row(jump, center = true)
-        text(getString(R.string.ui_jump), 28, Color.WHITE, head).apply {
-            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-        }
-        head.addView(ImageView(this).apply {
-            setImageResource(R.drawable.flight_diagram)
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(dp(90), dp(58)).apply { marginStart = dp(8) })
+        jump.addView(FlightView(this, FlightStrip.read(prefs.getString("flight_strip", null))), LinearLayout.LayoutParams(-1, dp(154)))
         text(getString(R.string.ready_explainer), 14, getColor(R.color.on_hero), jump)
         selectedSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 14, getColor(R.color.on_hero), jump) }
         val types = RadioGroup(this).apply {
@@ -454,7 +448,7 @@ class MainActivity : Activity() {
     }
 
     private fun signOutLocal() {
-        prefs.edit().remove("token").remove("name").remove("user_id").apply()
+        prefs.edit().remove("token").remove("name").remove("user_id").remove("flight_strip").apply()
         selectedSession = null
         resultSession = null
         analysis = null
@@ -762,10 +756,14 @@ class MainActivity : Activity() {
                     progressText?.text = getString(R.string.progress, value)
                 }
             }
-        } }, { analysis = it; if (trial == null) result() else diagnostics() },
+        } }, { analysis = it; if (trial == null) { rememberFlight(it); result() } else diagnostics() },
             { if (trial == null) home(it) else diagnostics(it) }, phoneTest = trial != null)
         progress?.show(0)
         text(getString(R.string.first_ten), 14)
+    }
+
+    private fun rememberFlight(run: Analysis) {
+        FlightStrip.from(run)?.let { prefs.edit().putString("flight_strip", it.encode()).apply() }
     }
 
     private fun result(message: String? = null) {
@@ -773,6 +771,7 @@ class MainActivity : Activity() {
         layout(getString(R.string.result), "result")
         val metrics = JSONObject(current.metrics.toJson())
         val hasFlight = hasFlight(metrics)
+        if (hasFlight) FlightStrip.from(current)?.let { card(hero = true).addView(FlightView(this, it), LinearLayout.LayoutParams(-1, dp(154))) }
         if (!hasFlight) {
             notice(getString(R.string.no_flight_help), caution = true)
             if (uploadedId == null && queuedId == null) {
@@ -914,6 +913,7 @@ class MainActivity : Activity() {
                 catch (_: IllegalArgumentException) { throw AppError(R.string.manual_analysis_error) }
             }, {
                 analysis = it
+                    rememberFlight(it)
                 edits = null
                 uploadedId = null
                 queuedId = null
@@ -1070,7 +1070,7 @@ class MainActivity : Activity() {
             (0 until warnings.length()).none { warnings.optString(it) == "no_flight_detected" }
         } != false
 
-    private fun jumpHighlights(json: JSONObject, beforeId: Long? = null, excludeClient: String? = null) {
+    private fun jumpHighlights(json: JSONObject, beforeId: Long? = null, excludeClient: String? = null, previous: List<Double> = emptyList()) {
         val highlights = listOf(
             JumpHighlight("jump_height_cm", R.string.ui_height, R.string.jump_height_meaning, getString(R.string.ui_cm)),
             JumpHighlight("flight_time_ms", R.string.ui_flight, R.string.jump_flight_meaning, getString(R.string.ui_ms)),
@@ -1086,12 +1086,13 @@ class MainActivity : Activity() {
         val errorMs = if (side) 87.9 else 32.1
         val durationMs = json.optDouble("flight_time_ms")
         val textLocale = resources.configuration.locales[0]
+        val ruler = if (json.isNull("jump_height_cm")) null else HeightRule(this, json, previous).also { host.addView(it, LinearLayout.LayoutParams(-1, dp(106))) }
         if (listOf("knee_flexion_contact_l", "knee_flexion_contact_r").any { json.optDouble(it) >= 30 }) {
             notice(getString(R.string.jump_bent_landing), caution = true)
         }
         section(R.string.jump_comparison, host)
         text(getString(if (auth.isEmpty()) R.string.jump_baseline_sign_in else R.string.jump_baseline_info), 14, parent = host)
-        for (metric in highlights) {
+        for (metric in highlights.filterNot { it.key == "jump_height_cm" }) {
             val panel = stat(getString(metric.label), number(json, metric.key), metric.unit, host)
             val band = when (metric.key) {
                 "flight_time_ms" -> errorMs
@@ -1134,6 +1135,7 @@ class MainActivity : Activity() {
                         retry.visibility = View.VISIBLE
                     } else {
                         status.visibility = View.GONE
+                        ruler?.baseline(baseline.optDouble("jump_height_cm"))
                         for (metric in highlights) {
                             val caption = when {
                                 baseline.isNull(metric.key) -> getString(R.string.jump_baseline_pending)
@@ -1226,22 +1228,30 @@ class MainActivity : Activity() {
                 notice(getString(R.string.empty_history))
                 button(getString(R.string.record), primary = true) { recordJump() }
             }
+            val pastByTest = mutableMapOf<String, MutableList<Double>>()
+            val priorHeights = Array(rows.length()) { emptyList<Double>() }
+            for (index in rows.length()-1 downTo 0) {
+                val item = rows.getJSONObject(index); val metrics = item.optJSONObject("metrics") ?: item
+                val heights = pastByTest.getOrPut(metrics.getString("test")) { mutableListOf() }
+                priorHeights[index] = heights.takeLast(6)
+                if (hasFlight(metrics)) metrics.optDouble("jump_height_cm").takeIf { it.isFinite() }?.let(heights::add)
+            }
             for (i in 0 until rows.length()) {
                 val item = rows.getJSONObject(i)
                 // The API returns metadata and metric fields in the same object.
                 val metrics = item.optJSONObject("metrics") ?: item
-                val panel = card()
+                val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(12), 0, dp(8)) }; page.addView(panel)
                 text(getString(R.string.history_item, item.getLong("id"), localDateTime(item.getString("created_at"), locale)), 16, green, panel)
                 val hasFlight = hasFlight(metrics)
                 text(getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump), 14, parent = panel)
                 if (!hasFlight) text(getString(R.string.no_flight_detected), 14, parent = panel)
                 else if (!metrics.isNull("jump_height_cm")) {
-                    text(getString(R.string.jump_history_height, number(metrics, "jump_height_cm")), 14, parent = panel)
+                    panel.addView(HeightRule(this, metrics, priorHeights[i]), LinearLayout.LayoutParams(-1, dp(82)))
                 }
                 button(getString(R.string.view_jump, item.getLong("id")), parent = panel) {
                     layout(getString(R.string.jump_title, item.getLong("id")), "history_detail")
                     if (hasFlight) {
-                        jumpHighlights(metrics, item.getLong("id"))
+                        jumpHighlights(metrics, item.getLong("id"), previous = priorHeights[i])
                         metricWarnings(metrics)
                         metricRows(metrics)
                     } else {

@@ -71,4 +71,9 @@
     <string name="ui_another_set">Another set</string>
     <string name="ui_reps_unit">reps</string>
     <string name="ui_held">seconds held</string>
+    <string name="flight_demo">Jump demonstration</string>
+    <string name="flight_last">Measured flight</string>
+    <string name="flight_replay">↻  Tap to replay</string>
+    <string name="flight_reference">Baseline · %1$s %2$s</string>
+    <string name="flight_target">Target · %1$d reps</string>
 </resources>
