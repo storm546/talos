@@ -159,11 +159,10 @@ internal fun MainActivity.iconTile(icon: String, parent: LinearLayout, dark: Boo
 }
 
 internal fun MainActivity.notice(value: String, caution: Boolean = false) = text(value, 14,
-    getColor(if (caution) R.color.warning else R.color.accent)).apply {
+    getColor(if (caution) R.color.warning else R.color.muted)).apply {
     background = shape(getColor(if (caution) R.color.notice else R.color.surface), 14)
-        setTextColor(getColor(if (caution) R.color.warning else R.color.muted))
-        compoundDrawablePadding = dp(10)
-        setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon(if (caution) "notice" else "info", currentTextColor), null, null, null)
+    compoundDrawablePadding = dp(10)
+    setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon(if (caution) "notice" else "info", currentTextColor), null, null, null)
     setPadding(dp(14), dp(12), dp(14), dp(12))
     accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
     (layoutParams as LinearLayout.LayoutParams).apply { topMargin = dp(8); bottomMargin = dp(8) }
