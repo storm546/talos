@@ -648,3 +648,151 @@ stay on the kit under `/work/jumpscan-data/form/reps/`. Reproduce on the kit: `r
 Limits: 12 squat sets from 11 people is a small sample; the Kaggle squat clips hold one or two repetitions;
 none of this is from a phone camera; the live path is simulated from recorded video, not measured on a
 Galaxy A54.
+
+## 2026-11-20: Benchmark with Countix and MM-Fit, Experimental section
+
+The first round (above) had hand counts only for squat, so every exercise was hidden. This round adds two
+public repetition-count sources, reruns every path, and replaces hiding with an Experimental section.
+
+### Sources and licences
+
+- **Hand-counted sets** (the 12 squat and 2 glute-bridge sets above). Three squat sets are cut from the Kaggle
+  dataset "Workout/Exercises Video" by hasyimabdillah, licensed CC BY-NC-SA 4.0 (attribution, non-commercial,
+  share-alike); the owner approved keeping them on 2026-11-19. The clips stay on the build kit and are not
+  redistributed in this repository. Attribution: hasyimabdillah, Workout/Exercises Video, Kaggle,
+  https://www.kaggle.com/datasets/hasyimabdillah/workoutfitness-video, CC BY-NC-SA 4.0.
+- **Countix** (Dwibedi et al., "Counting Out Time", CVPR 2020; Google Research): YouTube id, Kinetics clip and
+  repetition start and end with a count. Only the train and validation files carry a class column; the
+  Kinetics-700-2020 test annotations have no labels, so the Countix test file could not be mapped and is unused.
+  No licence statement was found in the Countix archive README, on sites.google.com/view/repnet or on the CVDF
+  Kinetics page, nor in the Kinetics-700-2020 annotation archive or its readme; the videos belong to their
+  YouTube uploaders. INDEX.csv records this per set. Classes used: squat, push up, pull ups, jumping jacks.
+  Lunge was not used: Countix counts alternating legs, the catalogue lunge is one side at a time.
+- **MM-Fit** (Strömbäck, Huang and Radu, IMWUT 2020), RGB video from Zenodo record 7672767 under CC BY 4.0,
+  labels (start frame, end frame, count) from the project archive at mmfit.github.io. Downloaded on the kit only.
+  The label frame f is video time f/30 s: the videos are 30 fps and the pose frame indices end at the video's
+  last frame (w19: 52 561 frames), and the squat and jumping-jack sets checked on time slices start and stop
+  where the labels say. Used: squat, push_up, jumping_jack, overhead_press (seated dumbbell press) and
+  lateral_raise (seated). Not used: curls (MM-Fit alternates arms, the catalogue counts both together), rows
+  (single-arm), lunges (alternating) and the exercises without a catalogue entry. Held out by subject: the
+  dataset authors' unseen-subject sessions w00, w05, w12, w13 and w20 are the test split; tuning used the first
+  set of each exercise in w01-w04 and w19. Sets are cut with 1 s before and after the labelled frames.
+
+### Countix filtering and spot-check
+
+Each annotated span was downloaded with yt-dlp (`--download-sections`, keyframes forced at the cuts), one at a
+time on openclaw, and moved to the kit: 492 of the 527 selected rows were still online. Filters, in order: the joints the
+exercise needs visible and inside the image on at least 75% of frames sampled at 4 fps (`visible.py`); the
+downloaded file starts at 0 and lasts the requested span within 0.2 s (`probe.csv`; about a third failed, mostly
+videos that end before the Kinetics clip or start at a later keyframe); no camera cut inside the span
+(`shots.py`); and a look at two frames of every remaining clip to drop other exercises and scenes with two
+people (`countix/screen-exclude.csv`: inverted rows and kipping in "pull ups", pike and wall push-ups in "push up",
+Olympic lifts and split squats in "squat", trampolines in "jumping jacks").
+
+Labels were spot-checked on pixel time slices of 12 segments per exercise (`countix/spotcheck.csv`):
+- jumping jacks 10 exact and 2 within one of 12;
+- pull ups 7 exact and 3 within one of 10 countable (3 of the 12 were inverted rows, now screened out);
+- push up 8 exact and 3 within one of 11 countable;
+- squat 10 exact of 11 countable (the twelfth had a camera cut, now filtered).
+
+The disagreements are all at the edges of the span. No exercise's Countix data was dropped.
+
+Countix spans start at the first counted movement and end at the last, often mid-cycle, and Countix counts
+those edge cycles. A rest-to-rest counter reports them as boundary observations (`incomplete_start` or
+`incomplete_end`). For Countix sets only, one boundary observation per edge is therefore counted as a repetition.
+Hand-counted and MM-Fit sets start and end at rest (MM-Fit with 1 s of margin), so there only complete repetitions
+count. Boundary flags are reported separately and are not counted as unclear; the unclear rate in the bar covers
+`tracking_gap`, `too_fast` and `degenerate_geometry`.
+
+### Results
+
+Exact = complete count equals the label (Countix: plus edge observations, as above). Live is the lite model at
+an irregular 15 fps, recorded is the heavy model at every frame. "Before" is the engine and catalogue at f172120.
+Unclear counts interior unclear observations per labelled repetition; boundary flags are left out.
+
+| Exercise | Source | Split | Sets | People | Live exact (before) | Live MAE | Live off by >1 | Live unclear | Recorded exact (before) | Live = recorded |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| glute_bridge | all | test | 1 | 1 | 100% (100%) | 0.0 | 0 | 0% | 100% (100%) | 100% |
+| glute_bridge | all | train | 1 | 1 | 100% (100%) | 0.0 | 0 | 0% | 0% (0%) | 0% |
+| jumping_jack | all | test | 28 | 18 | 61% (39%) | 1.29 | 7 | 1% | 61% (57%) | 64% |
+| jumping_jack | all | train | 24 | 24 | 46% (38%) | 1.33 | 4 | 4% | 46% (38%) | 50% |
+| jumping_jack | countix | test | 16 | 14 | 69% (62%) | 1.25 | 3 | 0% | 69% (69%) | 50% |
+| jumping_jack | countix | train | 21 | 21 | 48% (43%) | 1.1 | 3 | 3% | 52% (43%) | 52% |
+| jumping_jack | mmfit | test | 12 | 4 | 50% (8%) | 1.33 | 4 | 2% | 50% (42%) | 83% |
+| jumping_jack | mmfit | train | 3 | 3 | 33% (0%) | 3.0 | 1 | 7% | 0% (0%) | 33% |
+| lateral_raise | all | test | 12 | 4 | 75% (33%) | 0.5 | 3 | 0% | 50% (33%) | 75% |
+| lateral_raise | all | train | 4 | 4 | 75% (25%) | 1.0 | 1 | 0% | 0% (0%) | 25% |
+| overhead_press | all | test | 12 | 4 | 25% (25%) | 3.17 | 7 | 1% | 0% (0%) | 25% |
+| overhead_press | all | train | 5 | 5 | 80% (80%) | 0.6 | 1 | 0% | 80% (80%) | 80% |
+| pull_up | all | test | 17 | 17 | 47% (35%) | 0.76 | 1 | 13% | 35% (41%) | 24% |
+| pull_up | all | train | 29 | 29 | 45% (24%) | 1.34 | 9 | 25% | 41% (31%) | 24% |
+| push_up | all | test | 27 | 17 | 18% (7%) | 5.74 | 20 | 6% | 15% (18%) | 26% |
+| push_up | all | train | 27 | 25 | 48% (30%) | 2.67 | 14 | 8% | 30% (22%) | 15% |
+| push_up | countix | test | 12 | 12 | 33% (17%) | 1.33 | 6 | 6% | 17% (25%) | 33% |
+| push_up | countix | train | 22 | 20 | 50% (32%) | 2.05 | 11 | 6% | 32% (23%) | 14% |
+| push_up | mmfit | test | 15 | 5 | 7% (0%) | 9.27 | 14 | 6% | 13% (13%) | 20% |
+| push_up | mmfit | train | 5 | 5 | 40% (20%) | 5.4 | 3 | 12% | 20% (20%) | 20% |
+| squat | all | test | 22 | 12 | 96% (0%) | 0.05 | 0 | 0% | 96% (77%) | 86% |
+| squat | all | train | 29 | 28 | 76% (7%) | 0.34 | 1 | 5% | 55% (48%) | 41% |
+| squat | hand | test | 3 | 3 | 67% (0%) | 0.33 | 0 | 0% | 67% (67%) | 100% |
+| squat | hand | train | 9 | 8 | 89% (11%) | 0.11 | 0 | 0% | 56% (44%) | 67% |
+| squat | countix | test | 4 | 4 | 100% (0%) | 0.0 | 0 | 0% | 100% (75%) | 25% |
+| squat | countix | train | 15 | 15 | 60% (7%) | 0.6 | 1 | 16% | 47% (47%) | 13% |
+| squat | mmfit | test | 15 | 5 | 100% (0%) | 0.0 | 0 | 0% | 100% (80%) | 100% |
+| squat | mmfit | train | 5 | 5 | 100% (0%) | 0.0 | 0 | 0% | 80% (60%) | 80% |
+
+### Engine and catalogue changes (chosen on the training split only)
+
+- jumping_jack: `down` 1.05 -> 0.75 torso widths and `min_phase_ms` 150 -> 80. Countix jumping jacks peak at 0.9-1.0
+  torso widths and switch phase in under 150 ms. Train, live: exact 4 -> 10 of 18 Countix sets at the time of tuning.
+- pull_up: `up` 153 -> 130 degrees and gate `height:shoulder:wrist` min 0.1 -> -0.2. A dead hang reads 146-150
+  degrees in 2D, so rest was never reached, and at the top the wrists are level with the shoulders, so the gate
+  aborted the cycle. Train, live: exact 7 -> 10 of 25.
+- push_up: `up` 153 -> 140 degrees (locked-out arms read below 153 in many views). Train, live: exact 7 -> 11 of 22.
+- lateral_raise: `up` 27 -> 35 degrees (seated arms hang wider). Train, live: exact 1 -> 3 of 4 MM-Fit sets.
+- Tried and not shipped:
+  - a relative return level (end a repetition after it undoes a share of its own range): no gain on train;
+  - time-constant smoothing of the counting signal (`smooth_ms`, an exponential filter after the median-of-3
+    filter, reset after gaps). It was chosen on train (60 ms for jumping jacks, 120 ms for pull-ups) and then
+    compared once on the held-out split: jumping jacks 61% -> 61% exact, pull-ups 47% -> 47%, recorded MAE
+    slightly worse. No improvement, so it is not in the engine;
+  - rest bands from the athlete's first complete repetition (`adapt_rest`, clamped to the catalogue value and below
+    the midpoint): worse on train for all three exercises, so it was not taken to the held-out split.
+- Squat is unchanged from the first round (gap bridging, `open_flexion` 45).
+
+### Decision
+
+Bar, on the held-out split at live 15 fps: exact on at least 90% of sets, none off by more than one, unclear at most
+10%, and at least 8 test sets from at least 3 people.
+
+| Exercise | Held-out sets / people | Live exact | Off by >1 | Unclear | Status |
+|---|---|---:|---:|---:|---|
+| squat | 22 / 12 | 95% (21 of 22) | 0 | 0% | **validated**, offered normally |
+| lateral_raise | 12 / 4 | 75% | 3 | 0% | experimental |
+| jumping_jack | 28 / 18 | 61% | 7 | 1% | experimental |
+| pull_up | 17 / 17 | 47% | 1 | 13% | experimental |
+| overhead_press | 12 / 4 | 25% | 7 | 1% | experimental |
+| push_up | 27 / 17 | 19% | 20 | 6% | experimental |
+| glute_bridge | 1 / 1 | – | – | – | experimental (too few sets) |
+| the other 13 | 0 | – | – | – | experimental (no counted test videos) |
+
+Push-ups fail mostly on MM-Fit's frontal camera (the catalogue asks for a side view) and on refusals where the
+body-tilt gate never opens. Overhead press and lateral raise come from seated MM-Fit sets only, filmed from the
+front by one camera. These are data and view limits as much as engine limits; the experimental reason in the
+catalogue states the held-out number.
+
+The app no longer hides anything. Validated exercises are listed as before. All others sit in a collapsed
+"Experimental" ("Експериментални") section at the end of the picker. It is closed on every start and is opened
+with a "Show experimental exercises (N)" button. Each card has a "Not validated" chip and the one-line reason
+from the catalogue (`experimental_reason_en`/`_bg`). Live and From video work the same. The server keeps
+accepting and listing every catalogue entry.
+
+Files are in `/root/jumpscan/logs/reps/`:
+- `INDEX.csv`, which records for every set its source, licence, URL, person or session, split and label;
+- `results-final.csv` and `results-baseline.csv`;
+- the Countix work in `countix/` (selection, fetch log, visibility, timing probe, screening, spot-check);
+- the MM-Fit set list in `mmfit/sets.csv`;
+- the scripts.
+
+Countix and MM-Fit videos, cut sets and tracks stay on the kit under `/work/jumpscan-data/form/reps/`. None of
+this is phone footage, and the live path is simulated from recorded video.
