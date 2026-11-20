@@ -1,0 +1,20 @@
+<resources>
+    <color name="paper">#141619</color>
+    <color name="surface">#212428</color>
+    <color name="surface_top">#25282C</color>
+    <color name="ink">#F4F1E9</color>
+    <color name="muted">#B6B4AE</color>
+    <color name="line">#676A6C</color>
+    <color name="accent">#FF965B</color>
+    <color name="accent_pressed">#33FF965B</color>
+    <color name="hover">#36393D</color>
+    <color name="hero">#211F21</color>
+    <color name="hero_top">#2C292A</color>
+    <color name="signal">#FF965B</color>
+    <color name="on_hero">#DBDBD8</color>
+    <color name="notice">#423520</color>
+    <color name="warning">#FFD186</color>
+    <color name="error">#FF9C93</color>
+    <color name="ready">#98D7C8</color>
+    <color name="ready_surface">#243E39</color>
+</resources>

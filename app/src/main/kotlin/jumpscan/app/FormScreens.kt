@@ -137,7 +137,7 @@ private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, repl
     button(getString(R.string.ui_live), primary = true, parent = actions) { choose(); openLiveForm(false) }.apply {
         layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10) }
         contentDescription = getString(R.string.ui_live_for, exercise.label(locale.language == "bg"))
-        setCompoundDrawablesRelativeWithIntrinsicBounds(UiIcon("form", getColor(R.color.hero), dp(18)), null, null, null)
+        setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("form", getColor(R.color.hero)), null, null, null)
         if (replay) setOnLongClickListener { choose(); openLiveForm(true); true }
     }
     button(getString(R.string.ui_from_video), parent = actions) { choose(); formVideo() }.apply {

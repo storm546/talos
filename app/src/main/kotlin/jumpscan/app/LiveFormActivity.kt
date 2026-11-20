@@ -60,6 +60,8 @@ internal class RepeatCue {
 }
 
 class LiveFormActivity : ComponentActivity() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(base.instrumentTheme())
+
     private lateinit var exercise: FormExercise
     private var side: String? = null
     private var replay = false

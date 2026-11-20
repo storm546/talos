@@ -26,6 +26,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
 class MainActivity : Activity() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(base.instrumentTheme())
+
     private val executor = Executors.newSingleThreadExecutor()
     private val clubExecutor = Executors.newSingleThreadExecutor()
     private var task: Future<*>? = null
@@ -161,12 +163,14 @@ class MainActivity : Activity() {
         }
         setContentView(scroll)
         scroll.requestApplyInsets()
-        text("↗  " + getString(R.string.brand), 13, green).apply {
-            letterSpacing = 0.12f
-            setTypeface(null, Typeface.BOLD)
+        text(getString(R.string.brand), 13, ink).apply {
+            instrumentType(numeric = true)
+            letterSpacing = .1f
+            compoundDrawablePadding = dp(8)
+            setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("index", green), null, null, null)
         }
-        text(title, 34).apply {
-            typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
+        text(title, 40).apply {
+            instrumentType(display = true)
             setPadding(0, dp(9), 0, dp(6))
             if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
         }
@@ -175,6 +179,7 @@ class MainActivity : Activity() {
     internal fun text(value: String, size: Int = 16, color: Int = if (size <= 14) muted else ink, parent: LinearLayout = page): TextView = TextView(this).apply {
         text = value
         textSize = size.toFloat()
+        instrumentType(display = size >= 17)
         setTextColor(color)
         setPadding(0, dp(5), 0, dp(5))
         parent.addView(this, LinearLayout.LayoutParams(-1, -2))
@@ -201,6 +206,7 @@ class MainActivity : Activity() {
             inputType = type
             setSingleLine(true)
             setText(value)
+            instrumentType()
             setTextColor(ink)
             setHintTextColor(muted)
             setPadding(dp(12), dp(10), dp(12), dp(10))

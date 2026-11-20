@@ -80,6 +80,8 @@ internal class JumpLandingWatch(initialFeet: Float?) {
 
 @OptIn(ExperimentalSessionConfig::class, ExperimentalHighSpeedVideo::class)
 class JumpCaptureActivity : ComponentActivity() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(base.instrumentTheme())
+
     private data class Mode(val fps: Int, val config: SessionConfig, val video: VideoCapture<Recorder>)
 
     private val main = Handler(Looper.getMainLooper())
