@@ -47,8 +47,11 @@ def clear_demo_rows(db, users, athletes, club_ids):
                f"AND (athlete_id IS NULL OR athlete_id IN ({athlete_marks})) "
                "AND NOT EXISTS (SELECT 1 FROM group_members WHERE group_id = plans.group_id) "
                "AND NOT EXISTS (SELECT 1 FROM set_logs WHERE plan_id = plans.id)", (*club_ids, *users, *athletes))
+    db.execute(f"DELETE FROM recipes WHERE owner_id IN ({user_marks})", users)
     db.execute(f"DELETE FROM foods WHERE owner_id IN ({user_marks}) "
-               "AND NOT EXISTS (SELECT 1 FROM food_logs WHERE food_id = foods.id)", users)
+               "AND NOT EXISTS (SELECT 1 FROM food_logs WHERE food_id = foods.id) "
+               "AND NOT EXISTS (SELECT 1 FROM recipe_items WHERE food_id = foods.id) "
+               "AND NOT EXISTS (SELECT 1 FROM recipes WHERE food_id = foods.id)", users)
 
 
 def seed(path=None, *, reset=False):
@@ -273,6 +276,50 @@ MEAL_PLAN = (  # meal, food (Bulgarian name from the food list), grams
     ("dinner", "Бял хляб", 60), ("snack", "Ябълки", 180), ("snack", "Орехи", 30),
 )
 
+# Last week of the diary (SPEC 7.1): the snack is a scanned club food and dinner a club recipe, both by serving.
+SCANNED_FOOD = {"name_bg": "Протеинов бар (демо)", "brand": "Демо", "barcode": "2000000000015", "kcal": 390,
+                "protein_g": 30, "carbs_g": 40, "fat_g": 12, "fibre_g": 5, "serving": ("1 бр. (50 g)", 50)}
+RECIPE = ("Пъстърва на фурна с домати", 2, (("Пъстърва", 300), ("Зехтин", 6), ("Домати", 120)))
+WEEK_SWAPS = {"Орехи": "scanned", "Пъстърва": "recipe"}
+
+
+def seed_food_v2(db, club_id):
+    """The demo club's scanned food and recipe (idempotent); returns {kind: (food id, serving label, grams)}."""
+    bar = db.execute("SELECT id FROM foods WHERE club_id = ? AND owner_id IS NULL AND barcode = ?",
+                     (club_id, SCANNED_FOOD["barcode"])).fetchone()
+    if bar is None:
+        f = SCANNED_FOOD
+        bar = [db.execute(
+            "INSERT INTO foods(club_id, name_bg, brand, barcode, kcal, protein_g, carbs_g, fat_g, fibre_g, servings, "
+            "nutrients, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'custom')",
+            (club_id, f["name_bg"], f["brand"], f["barcode"], f["kcal"], f["protein_g"], f["carbs_g"], f["fat_g"],
+             f["fibre_g"], json.dumps([{"label": f["serving"][0], "grams": f["serving"][1]}]),
+             json.dumps({"fiber": f["fibre_g"]}))).lastrowid]
+    name, servings, items = RECIPE
+    recipe = db.execute("SELECT food_id FROM recipes WHERE club_id = ? AND owner_id IS NULL AND name = ?",
+                        (club_id, name)).fetchone()
+    total = sum(grams for _, grams in items)
+    if recipe is None:
+        foods = [(db.execute("SELECT * FROM foods WHERE name_bg = ? AND owner_id IS NULL AND club_id IS NULL",
+                             (food,)).fetchone(), grams) for food, grams in items]
+        per100 = {k: sum(f[k] * g for f, g in foods) / total for k in ("kcal", "protein_g", "carbs_g", "fat_g", "fibre_g")}
+        micro = [json.loads(f["nutrients"] or "{}") for f, _ in foods]
+        nutrients = {k: sum(m[k] * g for m, (_, g) in zip(micro, foods)) / total
+                     for k in sorted(set.intersection(*(set(m) for m in micro)))}
+        food_id = db.execute(
+            "INSERT INTO foods(club_id, name_bg, kcal, protein_g, carbs_g, fat_g, fibre_g, servings, nutrients, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'recipe')",
+            (club_id, name, *per100.values(), json.dumps([{"label": "1 порция", "grams": round(total / servings, 1)},
+                                                          {"label": "цялата рецепта", "grams": total}]),
+             json.dumps(nutrients))).lastrowid
+        recipe_id = db.execute("INSERT INTO recipes(club_id, name, servings_count, food_id) VALUES (?, ?, ?, ?)",
+                               (club_id, name, servings, food_id)).lastrowid
+        db.executemany("INSERT INTO recipe_items(recipe_id, position, food_id, grams) VALUES (?, ?, ?, ?)",
+                       [(recipe_id, n, f["id"], g) for n, (f, g) in enumerate(foods)])
+        recipe = [food_id]
+    return {"scanned": (bar[0], SCANNED_FOOD["serving"][0], SCANNED_FOOD["serving"][1]),
+            "recipe": (recipe[0], "1 порция", round(total / servings, 1))}
+
 
 def seed_training_nutrition(db, user_ids, athlete_ids, groups, club_ids, today, new_athletes):
     """Seed synthetic exercises, plans, sets and nutrition in the demo clubs."""
@@ -305,6 +352,7 @@ def seed_training_nutrition(db, user_ids, athlete_ids, groups, club_ids, today, 
     weekdays = sorted({item[0] for item in PLAN_ITEMS})
     food_ids = {name: db.execute("SELECT id FROM foods WHERE name_bg = ? AND owner_id IS NULL",
                                  (name,)).fetchone()[0] for _, name, _ in MEAL_PLAN}
+    swaps = seed_food_v2(db, demo_club_id)
     for group_name, accounts in DEMO_GROUPS.items():
         for account in accounts:
             if account not in new_athletes:
@@ -333,11 +381,15 @@ def seed_training_nutrition(db, user_ids, athlete_ids, groups, club_ids, today, 
                 day = today - timedelta(days=days_ago)
                 if days_ago != 4 + variant % 3:
                     for meal, food, grams in MEAL_PLAN:
+                        food_id, serving, grams = food_ids[food], None, round(grams * rng.uniform(.85, 1.15))
+                        if days_ago < 7 and food in WEEK_SWAPS:
+                            food_id, serving, grams = swaps[WEEK_SWAPS[food]]
                         db.execute(
-                            "INSERT INTO food_logs(athlete_id, day, meal, food_id, grams, client_id, created_at) "
-                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                            (athlete_id, day.isoformat(), meal, food_ids[food], round(grams * rng.uniform(.85, 1.15)),
-                             f"seed-food-{athlete_id}-{day.isoformat()}-{food}", now_isos(day)))
+                            "INSERT INTO food_logs(athlete_id, day, meal, food_id, grams, client_id, created_at, "
+                            "serving_label, quantity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (athlete_id, day.isoformat(), meal, food_id, grams,
+                             f"seed-food-{athlete_id}-{day.isoformat()}-{food}", now_isos(day), serving,
+                             None if serving is None else 1))
                 if days_ago not in (4, 9):  # two days without a weigh-in
                     db.execute("INSERT INTO weights(athlete_id, day, kg) VALUES (?, ?, ?)",
                                (athlete_id, day.isoformat(), round(base + days_ago * .04 + rng.gauss(0, .3), 1)))
