@@ -196,3 +196,18 @@ svg polyline {stroke-linecap:round;stroke-linejoin:round}
 .flight-arrival {display:flex;justify-content:flex-start;padding:12px 18px;border-inline-start:3px solid var(--accent);border-radius:0 14px 14px 0;background:var(--surface);margin-bottom:12px}
 .flight-arrival .flight-glyph {width:96px;height:64px}
 @media(prefers-reduced-motion:no-preference){.flight-arrival {animation:flight-in .45s ease-out}.flight-arrival .flight-path,.flight-lane .flight-path {animation:flight-draw .75s ease-out}.flight-lane .flight-mark {animation:flight-rise .6s cubic-bezier(.2,0,0,1)}@keyframes flight-rise{from{bottom:3px}}@keyframes flight-in{from{transform:translateY(-12px);opacity:0}}@keyframes flight-draw{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(-3px)}}}
+/* Records and leaderboard (SPEC 8): the team flight board language, on the dark hero in both themes. */
+.board-controls {display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:14px;--accent:var(--signal);--ink:var(--hero-ink);--muted:var(--hero-muted);--line:#595552;--hover:#353234;--surface:#2a2729}
+.board-controls .week {margin:0}.board-controls .week button {color:var(--hero-ink)}.board-controls select {width:auto;min-width:170px}
+.board-lanes {list-style:none;padding:0;margin-bottom:0}
+.own-lane,.record-new {box-shadow:inset 0 0 0 2px var(--signal)}
+.own-row td {font-weight:650;background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.record-badge {align-self:flex-start;color:var(--hero);background:var(--signal);border-color:var(--signal);font-weight:650}
+.record-lanes .flight-lanes {grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+.record-lanes .flight-lane span {white-space:normal;overflow:visible}
+.record-label {font-size:.82rem;color:var(--muted);margin-top:6px}
+.record-hero {min-height:0}
+.record-status h2 {margin-bottom:8px}.record-status p {margin:0 0 10px}
+.board-lanes {grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.record-lanes .flight-lanes {max-height:none;overflow:visible}
+.club-table td.num small {white-space:normal;min-width:16ch}

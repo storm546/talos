@@ -365,9 +365,11 @@ function relevant(event, view) {
     String(event.athlete_id) === String(state.user.id);
   if (view === 'wellbeing') return event.type === 'checkin';
   if (view === 'sessions' || view === 'sessionsMine') return event.type === 'session' || event.type === 'jump';
-  if (view === 'training' || view === 'nutrition' || view === 'form') {
+  if (view === 'leaderboard') return ['record','jump'].includes(event.type);
+  if (view === 'training' || view === 'nutrition' || view === 'form' || view === 'records') {
     const target = athleteTarget(); if (!target) return false;
-    const map = {training:['set','jump','checkin'], nutrition:['food','weight','coaching','nutrition_day','checkin'], form:['form']};
+    const map = {training:['set','jump','checkin'], nutrition:['food','weight','coaching','nutrition_day','checkin'], form:['form'],
+                 records:['record','jump','set','form']};
     return map[view].includes(event.type) && String(event.athlete_id) === String(target.id);
   }
   return false;
@@ -474,6 +476,7 @@ async function load(view=state.view) {
       api('/api/form/exercises').catch(error => { if (error.message === 'notFound') return []; throw error; })]) : [[], []];
     data = {formSets, formCatalogue};
   }
+  if (view === 'records' || view === 'leaderboard') data = await recordsData(view);
   if (version !== loadVersion || !state.user) return;
   Object.assign(state, data, {view}); message(''); render('h1');
 }
@@ -1215,7 +1218,7 @@ function athleteSubnav(content, current) {
   const own = state.user.role === 'athlete';
   const nav = node('nav', null, 'subnav'); nav.setAttribute('aria-label', t('sectionLinks'));
   for (const [v, key] of [...(own ? [['today','today']] : []), ['history', own ? 'ownHistory' : 'history'], ['training', 'training'],
-                          ['nutrition', 'nutrition'], ['form', 'formView']]) {
+                          ['nutrition', 'nutrition'], ['form', 'formView'], ['records', 'recTitle']]) {
     const b = button(key, () => load(v)); if (current === v) b.setAttribute('aria-current', 'page'); nav.append(b);
   }
   content.append(nav);
@@ -1759,10 +1762,10 @@ function render(focusSelector=null) {
   $('session').append(button('signOut',async()=>{await api('/api/auth/logout',{method:'POST'});loadVersion++;signedOut();message('');}));
   const nav=node('nav', null, 'main-nav');nav.setAttribute('aria-label',t('overview'));
   const own = state.user.role === 'athlete';
-  const views=own?[['today','overview','index'],['sessionsMine','mySessions','club'],['checkins','myCheckins','checkin']]:[
-    ['team','team','index'],['plans','plans','training'],['groups','groups','home'],['sessions','sessions','club'],['wellbeing','wellbeingView','checkin'],
+  const views=own?[['today','overview','index'],['sessionsMine','mySessions','club'],['checkins','myCheckins','checkin'],['leaderboard','recBoard','history']]:[
+    ['team','team','index'],['plans','plans','training'],['groups','groups','home'],['sessions','sessions','club'],['wellbeing','wellbeingView','checkin'],['leaderboard','recBoard','history'],
     ['users','users','profile'],...(state.user.role==='admin'?[['clubs','clubs','club'],['audit','audit','more']]:[])];
-  const athleteTab = ['history','training','nutrition','form'].includes(state.view);
+  const athleteTab = ['history','training','nutrition','form','records'].includes(state.view);
   for (const [view,key,icon] of views) {
     const control = button(key, () => load(view));
     const glyph = node('span', null, 'nav-glyph icon-' + icon); glyph.setAttribute('aria-hidden', 'true'); control.prepend(glyph);
@@ -1775,7 +1778,7 @@ function render(focusSelector=null) {
   if (content.dataset.previousView !== state.view) view.classList.add('enter');
   content.dataset.previousView = state.view;
   content.append(view);
-  ({today,team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans})[state.view](view);
+  ({today,team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans,records,leaderboard})[state.view](view);
   setLive(state.live);
   renderAssistant();
   if(focusSelector)content.querySelector(focusSelector)?.focus();
