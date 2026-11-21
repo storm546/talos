@@ -68,7 +68,7 @@ internal fun MainActivity.servingName(label: String, food: JSONObject? = null): 
     val unit = serving?.optString("unit")?.takeIf { it.isNotBlank() } ?: label.takeIf { it == "serving" || it == "recipe" } ?: return label
     val count = serving?.optDouble("count", 1.0)?.takeIf { it.isFinite() && it > 0 } ?: 1.0
     val name = getString(if (unit == "recipe") R.string.recipe_unit_recipe else R.string.recipe_serving)
-    return if (unit == "recipe" && count == 1.0) name else "${short(count)} $name"
+    return if (count == 1.0) name else "${short(count)} $name"
 }
 
 /** The reference a log carries: a stored food (recipes are backed by one) or a catalogue food, stored by the server on first use. */
