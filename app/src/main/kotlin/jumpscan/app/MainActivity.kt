@@ -383,7 +383,8 @@ class MainActivity : Activity() {
         text(getString(R.string.ui_extras))
         tiles(UiTile(R.string.training_title, "training") { trainingHome() },
             UiTile(R.string.nutrition_title, "food") { nutritionHome() },
-            UiTile(R.string.assistant_title, "assistant") { assistantScreen() })
+            UiTile(R.string.assistant_title, "assistant") { assistantScreen() },
+            UiTile(R.string.records_title, "index") { records() }, UiTile(R.string.leaderboard_title, "club") { leaderboard() })
     }
 
     internal fun profile() {
@@ -1428,6 +1429,7 @@ class MainActivity : Activity() {
             "technique_detail" -> techniqueHistory()
             "form_video", "form_detail", "form_result" -> formHome()
             "nutrition" -> home()
+            "records", "leaderboard" -> more()
             "food_log" -> foods()
             "recipe_edit" -> recipes()
             "food_search", "quick_add", "food_form", "barcode_manual", "recipes", "ai_entry", "insights" -> nutritionBack()

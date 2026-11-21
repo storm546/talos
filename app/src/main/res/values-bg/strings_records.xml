@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="records_title">Рекорди</string>
+    <string name="records_intro">Най-добрите Ви резултати от вече записани скокове, серии и задържания.</string>
+    <string name="records_empty">Още няма рекорди. Появяват се след първия скок или серия с тежест.</string>
+    <string name="records_new">Нов рекорд</string>
+    <string name="records_height">Височина на скока</string>
+    <string name="records_flight">Време във въздуха</string>
+    <string name="records_hold">Най-дълго задържане · %1$s</string>
+    <string name="records_strength">Сила</string>
+    <string name="records_estimate">Изчислен максимум за 1 повторение %1$s</string>
+    <string name="records_estimate_note">Максимумът за 1 повторение е изчислен по формулата на Епли от серии до 10 повторения.</string>
+    <string name="records_previous">%1$s · предишен рекорд %2$s</string>
+    <string name="records_first">%1$s · първи резултат</string>
+    <string name="records_excluded">Скокове с предупреждение не се броят: %1$d</string>
+    <string name="records_set">%1$s × %2$d</string>
+    <string name="records_seconds">%1$s сек</string>
+    <string name="records_ms">%1$s мс</string>
+    <string name="leaderboard_title">Класация</string>
+    <string name="leaderboard_period_30">30 дни</string>
+    <string name="leaderboard_period_90">90 дни</string>
+    <string name="leaderboard_period_all">Цялото време</string>
+    <string name="leaderboard_you">Вие</string>
+    <string name="leaderboard_rank">%1$d.</string>
+    <string name="leaderboard_your_place">Вашето място</string>
+    <string name="leaderboard_not_ranked">Не сте в класацията за този период.</string>
+    <string name="leaderboard_opt_in">Покажи ме в класацията на клуба</string>
+    <string name="leaderboard_opt_in_note">Членовете на клуба виждат само малкото Ви име, първата буква на фамилията и най-добрия Ви скок. Нищо друго не се споделя и можете да се откажете по всяко време.</string>
+    <string name="leaderboard_await_coach">Под 18 години сте, затова треньорът също трябва да потвърди, преди да се появите.</string>
+    <string name="leaderboard_empty">Още няма класирани за този период.</string>
+</resources>

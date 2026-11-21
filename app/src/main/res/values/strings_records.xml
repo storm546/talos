@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="records_title">Records</string>
+    <string name="records_intro">Your best results from jumps, sets and holds you have already recorded.</string>
+    <string name="records_empty">No records yet. They appear after your first jump or weighted set.</string>
+    <string name="records_new">New record</string>
+    <string name="records_height">Jump height</string>
+    <string name="records_flight">Flight time</string>
+    <string name="records_hold">Longest hold · %1$s</string>
+    <string name="records_strength">Strength</string>
+    <string name="records_estimate">Estimated one-rep max %1$s</string>
+    <string name="records_estimate_note">The one-rep max is estimated with the Epley formula from sets of at most 10 reps.</string>
+    <string name="records_previous">%1$s · previous best %2$s</string>
+    <string name="records_first">%1$s · first result</string>
+    <string name="records_excluded">Jumps with a warning are not counted: %1$d</string>
+    <string name="records_set">%1$s × %2$d</string>
+    <string name="records_seconds">%1$s s</string>
+    <string name="records_ms">%1$s ms</string>
+    <string name="leaderboard_title">Leaderboard</string>
+    <string name="leaderboard_period_30">30 days</string>
+    <string name="leaderboard_period_90">90 days</string>
+    <string name="leaderboard_period_all">All time</string>
+    <string name="leaderboard_you">You</string>
+    <string name="leaderboard_rank">%1$d.</string>
+    <string name="leaderboard_your_place">Your place</string>
+    <string name="leaderboard_not_ranked">You are not on the leaderboard for this period.</string>
+    <string name="leaderboard_opt_in">Show me on the club leaderboard</string>
+    <string name="leaderboard_opt_in_note">Club members see only your first name, the first letter of your surname and your best jump. Nothing else is shared, and you can turn this off at any time.</string>
+    <string name="leaderboard_await_coach">You are under 18, so your coach also needs to confirm before you appear.</string>
+    <string name="leaderboard_empty">No one is ranked for this period yet.</string>
+</resources>
