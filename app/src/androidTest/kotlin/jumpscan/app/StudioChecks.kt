@@ -13,12 +13,26 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
+internal fun Instrumentation.requireAppWindow(name: String) {
+    var observed = ""
+    repeat(30) {
+        val root = uiAutomation.rootInActiveWindow
+        observed = root?.packageName.toString()
+        if (observed == targetContext.packageName) return
+        if (observed == "android" && root?.findAccessibilityNodeInfosByText("Pixel Launcher")?.isNotEmpty() == true) {
+            root.findAccessibilityNodeInfosByViewId("android:id/aerr_close").firstOrNull()?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+        }
+        SystemClock.sleep(200)
+    }
+    error("Expected ${targetContext.packageName} over $name, found $observed")
+}
+
 internal class StudioChecks(private val test: Instrumentation, private val movies: Boolean) {
     private val context get() = test.targetContext
 
     fun record(name: String, action: () -> Unit) {
         if (!movies) return action()
-        val recording = test.uiAutomation.executeShellCommand("screenrecord --size 480x1040 --bit-rate 3000000 --time-limit 3 /sdcard/jumpscan-$name.mp4")
+        val recording = test.uiAutomation.executeShellCommand("screenrecord --size 480x1040 --bit-rate 3000000 --time-limit 4 /sdcard/jumpscan-$name.mp4")
         ParcelFileDescriptor.AutoCloseInputStream(recording).use { stream ->
             SystemClock.sleep(450)
             action()
@@ -42,6 +56,7 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             } while (SystemClock.uptimeMillis() < end)
             check(actual == expected) { "$name: expected $expected, got $actual" }
             SystemClock.sleep(550)
+            test.requireAppWindow(name)
             val bitmap = checkNotNull(test.uiAutomation.takeScreenshot())
             File(context.filesDir, "$language-$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             bitmap.recycle()
@@ -72,6 +87,12 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             }
             shot("home")
             test.runOnMainSync { host.formHome() }; shot("technique", "form")
+            test.runOnMainSync {
+                val count = jumpscan.core.FormExercises.all.count { it.experimental }
+                buttons(host.page).single { it.text == host.getString(R.string.ui_form_show_experimental, count) }.performClick()
+                val flagged = buttons(host.page).first { it.contentDescription == host.getString(R.string.ui_live_for, jumpscan.core.FormExercises.all.first { it.experimental }.label(language == "bg")) }
+                flagged.requestRectangleOnScreen(android.graphics.Rect(0, 0, flagged.width, flagged.height), true)
+            }; shot("experimental", "form")
             test.runOnMainSync { host.techniqueHistory() }; shot("technique-history", "technique_history")
             val sets = JSONArray(api(server, "/api/form?limit=20", token = login.getString("token")))
             val set = sets.getJSONObject(0)
@@ -79,6 +100,9 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             record("history-rulers") { test.runOnMainSync { open("history") }; shot("history") }
             test.runOnMainSync { host.trainingHome() }; shot("training")
             test.runOnMainSync { host.nutritionHome() }; shot("nutrition")
+            test.runOnMainSync { buttons(host.page).first { it.text == host.getString(R.string.nutr_food) }.performClick()
+                buttons(host.page).first { it.text == host.getString(R.string.nutr_search) }.performClick() }; shot("food-search", "food_search")
+            test.runOnMainSync { val choices = buttons(host.page); val search = choices.indexOfFirst { it.text == host.getString(R.string.nutr_search) }; choices[search+1].performClick() }; shot("meal-picker", "food_log")
             test.runOnMainSync { open("clubHome") }; shot("club")
             test.runOnMainSync { open("checkin") }; shot("checkin")
             test.runOnMainSync { host.assistantScreen() }; shot("assistant")
@@ -86,10 +110,11 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             test.runOnMainSync { host.appearanceSheet() }
             shot("appearance", "profile")
             test.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            analyzeVideo(context, android.net.Uri.fromFile(File(context.filesDir,"jump-60.mp4")), "cmj", "replay") {}
             test.runOnMainSync { host.diagnostics() }; shot("guided-phone-test", "diagnostics")
             test.runOnMainSync { (host.page.parent as android.widget.ScrollView).fullScroll(View.FOCUS_DOWN) }
             shot("diagnostics")
-            test.runOnMainSync { buttons(host.page).firstOrNull { it.text == host.getString(R.string.diag_clear) }?.performClick() }
+            test.runOnMainSync { buttons(host.page).first { it.text == host.getString(R.string.diag_clear) }.performClick() }
             shot("diagnostic-actions", "diagnostics")
         } finally {
             test.runOnMainSync { host.finish() }
