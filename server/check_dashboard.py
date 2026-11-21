@@ -151,6 +151,14 @@ def check():
         page.locator('.subnav').get_by_role('button', name='Тренировки', exact=True).click()
         page.get_by_role('button', name='Към отбора', exact=True).wait_for()
         page.get_by_role('heading', name='Дневник на сериите', exact=True).wait_for()
+        # Workouts (SPEC 9): the seeded finished workout with its date, duration, sets and volume.
+        workouts = page.locator('section', has=page.get_by_role('heading', name='Тренировки (сесии)', exact=True))
+        assert workouts.locator('th').all_text_contents()[:5] == ['Дата', 'Тренировка', 'Време', 'Серии', 'Обем (кг)']
+        cells = workouts.locator('tbody tr').first.locator('td').all_text_contents()
+        assert workouts.locator('tbody tr').count() >= 1 and 'Демо тренировка' in cells and '64 мин' in cells, cells
+        assert int(cells[3]) > 0 and int(cells[4].replace('\u00a0', '').replace(' ', '')) > 0, cells
+        workouts.scroll_into_view_if_needed()
+        screenshot('athlete-workouts-bg')
         page.locator('.subnav').get_by_role('button', name='Хранене', exact=True).click()
         page.locator('.daypicker').wait_for()
         page.locator('figure svg').first.wait_for()

@@ -56,7 +56,7 @@ const dictionary = {
     assistant:'Помощник с изкуствен интелект', sectionLinks:'Раздели', selectAthleteFirst:'Изберете състезател от „Отбор“.',
     weekdays:['Пон','Вт','Ср','Чет','Пет','Съб','Нед'],
     assignedPlan:'Назначен план', weekday:'Ден', exercise:'Упражнение', setsCol:'Серии', repsRange:'Повторения',
-    loadKg:'Тежест (кг)', rpeTarget:'Целево усилие (0–10)', setHistory:'Дневник на сериите', setNo:'Серия №', repsDone:'Повторения',
+    loadKg:'Тежест (кг)', rpeTarget:'Целево усилие (0–10)', setHistory:'Дневник на сериите', workoutsTitle:'Тренировки (сесии)', workoutCol:'Тренировка', durationCol:'Време', setsDone:'Серии', volumeCol:'Обем (кг)', minutesShort:'мин', setNo:'Серия №', repsDone:'Повторения',
     progressionTitle:'Предложение за прогресия', suggestion:'Предложение', planned:'Планирано',
     increase:'Увеличение', decrease:'Намаление', keep:'Без промяна', suggestedLoad:'Предложена тежест', fromLoad:'От',
     top_of_range_twice:'Горна граница два пъти', below_range_twice:'Под долната граница два пъти',
@@ -150,7 +150,7 @@ const dictionary = {
     assistant:'AI assistant', sectionLinks:'Sections', selectAthleteFirst:'Choose an athlete from Team first.',
     weekdays:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
     assignedPlan:'Assigned plan', weekday:'Day', exercise:'Exercise', setsCol:'Sets', repsRange:'Reps',
-    loadKg:'Load (kg)', rpeTarget:'Target RPE', setHistory:'Set log', setNo:'Set #', repsDone:'Reps',
+    loadKg:'Load (kg)', rpeTarget:'Target RPE', setHistory:'Set log', workoutsTitle:'Workouts', workoutCol:'Workout', durationCol:'Duration', setsDone:'Sets', volumeCol:'Volume (kg)', minutesShort:'min', setNo:'Set #', repsDone:'Reps',
     progressionTitle:'Progression suggestion', suggestion:'Suggestion', planned:'Planned',
     increase:'Increase', decrease:'Decrease', keep:'Keep', suggestedLoad:'Suggested load', fromLoad:'From',
     top_of_range_twice:'Top of range twice', below_range_twice:'Below range twice',
@@ -223,7 +223,7 @@ Object.assign(dictionary.en, {
   attemptsOf:' of ', effortShort:'effort'
 });
 const state = {language:'bg', token:null, user:null, view:'team', athletes:[], users:[], clubs:[], audit:[], offset:0, selected:null, jumps:[], summary:null, sort:'name', ascending:true, consent:null, reset:null, deleting:false, groups:[], groupEdit:null, membersEdit:null, sessions:[], sessionEdit:null, sessionReport:null, wellbeing:[], wellbeingDay:null, checkins:[], sessionsMine:[], comments:[], live:'idle', liveGeneration:0,
-  training:null, setLogs:[], exercises:[], plansData:[], nutritionDay:null, nutSummary:null, weightsData:null,
+  training:null, setLogs:[], workouts:[], exercises:[], plansData:[], nutritionDay:null, nutSummary:null, weightsData:null,
   expenditure:null, program:null, nutTarget:null, analytics:null, goal:null, foodLogs:[], foods:[], formSets:[], planEdit:null,
   assistant:{open:false, conversationId:null, reply:null, proposal:null, note:null, error:null}};
 const t = key => dictionary[state.language][key] ?? key;
@@ -367,7 +367,7 @@ function relevant(event, view) {
   if (view === 'sessions' || view === 'sessionsMine') return event.type === 'session' || event.type === 'jump';
   if (view === 'training' || view === 'nutrition' || view === 'form') {
     const target = athleteTarget(); if (!target) return false;
-    const map = {training:['set','jump','checkin'], nutrition:['food','weight','coaching','nutrition_day','checkin'], form:['form']};
+    const map = {training:['set','workout','jump','checkin'], nutrition:['food','weight','coaching','nutrition_day','checkin'], form:['form']};
     return map[view].includes(event.type) && String(event.athlete_id) === String(target.id);
   }
   return false;
@@ -376,7 +376,7 @@ function signedOut() {
   state.liveGeneration++;
   liveController?.abort();
   Object.assign(state, {todayCheckins:[], teamFlights:[], lastSession:null, lastReport:null, formCatalogue:[]});
-  Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],live:'idle',training:null,setLogs:[],exercises:[],plansData:[],nutritionDay:null,nutSummary:null,weightsData:null,expenditure:null,program:null,nutTarget:null,foodLogs:[],foods:[],formSets:[],planEdit:null,assistant:{open:false,conversationId:null,reply:null,proposal:null,note:null,error:null}});
+  Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],live:'idle',training:null,setLogs:[],workouts:[],exercises:[],plansData:[],nutritionDay:null,nutSummary:null,weightsData:null,expenditure:null,program:null,nutTarget:null,foodLogs:[],foods:[],formSets:[],planEdit:null,assistant:{open:false,conversationId:null,reply:null,proposal:null,note:null,error:null}});
   setLive('idle');
   render();
 }
@@ -439,11 +439,12 @@ async function load(view=state.view) {
     const target = athleteTarget();
     if (target) {
       const id = target.id;
-      const [training, plansData, setLogs, exercises] = await Promise.all([
+      const [training, plansData, setLogs, exercises, workouts] = await Promise.all([
         api('/api/athletes/' + id + '/training?weeks=4'), api('/api/plans'),
-        api('/api/set-logs?athlete_id=' + id + '&limit=500'), api('/api/exercises')]);
-      data = {training, plansData, setLogs, exercises};
-    } else data = {training:null, plansData:[], setLogs:[], exercises:[]};
+        api('/api/set-logs?athlete_id=' + id + '&limit=500'), api('/api/exercises'),
+        api('/api/workouts?athlete_id=' + id + '&limit=50')]);
+      data = {training, plansData, setLogs, exercises, workouts};
+    } else data = {training:null, plansData:[], setLogs:[], exercises:[], workouts:[]};
   }
   if (view === 'plans') {
     const [plansData, exercises, athletes, groups] = await Promise.all([
@@ -1302,6 +1303,19 @@ function setLogTable(rows) {
   }
   section.append(grid.wrap); return section;
 }
+function workoutTable(rows) {
+  const section = node('section'); section.append(node('h2', t('workoutsTitle')));
+  const grid = table(['date', 'workoutCol', 'durationCol', 'setsDone', 'volumeCol'], t('workoutsTitle'));
+  grid.wrap.classList.add('club-table');
+  for (const w of rows) {
+    const tr = node('tr');
+    tr.append(node('td', dateTime(w.started_at)), node('td', w.title),
+      node('td', w.duration_s == null ? '—' : formatNumber(w.duration_s / 60) + ' ' + t('minutesShort'), 'num'),
+      node('td', String(w.sets), 'num'), node('td', formatNumber(w.volume_kg), 'num'));
+    grid.body.append(tr);
+  }
+  section.append(grid.wrap); return section;
+}
 function training(content) {
   const athlete = beginAthleteView(content, 'training', t('training'));
   if (!athlete) return;
@@ -1315,6 +1329,7 @@ function training(content) {
     content.append(volumeCharts(tr.weekly_volume), volumeTable(tr.weekly_volume));
   }
   if (tr && tr.progression && tr.progression.length) content.append(progressionTable(tr.progression));
+  if (state.workouts.length) content.append(workoutTable(state.workouts));
   if (state.setLogs.length) content.append(setLogTable(state.setLogs));
   else if (!plans.length) content.append(node('p', t('noTraining'), 'empty'));
 }
