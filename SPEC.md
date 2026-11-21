@@ -716,3 +716,43 @@ Records are computed from data the server already holds; nothing new is measured
   Leaderboard screen (period and measure switch, own row pinned, opt-in toggle with a plain explanation).
 - **Dashboard:** club leaderboard panel and per-athlete records.
 - Audit: `leaderboard_opt_in_changed`, `leaderboard_allowed_changed`. Export includes records and opt-in.
+
+## 9. Fitness toolkit (direction set by the owner 2026-11-22)
+
+The owner's direction: JumpScan grows from a jump-scanning app into a fitness "Swiss army knife", the way his
+Hermes Companion grew from a chat client into a homelab toolkit. Jump scanning stays the flagship tool; every
+other tool shares the same accounts, roles, consent, offline queue, events, audit and design system, and each
+tool is useful alone. Tools that run entirely on the phone still sync their results so the coach sees them.
+Built in waves; each wave ships as a beta.
+
+**Wave 1 — toolkit shell and the gym floor**
+- **Tools hub (app):** a home "Tools" grid that groups every tool (Measure: jump, form, timers; Train: workout,
+  plans, records; Fuel: nutrition; Body: weight, check-in; Club: sessions, feedback, leaderboard; Ask: assistant),
+  with pinned favourites and recent tools. Existing screens move under it; no feature is lost.
+- **Workout session:** start an empty workout or from a template or today's plan; exercise picker with search
+  and recent; per-set rows (load, reps, RPE, done tick) pre-filled from the last session; automatic rest timer
+  after each done set (per-exercise default, ±15 s, notification and vibration when it ends, works with the
+  screen off); supersets; notes; finish summary (duration, sets, volume, records hit). Sets go through the
+  existing `set_logs` + offline queue. Server adds `workouts(id, athlete_id, started_at, ended_at, title,
+  template_id NULL, notes, client_id)` and `set_logs.workout_id NULL`, and `workout_templates(id, owner_id,
+  club_id NULL, title, items JSON)` (athletes own, coaches share with the club). API `/api/workouts`,
+  `/api/workout-templates`, scope and audit as 6.2.
+- **Calculators (on the phone):** plate loading (bar 20/15/10 kg, available plates editable), one-rep max
+  (Epley and Brzycki, with a percentage table), warm-up sets for a working weight.
+- **Interval timer (on the phone):** intervals, Tabata, EMOM, AMRAP and plain stopwatch; saved presets;
+  large countdown, audio and vibration cues, keeps running with the screen off (foreground service); a
+  finished timer can be logged as a conditioning session (check-in training minutes).
+
+**Wave 2 — body and recovery**
+- Body measurements (waist, hips, chest, arm, thigh, neck) with trend charts and a body-fat estimate from the
+  U.S. Navy circumference formula; progress photos kept on the phone only (never uploaded), compared side by side.
+- Health Connect import (steps, sleep, resting heart rate, workouts from watches), with per-type permission;
+  only daily summaries are synced.
+- Readiness: a daily score from the check-in, sleep, resting heart rate and the acute:chronic training load
+  ratio, shown as an explanation, never as medical advice.
+
+**Wave 3 — more camera tools from the same pose engine**
+- Range-of-motion check (knee, hip, shoulder angles held still, left vs right).
+- Balance test (single-leg stance time and sway).
+- Sprint and reaction timing with the camera (start and finish line crossing), and a 5-0-5 / T-test timer.
+- Outdoor cardio with GPS (distance, pace, splits; route stays on the phone, summary synced).
