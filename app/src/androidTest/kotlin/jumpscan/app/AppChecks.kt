@@ -187,6 +187,14 @@ class AppChecks : Instrumentation() {
                 "POST /api/set-logs", "PUT /api/me/nutrition/days/$day/complete", "POST /api/food-logs", "POST /api/food-logs",
                 "POST /api/food-logs/copy"))
             check(sent[formName] == 17L && restored.count() == 0)
+            // SPEC 7.4: a copy from an empty day is dropped (not set aside) with a receipt the screen turns into a message.
+            val empty = restored.enqueueFeature(FeatureWrite.COPY, "", JSONObject().put("from_day", "2026-11-01").put("to_day", day),
+                UUID.randomUUID().toString())
+            val emptySent = linkedMapOf<String, Long>()
+            restored.send(emptySent, featureSend = { _, _, _ ->
+                throw ApiError(422, """{"detail":"Nothing to copy from that day","code":"nothing_to_copy"}""")
+            }) { error("Not a jump") }
+            check(emptySent[empty] == NOTHING_COPIED && restored.count() == 0 && restored.rejectedCount() == 0)
         } finally { root.deleteRecursively() }
     }
 

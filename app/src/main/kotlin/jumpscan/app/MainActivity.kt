@@ -1084,6 +1084,7 @@ class MainActivity : Activity() {
                 catch (error: ApiError) { if (error.status == 401) throw error }
                 catch (error: IOException) { if (error is AppError) throw error }
                 val status = when {
+                    sent[name] == NOTHING_COPIED -> R.string.nutr_nothing_to_copy
                     sent.containsKey(name) -> R.string.feature_saved
                     queue.featurePending(name) -> R.string.saved_pending
                     else -> R.string.feature_rejected
@@ -1430,6 +1431,7 @@ class MainActivity : Activity() {
             "nutrition" -> home()
             "food_log" -> foods()
             "recipe_edit" -> recipes()
+            "goal_form" -> insights()
             "food_search", "quick_add", "food_form", "barcode_manual", "recipes", "ai_entry", "insights" -> nutritionBack()
             else -> home()
         }

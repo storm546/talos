@@ -40,6 +40,9 @@ internal enum class FeatureWrite(val method: String, val keys: Set<String>, val 
     }
 }
 
+/** The receipt of a copy the server answered with nothing_to_copy. */
+internal const val NOTHING_COPIED = -1L
+
 /** Directory identity binds saved numbers to one athlete on one server. Tokens, images and poses are excluded. */
 internal class PendingUploads(root: File, server: String, owner: Long) {
     private val directory = File(root, MessageDigest.getInstance("SHA-256")
@@ -183,7 +186,9 @@ internal class PendingUploads(root: File, server: String, owner: Long) {
                     sendCheckin(file.name.removePrefix("checkin-").removeSuffix(".json"), put)
                 } else sendJump(file.name, post)?.let { sent[file.name] = it }
             } catch (e: ApiError) {
-                if (e.status in 400..499 && e.status !in setOf(401, 408, 429)) quarantine(file) else throw e
+                // An empty source day leaves nothing to keep or retry; the caller shows why (SPEC 7.4).
+                if (e.code == "nothing_to_copy") { remove(file); sent[file.name] = NOTHING_COPIED }
+                else if (e.status in 400..499 && e.status !in setOf(401, 408, 429)) quarantine(file) else throw e
             } catch (e: AppError) {
                 if (e.resource == R.string.pending_unreadable) quarantine(file) else throw e
             }
