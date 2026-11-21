@@ -597,3 +597,10 @@ def test_migrates_the_6_3_nutrition_schema_in_place(tmp_path):
         assert {"recipes", "recipe_items"} <= tables and "food_logs_v2" not in tables
         assert db.execute("SELECT COUNT(*) FROM foods WHERE fdc_id IS NOT NULL AND servings IS NULL").fetchone()[0] == 0
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_seeded_goal_progress_for_the_dashboard(api, auth):
+    client, path = api
+    view = client.get(f"/api/athletes/{user_id(path, 'athlete6')}/nutrition/goal", headers=auth("coach")).json()
+    assert view["goal"]["phase"] == "lose" and view["goal"]["target_weight_kg"] and view["goal"]["end_date"]
+    assert -3 < view["remaining_kg"] < 0 and view["trend_kg_week"] is not None

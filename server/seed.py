@@ -430,11 +430,13 @@ def seed_coaching(db, athlete_id, coach_id, food_ids, today):
         fingerprint = hashlib.blake2b(json.dumps(rows, separators=(",", ":")).encode("utf-8")).hexdigest()
         db.execute("INSERT OR IGNORE INTO nutrition_day_complete(athlete_id, day, diary_fingerprint, confirmed_at) "
                    "VALUES (?, ?, ?, ?)", (athlete_id, iso, fingerprint, now_isos(today)))
+    latest = db.execute("SELECT kg FROM weights WHERE athlete_id = ? ORDER BY day DESC LIMIT 1", (athlete_id,)).fetchone()[0]
     db.execute(
         "INSERT INTO coaching_programs(athlete_id, effective_date, seed_kcal, mode, goal, rate_kg_week, "
-        "protein_g, fat_g, applied, set_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "protein_g, fat_g, applied, set_by, updated_at, target_weight_kg, end_date) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (athlete_id, (today - timedelta(days=45)).isoformat(), 2600.0, "updating", "lose", 0.3, 150.0, 70.0,
-         0, coach_id, datetime.now(timezone.utc).isoformat()))
+         0, coach_id, datetime.now(timezone.utc).isoformat(), round(latest - 2, 1), (today + timedelta(days=49)).isoformat()))
 
 
 def now_isos(day):
