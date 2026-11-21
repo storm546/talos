@@ -370,9 +370,9 @@ internal fun MainActivity.readoutRow(label: String, value: String, unit: String,
     }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
 }
 
-internal fun MainActivity.targetBar(label: String, value: String, fraction: Double?, parent: LinearLayout) {
+internal fun MainActivity.targetBar(label: String, value: String, fraction: Double?, parent: LinearLayout): TextView {
     text(label, 13, parent = parent)
-    text(value, 20, green, parent).instrumentType(display = true)
+    val reading = text(value, 20, green, parent).apply { instrumentType(display = true) }
     if (fraction != null) parent.addView(ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
         progressDrawable = android.graphics.drawable.LayerDrawable(arrayOf(
             shape(getColor(R.color.hover), 4),
@@ -384,6 +384,7 @@ internal fun MainActivity.targetBar(label: String, value: String, fraction: Doub
         progressBackgroundTintList = ColorStateList.valueOf(getColor(R.color.hover))
         importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }, LinearLayout.LayoutParams(-1, dp(6)).apply { bottomMargin = dp(10) })
+    return reading
 }
 
 internal fun Context.lineIcon(name: String, tint: Int) = getDrawable(when (name) {

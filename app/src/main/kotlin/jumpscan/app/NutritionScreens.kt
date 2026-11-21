@@ -139,7 +139,11 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
         val goalGrams = target.optDouble(key)
         fun whole(json: JSONObject) = metricNumber(json.optDouble(key, 0.0), "kcal", locale)
         val grams = whole(totals) + (if (goalGrams > 0) " / ${whole(target)}" else "")
-        targetBar(getString(label), "$grams ${getString(R.string.unit_grams)}", if (goalGrams > 0) totals.optDouble(key, 0.0) / goalGrams else null, column)
+        targetBar(getString(label), "$grams ${getString(R.string.unit_grams)}", if (goalGrams > 0) totals.optDouble(key, 0.0) / goalGrams else null, column).apply {
+            // One line in every language: the reading shrinks rather than wraps in the narrow column.
+            maxLines = 1
+            setAutoSizeTextTypeUniformWithConfiguration(12, 20, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }
     }
     toolRow(UiTile(R.string.nutr_add, "plus") { foods(day) }, UiTile(R.string.scan_short, "scan") { scanBarcode() },
         UiTile(R.string.nutr_copy_day, "copy") { copyLogs(day, null) }, UiTile(R.string.nutr_insights, "insights") { insights(day) })
