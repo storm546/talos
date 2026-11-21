@@ -682,7 +682,7 @@ class MainActivity : Activity() {
         catch (_: Exception) {
             val error = getString(R.string.no_video_app)
             if (request == 30) { pendingTrial = null; diagnostics(error) }
-            else if (request in 12..13) formHome(error) else home(error)
+            else if (request in 12..13) formHome(error) else if (request == 40) snack(getString(R.string.scan_camera_failed)) else home(error)
         }
     }
 
@@ -696,6 +696,7 @@ class MainActivity : Activity() {
     @Deprecated("Uses the platform activity result API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 40) return barcodeResult(resultCode, data?.getStringExtra("code"))
         if (requestCode == 10 && resultCode == RESULT_FIRST_USER) pickJumpVideo()
         if (requestCode == 10 && resultCode == RESULT_OK) {
             val name = data?.getStringExtra("clip")?.takeIf { it.matches(Regex("jump-[0-9]+\\.mp4")) }
@@ -1099,11 +1100,12 @@ class MainActivity : Activity() {
         queue.send(sent, put = { day, body ->
             require(JSONObject(api(address, "/api/me/checkins/$day", "PUT", auth, body)).getString("day") == day)
         }, featureSend = { kind, path, body ->
-            val response = JSONObject(api(address, path, kind.method, auth, body))
-        if (kind.method == "POST") response.getLong("id") else {
-            require(response.getString("day") == path.split('/').last { it != "complete" })
-            0L
-        }
+            val text = api(address, path, kind.method, auth, body)
+            // A copy answers with its rows rather than one id.
+            if (kind.method == "POST") (org.json.JSONTokener(text).nextValue() as? JSONObject)?.optLong("id") ?: 0L else {
+                require(JSONObject(text).getString("day") == path.split('/').last { it != "complete" })
+                0L
+            }
         }) { metrics -> JSONObject(api(address, "/api/jumps", "POST", auth, metrics)).getLong("id") }
     }
 
@@ -1425,6 +1427,10 @@ class MainActivity : Activity() {
             "technique_history" -> formHome()
             "technique_detail" -> techniqueHistory()
             "form_video", "form_detail", "form_result" -> formHome()
+            "nutrition" -> home()
+            "food_log" -> foods()
+            "recipe_edit" -> recipes()
+            "food_search", "quick_add", "food_form", "barcode_manual", "recipes", "ai_entry", "insights" -> nutritionBack()
             else -> home()
         }
     }

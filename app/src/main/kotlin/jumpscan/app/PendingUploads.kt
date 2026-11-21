@@ -14,7 +14,10 @@ internal val uploadLock = Any()
 internal enum class FeatureWrite(val method: String, val keys: Set<String>, val optional: Set<String> = emptySet()) {
     FORM("POST", setOf("exercise", "side", "view", "fps", "quality", "repetitions", "summary", "warnings"),
         setOf("mode", "source")),
-    FOOD("POST", setOf("day", "meal", "food_id", "grams")),
+    // A log names a food, a catalogue food or a recipe, or carries quick-add macros with a label.
+    FOOD("POST", setOf("day", "meal"), setOf("food_id", "catalog_id", "recipe_id", "grams", "serving_label", "quantity",
+        "label", "kcal", "protein_g", "carbs_g", "fat_g")),
+    COPY("POST", setOf("from_day", "to_day"), setOf("from_meal", "to_meal")),
     WEIGHT("PUT", setOf("kg")),
     SET("POST", setOf("day", "exercise_id", "set_no", "reps", "load_kg", "rpe", "plan_id")),
     COMPLETE("PUT", emptySet());
@@ -22,6 +25,7 @@ internal enum class FeatureWrite(val method: String, val keys: Set<String>, val 
     fun path(day: String): String = when (this) {
         FORM -> "/api/form"
         FOOD -> "/api/food-logs"
+        COPY -> "/api/food-logs/copy"
         SET -> "/api/set-logs"
         WEIGHT -> "/api/me/weights/${LocalDate.parse(day)}"
         COMPLETE -> "/api/me/nutrition/days/${LocalDate.parse(day)}/complete"
