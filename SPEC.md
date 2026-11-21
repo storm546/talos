@@ -416,18 +416,20 @@ than 300 ms adds no time (shorter low-visibility or dropped-frame stretches are 
 provisional until `finish`. Depth is peak knee flexion (side: image plane; front: world), FPPA is measured
 at deepest flexion (front only), asymmetry uses both legs, and hips below knees is available from the side.
 
-Validated status (benchmark of 20 November 2026, round 3; hand counts, Countix and MM-Fit; see `core/VALIDATION.md`):
+Validated status (benchmark of 21 November 2026, round 4; hand counts, Countix and MM-Fit; see `core/VALIDATION.md`):
+- A repetition counter passes on at least 8 held-out live-equivalent sets from 3 people, with at least 90%
+  exact counts, no set off by more than one, and at most 10% unclear repetitions.
 - **Squat** is validated: held-out live 15 fps, 21 of 22 sets exact, 12 people, none off by more than one, no
   unclear repetitions.
 - **Plank** is validated for hold time: 9 of 9 held-out sets within max(1 s, 10%), 3 people. In-band time is
   not validated (8 of 9 held-out sets live, below the bar).
-- **Experimental**, with their held-out exact rates:
+- **Experimental**, with their held-out live exact rates:
   - lateral raise 75% of 12;
+  - push-up 70% of 27 (74% recorded);
   - overhead press 67% of 12;
   - biceps curl 62% of 13;
   - jumping jack 61% of 28;
   - pull-up 59% of 17;
-  - push-up 56% of 27;
   - lunge 53% of 36;
   - bent-over row 0% of 15;
   - glute bridge, which has 2 counted sets;
@@ -437,8 +439,9 @@ Catalogue signals may set:
 - `"limbs": "each"`: in a front view with no side chosen, each arm or leg is counted separately, and overlapping
   repetitions on both sides count once;
 - `min_visibility` for the signal and its gate (checks keep 0.5);
-- `signal_front`: a driving signal used when the camera sees the athlete from the front. The metric `rise:a:b` is
-  the height of b above a, divided by the larger of shoulder width and torso length.
+- `signal_front`: an alternative driving signal for front or diagonal views. Push-up detects the view from
+  plank posture when possible. Its `rise:wrist:nose` signal uses the height of the nose above the wrist,
+  divided by the larger of shoulder width and torso length, and can use one visible wrist.
 
 In the squat counter, unusable frames are skipped, and only an unobserved stretch longer than max(200 ms, 1.5 median
 intervals) splits an observation. `FormStream` interrupts after 300 ms without a usable frame.

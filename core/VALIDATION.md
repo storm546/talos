@@ -985,3 +985,59 @@ not done.
 | bent_over_row | 15 / 5 | 0% | 15 | 0% | experimental |
 
 Tables are in `/root/jumpscan/logs/reps/`: `results3-final.csv`, `results3-start.csv` and `results3-baseline.csv`.
+
+## 2026-11-21 (round 4): Push-up view from plank posture
+
+Round 4 reused the round-3 labels, subject split, Countix edge rule and cached tracks on the kit. Candidates
+were selected using only training subjects, then evaluated on the fixed held-out split. For repetitions, the
+live validation bar remains at least 90% exact sets, no set off by more than one, at most 10% unclear
+repetitions, and at least 8 sets from 3 people. The recorded path is reported separately. Hold-time accuracy
+uses the greater of 1 second or 10% of the labelled time.
+
+- **Push-up (shipped).** Auto view now uses frames with a near-horizontal world-space torso and a visible
+  wrist below the shoulder, instead of choosing a view from the first ten frames regardless of posture. A
+  less restrictive front-view cutoff routes diagonal views to the wrist-to-nose signal. One usable wrist is
+  sufficient for that signal. Frontal rest, bottom and minimum excursion are 0.50, 0.30 and 0.25 in the
+  existing normalized units; the side signal is unchanged. Live framing accepts either view. Training
+  exact counts improved from 20 to 28 of 37 live and 22 to 25 of 37 recorded. Held-out mean absolute error
+  fell from 1.33 to 0.44 live and 1.11 to 0.48 recorded; unclear repetitions fell to 0.5% on both paths.
+  Held-out exact counts improved from 11 to 14 of 15 live and 11 to 15 of 15 recorded on MM-Fit, and from
+  4 to 5 of 12 on both Countix paths. Push-up remains Experimental.
+- **Biceps curl (not shipped).** Counting both arms independently in every view improved training live
+  from 12 to 14 of 14 and left training recorded at 14 of 14. Held-out results were unchanged on both paths.
+- **Lateral raise (not shipped).** Accepting rest up to 60 degrees with the same 40-degree excursion let
+  high-rest athletes close more cycles in training. Recorded training exact counts rose from 1 to 7 of 10;
+  live stayed at 9 of 10 with lower error. The frozen candidate regressed held-out from 9 to 1 of 12 live
+  and 8 to 2 of 12 recorded. The existing rest band stays.
+- **Jumping jack (not shipped).** On training sets, narrow opening and the excursion from the last sample in
+  the rest band frequently produced partial reps. A narrower rest band and lower minimum excursion improved
+  exact counts from 12 to 20 of 30 live and 14 to 23 of 30 recorded. Held-out mean error fell slightly, but
+  exact counts and sets off by more than one did not improve on either path.
+- **Lunge (unchanged).** Training failures included sets where the selected leg did not bend, shallow
+  bends, and tracking loss. Countix does not label the active leg. No single change was justified for the
+  sided reverse-lunge counter.
+
+### Held-out results (shipped engine)
+
+| Exercise | Sets / people | Live exact, before → after | Recorded exact, before → after | Live / recorded off by >1, after |
+|---|---:|---:|---:|---:|
+| Bent-over row | 15 / 5 | 0 → 0 | 0 → 0 | 15 / 15 |
+| Biceps curl | 13 / 5 | 8 → 8 | 7 → 7 | 1 / 2 |
+| Glute bridge | 1 / 1 | 1 → 1 | 1 → 1 | 0 / 0 |
+| Jumping jack | 28 / 18 | 17 → 17 | 17 → 17 | 7 / 6 |
+| Lateral raise | 12 / 4 | 9 → 9 | 8 → 8 | 3 / 3 |
+| Lunge | 36 / 25 | 19 → 19 | 8 → 8 | 13 / 20 |
+| Overhead press | 12 / 4 | 8 → 8 | 9 → 9 | 0 / 0 |
+| Plank hold time | 9 / 3 | 9 → 9 | 8 → 8 | — |
+| Pull-up | 17 / 17 | 10 → 10 | 7 → 7 | 1 / 4 |
+| Push-up | 27 / 17 | 15 → 19 | 15 → 20 | 4 / 5 |
+| Squat | 22 / 12 | 21 → 21 | 21 → 21 | 0 / 0 |
+
+No catalogue entry changes validation status. Plank technique-band time remains unvalidated (8 of 9 live,
+5 of 8 scored recorded; one recorded set refused). The other nine entries still have no counted or timed
+test sets. Training scores and the before, candidate and final held-out reports are on the kit under
+`/work/jumpscan-data/form/reps/round4/`.
+
+The final engine reproduced the frozen push-up candidate exactly. All other held-out batch outputs, including
+squat and plank, matched the round-start engine byte-for-byte. Server pytest passed (506 passed, 1 skipped).
+The locked kit build passed `:core:test` (73 passed, 1 skipped) and `:app:assembleDebug`.
