@@ -682,3 +682,37 @@ Everything in 6.3 keeps working; existing endpoints and responses stay compatibl
 
 ### 7.3 Dashboard
 Coach view of an athlete gains nutrition adherence, the analytics chart and goal progress.
+
+### 7.4 Nutrition follow-ups (added 2026-11-22)
+Defaults chosen by the orchestrator after the owner said "keep working"; the owner may reverse them.
+- **Goal form:** the athlete sets or changes their goal (phase, target weight, end date) in the app's Insights;
+  a coach sets it from the dashboard's athlete nutrition view. Same endpoint, guardrails and audit as 7.1.
+- **Scanned-food corrections:** foods record `created_by`. The athlete who scanned or created a club food may
+  correct it with `PATCH /api/foods/{id}` until another athlete has logged it; staff may always. Others: 403.
+- **Language:** nutrient definitions carry `name_bg` and `name_en`; the app shows the one for its language.
+  Recipe serving labels are built by the client from a count and unit, not as server text.
+- **Copy from an empty day:** the server answers 422 with `code: "nothing_to_copy"`; the app shows "Nothing to
+  copy from that day" (bg: "Няма какво да се копира от този ден").
+- **Seed:** the coaching demo athlete has one consistent weight series that moves towards the goal, so the
+  projected date shows.
+- **Licences:** `LICENSES-AUDIT.md` lists ML Kit barcode scanning (Google APIs terms, bundled model) and Open
+  Food Facts data (ODbL, attribution on scanned foods).
+
+## 8. Personal records and club leaderboard (added 2026-11-22)
+
+Records are computed from data the server already holds; nothing new is measured.
+- **Personal records:** `GET /api/athletes/{id}/records` (athlete own, coach own club, admin all; cross-club
+  404) returns, per measure, the best value, its date and source id, and the previous best: jump height
+  (best of non-warning jumps; uncertain results excluded and counted), flight time, heaviest logged set per
+  exercise (load and reps), estimated one-rep max per exercise (Epley, sets of at most 10 reps), and longest
+  validated form hold. A new record publishes a `record` event (no values) and the athlete's app shows it.
+- **Leaderboard:** `GET /api/clubs/me/leaderboard?measure=jump_height|flight_time&period=30|90|all&group_id=`
+  (members of the caller's club). Each athlete appears only if they opted in
+  (`PATCH /api/me/profile {leaderboard_opt_in: bool}`, default false); athletes marked under 18 appear only
+  with their coach's confirmation as well (`PATCH /api/users/{id}/profile {leaderboard_allowed: bool}`).
+  Display name: first name and last initial. Ranking uses each athlete's best valid result in the period;
+  ties share a rank. Coaches and admins see everyone opted in plus a count of those not shown.
+- **App:** a Records screen (personal bests with dates, "new record" highlight using the height ruler) and a
+  Leaderboard screen (period and measure switch, own row pinned, opt-in toggle with a plain explanation).
+- **Dashboard:** club leaderboard panel and per-athlete records.
+- Audit: `leaderboard_opt_in_changed`, `leaderboard_allowed_changed`. Export includes records and opt-in.
