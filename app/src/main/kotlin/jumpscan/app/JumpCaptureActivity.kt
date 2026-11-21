@@ -319,7 +319,7 @@ class JumpCaptureActivity : ComponentActivity() {
             lastTick = number
             status.instrumentType(numeric = true)
             status.bump()
-            status.textSize = 40f
+            status.textSize = 88f
             status.text = getString(R.string.jump_countdown, number)
             tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
         }

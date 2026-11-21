@@ -77,6 +77,7 @@ class LiveFormActivity : ComponentActivity() {
     @Volatile private var replayStart = 0L
     private lateinit var preview: LiveFormPreview
     private var targetButton: RepTarget? = null
+    private lateinit var ring: RepRing
     private var repTarget = 8
     private lateinit var counter: TextView
     private lateinit var subcount: TextView
@@ -118,34 +119,42 @@ class LiveFormActivity : ComponentActivity() {
     }
 
     private fun buildScreen() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.paper))
-        }
-        preview = LiveFormPreview(this)
+        // The camera and skeleton fill the screen; readouts float over soft scrims at the top and bottom.
+        val root = android.widget.FrameLayout(this).apply { setBackgroundColor(getColor(R.color.hero)) }
+        preview = LiveFormPreview(this).apply { fill = true }
+        root.addView(preview, android.widget.FrameLayout.LayoutParams(-1, -1))
+        val paper = getColor(R.color.paper)
+        fun scrim(fromTop: Boolean) = android.graphics.drawable.GradientDrawable(
+            if (fromTop) android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM else android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP,
+            intArrayOf((paper and 0xffffff) or (0xF0 shl 24), (paper and 0xffffff) or (0xC8 shl 24), paper and 0xffffff))
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(column, android.widget.FrameLayout.LayoutParams(-1, -1))
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(10), dp(16), dp(6))
+            setPadding(dp(16), dp(10), dp(16), dp(36))
+            background = scrim(true)
         }
-        root.addView(header, LinearLayout.LayoutParams(-1, -2))
+        column.addView(header, LinearLayout.LayoutParams(-1, -2))
         val name = exercise.label(bg)
         val title = side?.let { getString(R.string.form_named_side, name, getString(if (it == "L") R.string.form_left else R.string.form_right)) } ?: name
         header.addView(label(getString(if (replay) R.string.form_replay_debug else R.string.ui_live).uppercase(appLocale), 12, R.color.accent).apply {
             letterSpacing = .12f; instrumentType(display = true)
         })
-        val tally = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        tally.addView(label(title, 28, R.color.ink).apply {
-            instrumentType(display = true)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        counter = label("", 40, R.color.accent).apply {
+        header.addView(label(title, 28, R.color.ink).apply { instrumentType(display = true) })
+        ring = RepRing(this)
+        val dial = android.widget.FrameLayout(this)
+        dial.addView(ring, android.widget.FrameLayout.LayoutParams(-1, -1))
+        val tally = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
+        counter = label("", 40, R.color.ink).apply {
             instrumentType(numeric = true)
+            textSize = 46f
             includeFontPadding = false
+            gravity = Gravity.CENTER
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         tally.addView(counter)
-        val unit = label(getString(if (exercise.mode == "hold") R.string.ui_held else R.string.ui_reps_unit), 16, R.color.muted)
-        tally.addView(unit, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(6) })
-        header.addView(tally)
+        tally.addView(label(getString(if (exercise.mode == "hold") R.string.ui_held else R.string.ui_reps_unit), 13, R.color.muted).apply { gravity = Gravity.CENTER })
+        dial.addView(tally, android.widget.FrameLayout.LayoutParams(-1, -1))
         subcount = label("", 13, R.color.muted)
         header.addView(subcount)
         banner = label(getString(R.string.form_finding_camera), 14, R.color.ink).apply {
@@ -171,26 +180,35 @@ class LiveFormActivity : ComponentActivity() {
             }
         }
         header.addView(voice, LinearLayout.LayoutParams(-1, -2))
+        column.addView(View(this), LinearLayout.LayoutParams(-1, 0, 1f))
+        val footer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(40), dp(16), dp(8))
+            background = scrim(false)
+        }
+        column.addView(footer, LinearLayout.LayoutParams(-1, -2))
+        val deck = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        footer.addView(deck, LinearLayout.LayoutParams(-1, -2))
+        deck.addView(dial, LinearLayout.LayoutParams(dp(132), dp(132)))
+        val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        deck.addView(controls, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(14) })
         if (exercise.mode == "reps") {
             val settings = getSharedPreferences("live-form", MODE_PRIVATE)
             val options = listOf(5, 8, 12)
             repTarget = settings.getInt("target", 8).takeIf { it in options } ?: 8
             targetButton = RepTarget(this).also { target ->
-                styleButton(target, false); target.setPadding(dp(42), 0, dp(12), 0); target.isAllCaps = false
+                styleButton(target, false); target.isAllCaps = false
                 target.text = getString(R.string.flight_target, repTarget)
                 target.setOnClickListener {
                     repTarget = options[(options.indexOf(repTarget)+1)%options.size]
-                    settings.edit().putInt("target", repTarget).apply(); target.text = getString(R.string.flight_target, repTarget)
-                }; header.addView(target, LinearLayout.LayoutParams(-1, dp(48)))
+                    settings.edit().putInt("target", repTarget).apply(); target.text = getString(R.string.flight_target, repTarget); ring.show(0f, repTarget)
+                }; controls.addView(target, LinearLayout.LayoutParams(-1, dp(48)))
             }
             cuesMuted = settings.getBoolean("mute-technique", false)
-            header.addView(Switch(this).apply {
+            controls.addView(Switch(this).apply {
                 setText(R.string.form_mute_technique)
                 setTextColor(getColor(R.color.muted))
-                thumbTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                    intArrayOf(getColor(R.color.accent), getColor(R.color.muted)))
-                trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                    intArrayOf(getColor(R.color.tonal), getColor(R.color.hover)))
+                instrumentSwitch()
                 switchMinWidth = dp(42)
                 switchPadding = dp(10)
                 instrumentType()
@@ -203,12 +221,11 @@ class LiveFormActivity : ComponentActivity() {
                 }
             })
         }
-        root.addView(preview, LinearLayout.LayoutParams(-1, 0, 1f))
         action = styleButton(Button(this), primary = true).apply {
-            text = getString(R.string.form_start); isAllCaps = false; isEnabled = false; minHeight = dp(48); textSize = 16f
+            text = getString(R.string.form_start); isAllCaps = false; isEnabled = false; minHeight = dp(56); textSize = 17f
             setOnClickListener { if (stream == null) startSet() else finishSet() }
         }
-        root.addView(action, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(16), dp(6), dp(16), dp(8)) })
+        footer.addView(action, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         root.setOnApplyWindowInsetsListener { view, insets ->
             if (Build.VERSION.SDK_INT >= 30) {
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
@@ -452,7 +469,9 @@ class LiveFormActivity : ComponentActivity() {
                 if (progress.complete > 0) { counter.bump(); counter.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK) }
             }
             val counts = getString(R.string.form_counts, progress.complete, progress.partial, progress.unclear)
-            targetButton?.apply { fraction = (progress.complete.toFloat()/repTarget).coerceIn(0f, 1f); isClickable = stream == null; invalidate() }
+            val filled = (progress.complete.toFloat()/repTarget).coerceIn(0f, 1f)
+            targetButton?.apply { fraction = filled; isClickable = stream == null; invalidate() }
+            ring.show(filled, repTarget)
             subcount.text = if (stream == null) counts else getString(R.string.form_provisional_count, counts)
         }
     }
