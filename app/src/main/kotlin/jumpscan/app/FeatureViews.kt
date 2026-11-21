@@ -18,6 +18,7 @@ internal class FeatureApi(private val base: String, private val token: String) {
     fun array(path: String) = JSONArray(api(base, path, token = token)).objects()
     fun obj(path: String) = JSONObject(api(base, path, token = token))
     fun post(path: String, body: JSONObject) = JSONObject(api(base, path, "POST", token, body))
+    fun send(method: String, path: String, body: JSONObject? = null) = api(base, path, method, token, body)
 }
 
 internal fun MainActivity.featureApi() = FeatureApi(base(), token())
@@ -31,8 +32,8 @@ internal fun MainActivity.dayPicker(day: String, picked: (String) -> Unit) {
     }
 }
 
-internal fun MainActivity.decimalField(label: Int, value: String = "") =
-    field(getString(label), value, InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
+internal fun MainActivity.decimalField(label: Int, value: String = "", parent: android.widget.LinearLayout = page) =
+    field(getString(label), value, InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL, parent).apply {
         keyListener = android.text.method.DigitsKeyListener.getInstance("0123456789.,")
         setRawInputType(InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
     }

@@ -100,9 +100,9 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             record("history-rulers") { test.runOnMainSync { open("history") }; shot("history") }
             test.runOnMainSync { host.trainingHome() }; shot("training")
             test.runOnMainSync { host.nutritionHome() }; shot("nutrition")
-            test.runOnMainSync { buttons(host.page).first { it.text == host.getString(R.string.nutr_food) }.performClick()
-                buttons(host.page).first { it.text == host.getString(R.string.nutr_search) }.performClick() }; shot("food-search", "food_search")
-            test.runOnMainSync { val choices = buttons(host.page); val search = choices.indexOfFirst { it.text == host.getString(R.string.nutr_search) }; choices[search+1].performClick() }; shot("meal-picker", "food_log")
+            test.runOnMainSync { host.foods() }; shot("food-search", "food_search")
+            val food = JSONArray(api(server, "/api/foods?limit=1", token = login.getString("token"))).getJSONObject(0)
+            test.runOnMainSync { host.foodLog(todayLocal(), food) }; shot("meal-picker", "food_log")
             test.runOnMainSync { open("clubHome") }; shot("club")
             test.runOnMainSync { open("checkin") }; shot("checkin")
             test.runOnMainSync { host.assistantScreen() }; shot("assistant")

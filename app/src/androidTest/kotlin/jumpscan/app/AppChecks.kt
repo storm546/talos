@@ -49,6 +49,9 @@ class AppChecks : Instrumentation() {
                 val studio = StudioChecks(this, movies)
                 studio.screens(requireNotNull(fixtureServer))
                 capture.visual(studio)
+            } else if (only == "nutrition") {
+                targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
+                NutritionStudio(this).screens()
             } else if (only == "capture-parity") output.putString("parity", capture.parity())
             else if (only == "capture-visual") capture.visual()
             else if (only == "cutoff") videoCutoffCheck()
@@ -143,6 +146,17 @@ class AppChecks : Instrumentation() {
             queue.enqueueFeature(FeatureWrite.WEIGHT, day, JSONObject().put("kg", 81.5), UUID.randomUUID().toString())
             queue.enqueueFeature(FeatureWrite.SET, "", set, UUID.randomUUID().toString())
             queue.enqueueFeature(FeatureWrite.COMPLETE, day, JSONObject(), UUID.randomUUID().toString())
+            // Version 2: quick add without a food, a catalogue food with a serving, and copying yesterday.
+            queue.enqueueFeature(FeatureWrite.FOOD, "", JSONObject().put("day", day).put("meal", "snack").put("label", "Bar")
+                .put("kcal", 210).put("protein_g", 10).put("carbs_g", 25).put("fat_g", 8), UUID.randomUUID().toString())
+            queue.enqueueFeature(FeatureWrite.FOOD, "", JSONObject().put("day", day).put("meal", "lunch").put("catalog_id", 171287)
+                .put("grams", 60).put("serving_label", "slice").put("quantity", 2), UUID.randomUUID().toString())
+            queue.enqueueFeature(FeatureWrite.COPY, "", JSONObject().put("from_day", "2026-11-20").put("to_day", day)
+                .put("from_meal", "lunch").put("to_meal", "lunch"), UUID.randomUUID().toString())
+            check(runCatching { queue.enqueueFeature(FeatureWrite.FOOD, "", JSONObject().put("day", day).put("meal", "lunch")
+                .put("photo", "local only"), UUID.randomUUID().toString()) }.isFailure)
+            check(validBarcode("3800123456789") && validBarcode("12345670") && !validBarcode("1234567") && !validBarcode("38001234x6789"))
+            check(servingsOf(JSONObject("""{"servings":[{"label":"slice","grams":30}]}""")).map { it.first } == listOf("slice", "100 g", "g"))
             check(PendingUploads(root, "https://club.example", 2).count() == 0)
             check(runCatching { queue.enqueueFeature(FeatureWrite.FORM, "", JSONObject(form.toString())
                 .put("video", "local only"), uuid) }.isFailure)
@@ -154,14 +168,15 @@ class AppChecks : Instrumentation() {
                     throw IOException("Response lost")
                 }) { error("Not a jump") }
             }
-            check(firstAttempt.exceptionOrNull() is IOException && restored.count() == 5)
+            check(firstAttempt.exceptionOrNull() is IOException && restored.count() == 8)
             val routes = mutableListOf<String>()
             val sent = linkedMapOf<String, Long>()
             restored.send(sent, featureSend = { kind, path, json ->
                 routes.add("${kind.method} $path")
                 when (kind) {
                     FeatureWrite.FORM -> check(json.getString("client_id") == uuid && json.isNull("side"))
-                    FeatureWrite.FOOD -> check(json.getDouble("grams") == 123.5 && json.has("client_id"))
+                    FeatureWrite.FOOD -> check((json.optDouble("grams") in listOf(123.5, 60.0) || json.getString("label") == "Bar") && json.has("client_id"))
+                    FeatureWrite.COPY -> check(json.getString("to_day") == day && json.getString("to_meal") == "lunch" && json.has("client_id"))
                     FeatureWrite.WEIGHT -> check(json.getDouble("kg") == 81.5 && !json.has("client_id"))
                     FeatureWrite.SET -> check(json.getInt("reps") == 6 && json.has("client_id"))
                     FeatureWrite.COMPLETE -> check(json.length() == 0)
@@ -169,7 +184,8 @@ class AppChecks : Instrumentation() {
                 17L
             }) { error("Not a jump") }
             check(routes == listOf("POST /api/form", "POST /api/food-logs", "PUT /api/me/weights/$day",
-                "POST /api/set-logs", "PUT /api/me/nutrition/days/$day/complete"))
+                "POST /api/set-logs", "PUT /api/me/nutrition/days/$day/complete", "POST /api/food-logs", "POST /api/food-logs",
+                "POST /api/food-logs/copy"))
             check(sent[formName] == 17L && restored.count() == 0)
         } finally { root.deleteRecursively() }
     }

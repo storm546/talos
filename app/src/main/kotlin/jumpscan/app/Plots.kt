@@ -14,6 +14,9 @@ internal class Dial(context: Context) : View(context) {
     private var shown = -1f
     private var target = -1
     private var sweep: ValueAnimator? = null
+    /** A reading drawn in place of the percentage, with its unit underneath. */
+    var caption: String? = null
+    var unit: String? = null
     init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
 
     fun show(percent: Int) {
@@ -53,7 +56,13 @@ internal class Dial(context: Context) : View(context) {
         pen.typeface = resources.getFont(R.font.jetbrainsmono_regular)
         pen.textSize = radius * .45f
         pen.color = context.getColor(R.color.ink)
-        canvas.drawText(if (shown < 0) "—" else "${shown.toInt()}%", 0f, pen.textSize * .35f, pen)
+        val reading = caption
+        if (reading != null) {
+            pen.textSize = radius * (if (reading.length > 4) .38f else .45f)
+            canvas.drawText(reading, 0f, pen.textSize * .2f, pen)
+            pen.textSize = radius * .2f; pen.color = context.getColor(R.color.muted)
+            canvas.drawText(unit.orEmpty(), 0f, radius * .42f, pen)
+        } else canvas.drawText(if (shown < 0) "—" else "${shown.toInt()}%", 0f, pen.textSize * .35f, pen)
     }
 
     override fun onDetachedFromWindow() { sweep?.cancel(); super.onDetachedFromWindow() }
@@ -117,4 +126,72 @@ internal fun MainActivity.heightTrace(jumps: List<Pair<Long, Double>>, label: St
     text(getString(R.string.height_trace) + " · " + label, 14).setPadding(0, dp(18), 0, 0)
     baseline?.let { text(getString(R.string.flight_reference, String.format(resources.configuration.locales[0], "%.1f", it), getString(R.string.ui_cm)), 12) }
     page.addView(RulerWall(this, jumps.takeLast(10), baseline), LinearLayout.LayoutParams(-1, dp(250)))
+}
+
+/**
+ * Daily bars against a dashed target line (bars within 10 % of it in the accent), or measured dots
+ * under a smoothed line. Missing days are gaps, never zero.
+ */
+internal class SeriesPlot(context: Context, private val bars: List<Double?>, private val target: Double? = null,
+                          private val dots: List<Double?> = emptyList(), private val line: List<Double?> = emptyList(),
+                          private val first: String = "", private val last: String = "") : View(context) {
+    private val pen = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = resources.getFont(R.font.jetbrainsmono_regular) }
+    private val dashes = android.graphics.DashPathEffect(floatArrayOf(5f, 5f), 0f)
+    private val locale = resources.configuration.locales[0]
+    private var time = 1f
+    private var rise: ValueAnimator? = null
+    init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (ValueAnimator.areAnimatorsEnabled()) rise = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 700; interpolator = settle; addUpdateListener { time = it.animatedValue as Float; invalidate() }; start()
+        }
+    }
+    override fun onDetachedFromWindow() { rise?.cancel(); super.onDetachedFromWindow() }
+    override fun onDraw(canvas: Canvas) {
+        val density = resources.displayMetrics.density; canvas.scale(density, density)
+        val type = resources.configuration.fontScale.coerceIn(1f, 1.3f)
+        val w = width / density; val top = 10f; val bottom = height / density - 20f; val gutter = 40f
+        val values = (bars + dots + line + target).filterNotNull()
+        if (values.isEmpty()) return
+        val count = maxOf(bars.size, dots.size, line.size)
+        val low = if (bars.isNotEmpty()) 0.0 else kotlin.math.floor(values.min() - 1)
+        val high = if (bars.isNotEmpty()) kotlin.math.ceil(values.max() * 1.08 / 500) * 500 else kotlin.math.ceil(values.max() + 1)
+        val span = (high - low).coerceAtLeast(1.0)
+        fun y(value: Double) = (bottom - (bottom - top) * ((value - low) / span)).toFloat()
+        fun x(index: Int) = gutter + (w - gutter) * (index + .5f) / count
+        val ink = context.getColor(R.color.ink); val muted = context.getColor(R.color.muted); val accent = context.getColor(R.color.accent)
+        pen.textSize = 10f * type; pen.strokeWidth = 1f; pen.style = Paint.Style.FILL
+        for (step in 0..2) {
+            val value = low + span * step / 2
+            pen.color = ink; pen.alpha = if (step == 0) 110 else 28; canvas.drawLine(gutter, y(value), w, y(value), pen)
+            pen.color = muted; pen.alpha = 255; pen.textAlign = Paint.Align.RIGHT
+            canvas.drawText(String.format(locale, if (bars.isNotEmpty()) "%.0f" else "%.1f", value), gutter - 6f, y(value) + 3.5f, pen)
+        }
+        val slot = (w - gutter) / count
+        bars.forEachIndexed { index, value ->
+            if (value == null) return@forEachIndexed
+            val near = target != null && kotlin.math.abs(value - target) <= target * .1
+            pen.color = if (near) accent else ink; pen.alpha = if (near) 255 else 90
+            val half = (slot * .32f).coerceIn(1.5f, 9f)
+            canvas.drawRoundRect(x(index) - half, y(low + (value - low) * time), x(index) + half, bottom, 2f, 2f, pen)
+        }
+        target?.let {
+            pen.color = ink; pen.alpha = 170; pen.pathEffect = dashes; pen.strokeWidth = 1.2f
+            canvas.drawLine(gutter, y(it), w, y(it), pen); pen.pathEffect = null; pen.strokeWidth = 1f
+        }
+        pen.color = muted; pen.alpha = 200
+        dots.forEachIndexed { index, value -> if (value != null) canvas.drawCircle(x(index), y(value), 2.6f, pen) }
+        pen.color = accent; pen.alpha = 255; pen.style = Paint.Style.STROKE; pen.strokeWidth = 2.5f; pen.strokeCap = Paint.Cap.ROUND
+        val path = android.graphics.Path(); var open = false
+        val shown = (line.size * time).toInt().coerceAtMost(line.size)
+        line.take(shown).forEachIndexed { index, value ->
+            if (value == null) { open = false; return@forEachIndexed }
+            if (open) path.lineTo(x(index), y(value)) else path.moveTo(x(index), y(value)); open = true
+        }
+        canvas.drawPath(path, pen)
+        pen.style = Paint.Style.FILL; pen.color = muted; pen.textSize = 10f * type
+        pen.textAlign = Paint.Align.LEFT; canvas.drawText(first, gutter, bottom + 15f, pen)
+        pen.textAlign = Paint.Align.RIGHT; canvas.drawText(last, w, bottom + 15f, pen)
+    }
 }
