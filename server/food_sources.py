@@ -22,23 +22,31 @@ OFF_FIELDS = "code,product_name,brands,nutriments,serving_size"
 USER_AGENT = "JumpScan/1.2 (school project)"
 FOOD_URL = "https://fdc.nal.usda.gov/fdc-app.html#/food-details/{}/nutrients"
 
-# Detailed per-100 g nutrients (key, name, unit); a missing key means unknown, never zero. No daily reference values
-# are defined, so `reference` is always null rather than an invented target.
+# Detailed per-100 g nutrients (key, English name, Bulgarian name, unit); a missing key means unknown, never zero.
+# No daily reference values are defined, so `reference` is always null rather than an invented target.
 NUTRIENTS = (
-    ("fiber", "Fiber", "g"), ("sugar", "Total sugars", "g"), ("saturated_fat", "Saturated fat", "g"),
-    ("monounsaturated_fat", "Monounsaturated fat", "g"), ("polyunsaturated_fat", "Polyunsaturated fat", "g"),
-    ("cholesterol", "Cholesterol", "mg"), ("sodium", "Sodium", "mg"), ("potassium", "Potassium", "mg"),
-    ("calcium", "Calcium", "mg"), ("iron", "Iron", "mg"), ("magnesium", "Magnesium", "mg"),
-    ("phosphorus", "Phosphorus", "mg"), ("zinc", "Zinc", "mg"), ("copper", "Copper", "mg"),
-    ("manganese", "Manganese", "mg"), ("selenium", "Selenium", "µg"), ("vitamin_a", "Vitamin A (RAE)", "µg"),
-    ("vitamin_c", "Vitamin C", "mg"), ("vitamin_d", "Vitamin D", "µg"),
-    ("vitamin_e", "Vitamin E (alpha-tocopherol)", "mg"), ("vitamin_k", "Vitamin K (phylloquinone)", "µg"),
-    ("thiamin", "Thiamin (B1)", "mg"), ("riboflavin", "Riboflavin (B2)", "mg"), ("niacin", "Niacin (B3)", "mg"),
-    ("pantothenic_acid", "Pantothenic acid (B5)", "mg"), ("vitamin_b6", "Vitamin B6", "mg"),
-    ("folate", "Folate, total", "µg"), ("vitamin_b12", "Vitamin B12", "µg"), ("choline", "Choline", "mg"),
-    ("water", "Water", "g"), ("alcohol", "Alcohol", "g"), ("caffeine", "Caffeine", "mg"),
+    ("fiber", "Fiber", "Фибри", "g"), ("sugar", "Total sugars", "Захари", "g"),
+    ("saturated_fat", "Saturated fat", "Наситени мазнини", "g"),
+    ("monounsaturated_fat", "Monounsaturated fat", "Мононенаситени мазнини", "g"),
+    ("polyunsaturated_fat", "Polyunsaturated fat", "Полиненаситени мазнини", "g"),
+    ("cholesterol", "Cholesterol", "Холестерол", "mg"), ("sodium", "Sodium", "Натрий", "mg"),
+    ("potassium", "Potassium", "Калий", "mg"), ("calcium", "Calcium", "Калций", "mg"), ("iron", "Iron", "Желязо", "mg"),
+    ("magnesium", "Magnesium", "Магнезий", "mg"), ("phosphorus", "Phosphorus", "Фосфор", "mg"),
+    ("zinc", "Zinc", "Цинк", "mg"), ("copper", "Copper", "Мед", "mg"), ("manganese", "Manganese", "Манган", "mg"),
+    ("selenium", "Selenium", "Селен", "µg"), ("vitamin_a", "Vitamin A (RAE)", "Витамин A (RAE)", "µg"),
+    ("vitamin_c", "Vitamin C", "Витамин C", "mg"), ("vitamin_d", "Vitamin D", "Витамин D", "µg"),
+    ("vitamin_e", "Vitamin E (alpha-tocopherol)", "Витамин E (алфа-токоферол)", "mg"),
+    ("vitamin_k", "Vitamin K (phylloquinone)", "Витамин K (филохинон)", "µg"),
+    ("thiamin", "Thiamin (B1)", "Тиамин (B1)", "mg"), ("riboflavin", "Riboflavin (B2)", "Рибофлавин (B2)", "mg"),
+    ("niacin", "Niacin (B3)", "Ниацин (B3)", "mg"),
+    ("pantothenic_acid", "Pantothenic acid (B5)", "Пантотенова киселина (B5)", "mg"),
+    ("vitamin_b6", "Vitamin B6", "Витамин B6", "mg"), ("folate", "Folate, total", "Фолати, общо", "µg"),
+    ("vitamin_b12", "Vitamin B12", "Витамин B12", "µg"), ("choline", "Choline", "Холин", "mg"),
+    ("water", "Water", "Вода", "g"), ("alcohol", "Alcohol", "Алкохол", "g"), ("caffeine", "Caffeine", "Кофеин", "mg"),
 )
-DEFINITIONS = [{"key": key, "name": name, "unit": unit, "reference": None} for key, name, unit in NUTRIENTS]
+# "name" stays for older clients and equals the English name (SPEC 7.4: clients show name_bg or name_en).
+DEFINITIONS = [{"key": key, "name": en, "name_en": en, "name_bg": bg, "unit": unit, "reference": None}
+               for key, en, bg, unit in NUTRIENTS]
 
 
 class Unavailable(Exception):
