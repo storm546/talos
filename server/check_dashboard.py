@@ -161,6 +161,15 @@ def check():
         assert page.locator('figcaption', has_text='Прием за 30 дни').count() == 1
         assert page.locator('.adherence p').first.inner_text().split(' / ')[0].isdigit()
         page.screenshot(path=str(output / 'coach-nutrition.png'), full_page=True)
+        # SPEC 7.4: the coach sets the goal from the same view.
+        panel = page.locator('.goal-progress')
+        panel.locator('summary', has_text='Задайте цел за тегло').click()
+        panel.locator('select[name=phase]').select_option('maintain')
+        assert panel.locator('input[name=end_date]').is_disabled()
+        panel.locator('input[name=protein_g]').fill('130')
+        panel.locator('input[name=fat_g]').fill('60')
+        panel.get_by_role('button', name='Задайте цел за тегло', exact=True).click()
+        page.locator('.goal-progress .badge', has_text='Поддържане').wait_for()
         page.locator('.subnav').get_by_role('button', name='Техника', exact=True).click()
         page.get_by_role('button', name='Към отбора', exact=True).wait_for()
         # staff plan and exercise management

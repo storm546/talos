@@ -75,7 +75,7 @@ const dictionary = {
     expenditure:'Разход на енергия', expenditureNote:'Адаптивна оценка от Вашите записи, не измерване.',
     programTitle:'Програма', goal:'Цел', maintain:'Поддържане', lose:'Сваляне', gain:'Качване', rate:'Темп (кг/седмица)',
     recommended:'Препоръчано', appliedBadge:'Приложено', notAppliedBadge:'Не е приложено', estimateKcal:'Оценен разход',
-    proteinRange:'Препоръчан белтък', setTarget:'Задайте цел', setProgram:'Задайте цел и темп', dayComplete:'Отбележете деня завършен',
+    proteinRange:'Препоръчан белтък', setTarget:'Задайте цел', setProgram:'Задайте цел и темп', setGoal:'Задайте цел за тегло', dayComplete:'Отбележете деня завършен',
     under18:'Под 18 г.', noProgram:'Няма програма. Задайте цел и темп.', notEnoughData:'Недостатъчно записи за оценка.',
     guardrailNote:'Препоръката не минава правилата (под 18 г. или под 1500 ккал) и не е записана — обсъдете с треньора.',
     nutritionNote:'Обсъдете тези стойности с треньора си.', noNutrition:'Още няма данни за хранене.',
@@ -169,7 +169,7 @@ const dictionary = {
     expenditure:'Energy expenditure', expenditureNote:'An adaptive estimate from your own logs, not a measurement.',
     programTitle:'Program', goal:'Goal', maintain:'Maintain', lose:'Lose', gain:'Gain', rate:'Rate (kg/week)',
     recommended:'Recommended', appliedBadge:'Applied', notAppliedBadge:'Not applied', estimateKcal:'Estimated expenditure',
-    proteinRange:'Protein range', setTarget:'Set target', setProgram:'Set goal and rate', dayComplete:'Mark day complete',
+    proteinRange:'Protein range', setTarget:'Set target', setProgram:'Set goal and rate', setGoal:'Set weight goal', dayComplete:'Mark day complete',
     under18:'Under 18', noProgram:'No program yet. Set a goal and weekly rate.', notEnoughData:'Not enough logged data for an estimate.',
     guardrailNote:'The recommendation was not saved (under 18 or below 1,500 kcal). Discuss it with your coach.',
     nutritionNote:'Use these numbers to start a conversation with your coach.', noNutrition:'No nutrition data yet.',
@@ -264,6 +264,12 @@ async function api(path, options={}) {
   if (!response.ok) {
     const code = response.status;
     if (code === 401 && state.token) {signedOut(); throw new Error('expired');}
+    // A busy read (a live refresh overlapping a save's reload) is retried once after the server's Retry-After.
+    const wait = Number(response.headers.get('Retry-After'));
+    if (code === 503 && wait && !options.method && !options.retried) {
+      await new Promise(resolve => setTimeout(resolve, 1000 * wait));
+      return api(path, {...options, retried:true});
+    }
     throw new Error(({401:'invalidLogin',403:'forbidden',404:'notFound',409:'conflict',422:'badInput',429:'rateLimit',503:'assistantUnavailable'})[code] || 'error');
   }
   if (options.download) return response.blob();
@@ -1490,9 +1496,33 @@ function adherenceView(a) {
     ' · ' + t('carbs') + ' ' + formatNumber(a.averages.carbs_g) + ' · ' + t('fat') + ' ' + formatNumber(a.averages.fat_g), 'muted'));
   return section;
 }
-function goalView(g) {
+function goalForm(athlete, g) {
+  // SPEC 7.4: phase, target weight and end date through the same endpoint (and guardrails) as the app.
+  const form = node('form');
+  const cur = g && g.goal ? g.goal : null;
+  const rec = state.program && state.program.program ? state.program.program.recommended_target : null;
+  const phase = selectField(form, 'goal', 'phase', [['maintain', t('maintain')], ['lose', t('lose')], ['gain', t('gain')]]);
+  if (cur) phase.value = cur.phase;
+  const target = inputField(form, 'targetWeight', 'target_weight_kg', 'number',
+    cur && cur.target_weight_kg != null ? String(cur.target_weight_kg) : '', {min:20, max:400, step:'0.1'});
+  const end = inputField(form, 'endDate', 'end_date', 'date', cur && cur.end_date ? cur.end_date : '');
+  const sync = () => { target.disabled = end.disabled = phase.value === 'maintain'; };
+  phase.addEventListener('change', sync); sync();
+  inputField(form, 'protein', 'protein_g', 'number', rec ? String(Math.round(rec.protein_g)) : '', {min:0, max:500, step:'1'});
+  inputField(form, 'fat', 'fat_g', 'number', rec ? String(Math.round(rec.fat_g)) : '', {min:0, max:500, step:'1'});
+  submit(form, 'setGoal', async data => {
+    const maintain = data.get('phase') === 'maintain';
+    await api('/api/athletes/' + athlete.id + '/nutrition/goal', {method:'PUT', body:JSON.stringify(
+      {phase: data.get('phase'), target_weight_kg: maintain ? null : Number(data.get('target_weight_kg')),
+       end_date: maintain ? null : data.get('end_date'), protein_g: Number(data.get('protein_g')), fat_g: Number(data.get('fat_g'))})});
+    await load(); message('saved');
+  });
+  return form;
+}
+function goalView(g, athlete) {
   const section = node('section', null, 'inline-panel goal-progress'); section.append(node('h2', t('goalProgress')));
-  if (!g || !g.goal) { section.append(node('p', t('noGoal'), 'muted')); return section; }
+  const form = details('setGoal', goalForm(athlete, g));
+  if (!g || !g.goal) { section.append(node('p', t('noGoal'), 'muted'), form); return section; }
   const kg = (v, key) => v == null ? '—' : format(v, key) + ' ' + t('kgUnit');
   const meta = node('p'); meta.append(node('span', t(g.goal.phase), 'badge'));
   if (g.on_track != null) meta.append(document.createTextNode(' '), node('span', t(g.on_track ? 'onTrack' : 'offTrack'), 'badge' + (g.on_track ? '' : ' pending')));
@@ -1502,6 +1532,7 @@ function goalView(g) {
       ['endDate', g.goal.end_date ? date(g.goal.end_date) : '—'], ['projectedDate', g.projected_date ? date(g.projected_date) : '—']]) {
     const row = node('div', null, 'stat-line'); row.append(node('span', t(label)), node('strong', value)); section.append(row);
   }
+  section.append(form);
   return section;
 }
 function nutritionSummaryView(s) {
@@ -1631,7 +1662,7 @@ function nutrition(content) {
   if (charts.children.length) content.append(charts);
   const progress = node('div', null, 'overview-grid');
   if (state.analytics) progress.append(adherenceView(state.analytics));
-  progress.append(goalView(state.goal));
+  progress.append(goalView(state.goal, athlete));
   content.append(progress);
   const settings = node('div', null, 'overview-grid');
   settings.append(programView(state.program, athlete), targetView(state.nutTarget, athlete));
