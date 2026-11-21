@@ -621,3 +621,64 @@ measurements remain null for other exercises. Holds have empty `repetitions`, ze
   conversations and proposals. The demo seed contains no AI data.
 - Dashboard: an assistant panel on every page. App: an "AI помощник" screen with the same confirmation
   step.
+
+## 7. Nutrition, version 2 (added 2026-11-21)
+
+The owner asked for a full food tracker in place of the basic one, built on his own reconstruction in
+`/opt/personal-nutrition` (read it as the reference for behaviour: `core.py`, `server.py`, `common_catalog.py`,
+`nutrients.py`, `nutrient_totals.py`, `nutrition_days.py`, `goals.py`, `analytics.py`, `ai_food.py` and
+`static/*.js`). Port behaviour into JumpScan's own storage, roles, consent, audit and guardrails from section 6;
+no third-party product names or hashes in code, UI or docs (the existing product-string test covers new files).
+Everything in 6.3 keeps working; existing endpoints and responses stay compatible.
+
+### 7.1 Server
+- **Food catalogue.** Ship the USDA FoodData Central catalogue (CC0; SR Legacy 2018-04, Foundation, FNDDS) as a
+  read-only SQLite file with full-text search (`server/data/common_catalog.sqlite`, copied from the reference,
+  with a header or metadata row naming the source and licence). `GET /api/foods?q=` searches the existing foods
+  first, then the catalogue; catalogue hits carry `catalog_id`, per-100 g values, micronutrients and USDA
+  portions. Logging a catalogue food materialises it once as a system food (idempotent by `catalog_id`).
+- **Servings.** Foods gain `servings` (label, grams; at least "100 g"; USDA portions and label serving sizes),
+  `brand`, `barcode` (8–14 digits, unique when set) and `source`/`source_url`. `food_logs` gains `serving_label`
+  and `quantity`; `grams` stays the stored truth.
+- **Barcode.** `GET /api/foods/barcode/{code}` (8–14 digits, else 422): local food with that barcode first; else
+  Open Food Facts product API v2 (server-side, 5 s timeout, User-Agent `JumpScan/1.2 (school project)`, fields as
+  in the reference `barcode_food`), normalised to per-100 g kcal/protein/carbs/fat/fibre plus sugar, salt/sodium,
+  saturated fat when present, and saved as a club food with `source` "Open Food Facts" and the product URL
+  (attribution: data under the ODbL). Not found: 404 with a "create it" hint. Network failure: 503, nothing saved.
+  The athlete can correct a scanned food (`PATCH /api/foods/{id}`, own/club scope as for delete).
+- **Micronutrients.** Port the reference nutrient definitions (`GET /api/nutrient-definitions`) and per-day
+  totals; `GET /api/athletes/{id}/nutrition/summary` gains `nutrients` (amount, unit, reference value when
+  defined). Missing values are reported as missing, never as zero.
+- **Diary editing.** `PATCH /api/food-logs/{id}` (grams/serving/quantity/meal/day), `POST /api/food-logs/copy`
+  (from day[, meal] to day[, meal]; idempotent by `client_id`), `POST /api/food-logs/batch` (up to 50 entries,
+  all or nothing). Quick add: a log may carry kcal/protein/carbs/fat with no food (`food_id` null, a label).
+- **Recipes.** `recipes(id, owner_id, club_id, name, servings_count)` + `recipe_items(food_id, grams)`; a recipe
+  is loggable like a food (per serving or grams); totals computed from items. CRUD at `/api/recipes`.
+- **Suggestions.** `GET /api/foods/recent?meal=` (the athlete's recent and frequent foods, at most 20) for
+  one-tap logging.
+- **Goals and phases.** Port the reference goal model onto `coaching_programs`: a phase (`lose`/`maintain`/
+  `gain`) with target weight and end date gives the rate; `GET /api/athletes/{id}/nutrition/goal` shows progress
+  from the weight trend (current trend, target, projected date). All 6.3 guardrails still apply.
+- **Analytics.** `GET /api/athletes/{id}/nutrition/analytics?days=7|30|90`: daily kcal and macros, averages over
+  logged days, adherence to target (days within ±10 % of kcal), trend weight series and expenditure series.
+- **AI meal entry.** `POST /api/me/nutrition/ai-parse` sends a free-text meal ("2 eggs and toast") to the
+  configured local LLM (JUMPSCAN_LLM_*; 503 when not configured), matches the items against foods and the
+  catalogue, and returns a proposal; nothing is logged until the client posts it through `batch`.
+- Audit: `food_updated`, `food_scanned`, `food_logs_copied`, `food_logs_batch`, `recipe_created`,
+  `recipe_updated`, `recipe_deleted`, `goal_set`; events as in 6.3, no values. The athlete export includes recipes.
+
+### 7.2 App (Android)
+- **Barcode scanner:** CameraX preview + ML Kit barcode scanning, bundled (offline) model, formats EAN-13,
+  EAN-8, UPC-A, UPC-E; torch toggle; vibrate on hit; result goes to the server lookup; 404 opens "create food"
+  pre-filled with the barcode; offline shows a clear message and lets the athlete enter the food manually.
+- **Diary:** a day view with the kcal ring and protein/carbs/fat bars against the target, meals as a timeline,
+  swipe to delete, tap to edit serving and quantity, copy yesterday or a meal, mark day complete.
+- **Add food:** one search across recent, own, club and catalogue foods; serving picker with quantity; quick
+  add of macros; recipes; scan button; AI text entry with a confirm step.
+- **Insights:** weight log with the trend line, expenditure and program card (weekly check-in), goal progress,
+  7/30/90-day analytics, micronutrient list for the day.
+- Bulgarian and English strings, light and dark, the existing design system (graphite and timing orange, the
+  `UiCards.kt`/`Plots.kt` kit). Offline queue as for other uploads.
+
+### 7.3 Dashboard
+Coach view of an athlete gains nutrition adherence, the analytics chart and goal progress.
