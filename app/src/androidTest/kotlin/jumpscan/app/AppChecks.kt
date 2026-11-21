@@ -49,6 +49,9 @@ class AppChecks : Instrumentation() {
                 val studio = StudioChecks(this, movies)
                 studio.screens(requireNotNull(fixtureServer))
                 capture.visual(studio)
+            } else if (only == "nutrition") {
+                targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
+                NutritionStudio(this).screens()
             } else if (only == "capture-parity") output.putString("parity", capture.parity())
             else if (only == "capture-visual") capture.visual()
             else if (only == "cutoff") videoCutoffCheck()
