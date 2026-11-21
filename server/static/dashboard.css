@@ -179,14 +179,20 @@ svg polyline {stroke-linecap:round;stroke-linejoin:round}
 .flight-board {margin:20px 0 0;color:var(--hero-ink);--accent:var(--signal);--muted:var(--hero-muted);--ink:var(--hero-ink);--line:#595552;--hover:#353234}
 .overview-hero .flight-board h2 {color:var(--hero-muted);font:600 .92rem Space,sans-serif;margin:0 0 5px}
 .team-count {color:var(--hero-ink);font:.9rem Timing,monospace}
-.flight-lanes {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr));gap:0 20px;max-height:182px;overflow:auto}
+.flight-lanes {display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:12px;margin-top:12px;max-height:min(70vh,560px);overflow:auto}
 .flight-lane,.flight-arrival {display:flex;align-items:center;gap:12px}
-.flight-lane {background:transparent;color:var(--ink);border:0;border-bottom:1px solid var(--line);border-radius:0;text-align:start;padding:8px 0}
-.flight-lane:hover {background:var(--hover)}
-.flight-lane strong,.flight-arrival span {margin-inline-start:auto;white-space:nowrap;font:1rem Timing,monospace}
-.flight-glyph {position:relative;flex:none;width:64px;height:40px;color:var(--accent)}
-.flight-rule {position:absolute;inset:2px 0 3px 1px;border:solid var(--muted);border-width:0 0 1px 1px;opacity:.7;background:repeating-linear-gradient(to top,var(--muted) 0 1px,transparent 1px 8px) left bottom/5px 100% no-repeat}
-.flight-path {position:absolute;bottom:4px;left:8px;border:2px solid currentColor;border-bottom:0;border-radius:50% 50% 0 0 / 100% 100% 0 0}
-.flight-path::after {content:'';position:absolute;left:50%;top:-3px;width:4px;height:4px;border-radius:50%;background:currentColor}
-.flight-arrival {padding:10px 16px;border-inline-start:3px solid var(--accent);background:var(--surface);margin-bottom:12px}
-@media(prefers-reduced-motion:no-preference){.flight-arrival {animation:flight-in .45s ease-out}.flight-arrival .flight-path {animation:flight-draw .75s ease-out}@keyframes flight-in{from{transform:translateY(-12px);opacity:0}}@keyframes flight-draw{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(-3px)}}}
+.flight-lane {flex-direction:column;align-items:stretch;gap:4px;background:rgba(255,255,255,.035);color:var(--ink);border:0;border-radius:14px;text-align:start;padding:12px 12px 10px;transition:background-color .16s,transform .16s}
+.flight-board .flight-lane:hover,.flight-board .flight-lane:focus-visible {background:var(--hover);color:var(--hero-ink)}
+.flight-board .flight-lane {text-decoration:none}
+.flight-lane strong {font:600 1.55rem/1.1 Timing,monospace;letter-spacing:-.02em;white-space:nowrap;margin-top:6px}
+.flight-lane span:last-child {font-size:.82rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flight-arrival > span:last-child {margin-inline-start:auto;white-space:nowrap;font:600 1.5rem Timing,monospace}
+.flight-glyph {position:relative;flex:none;width:72px;height:56px;color:var(--accent)}
+.flight-lane .flight-glyph {width:100%;height:150px}
+.flight-rule {position:absolute;inset:2px 0 3px 1px;border:solid var(--muted);border-width:0 0 1px 1px;opacity:.55;background:repeating-linear-gradient(to top,var(--muted) 0 1px,transparent 1px 10%) left bottom/7px 100% no-repeat}
+.flight-path {position:absolute;bottom:3px;left:50%;transform:translateX(-50%);border:3px solid currentColor;border-bottom:0;border-radius:50% 50% 0 0 / 100% 100% 0 0}
+.flight-path::after {content:'';position:absolute;left:50%;top:-5px;width:7px;height:7px;margin-left:-3.5px;border-radius:50%;background:currentColor;box-shadow:0 0 0 4px color-mix(in srgb,currentColor 25%,transparent)}
+.flight-mark {position:absolute;left:-4px;width:22px;height:3px;border-radius:2px;background:currentColor}
+.flight-arrival {display:flex;justify-content:flex-start;padding:12px 18px;border-inline-start:3px solid var(--accent);border-radius:0 14px 14px 0;background:var(--surface);margin-bottom:12px}
+.flight-arrival .flight-glyph {width:96px;height:64px}
+@media(prefers-reduced-motion:no-preference){.flight-arrival {animation:flight-in .45s ease-out}.flight-arrival .flight-path,.flight-lane .flight-path {animation:flight-draw .75s ease-out}.flight-lane .flight-mark {animation:flight-rise .6s cubic-bezier(.2,0,0,1)}@keyframes flight-rise{from{bottom:3px}}@keyframes flight-in{from{transform:translateY(-12px);opacity:0}}@keyframes flight-draw{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(-3px)}}}

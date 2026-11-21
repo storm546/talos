@@ -623,12 +623,15 @@ function measuredFlight(jump) {
 function flightLabel(jump) {
   return measuredFlight(jump) ? format(jump.jump_height_cm,'jump_height_cm') + (state.language === 'bg' ? ' см' : ' cm') : '—';
 }
-function flightGlyph(jump) {
+function flightGlyph(jump, scale = 60) {
   const glyph = node('span',null,'flight-glyph'); glyph.setAttribute('aria-hidden','true');
   glyph.append(node('i',null,'flight-rule'));
   if (measuredFlight(jump)) {
-    const arc = node('i',null,'flight-path'); arc.style.height = (Math.min(1,jump.jump_height_cm/80)*32+1)+'px';
-    arc.style.width = (Math.min(1,jump.flight_time_ms/800)*54+2)+'px'; glyph.append(arc);
+    const level = Math.min(1, jump.jump_height_cm/scale).toFixed(3);
+    const arc = node('i',null,'flight-path'); arc.style.height = 'calc((100% - 8px) * '+level+')';
+    arc.style.width = (34+Math.min(1,jump.flight_time_ms/700)*52)+'%';
+    const mark = node('i',null,'flight-mark'); mark.style.bottom = 'calc(3px + (100% - 8px) * '+level+')';
+    glyph.append(arc, mark);
   }
   return glyph;
 }
@@ -645,11 +648,13 @@ function team(content) {
   teamOverview(content);
   if (state.athletes.length) {
     const latest = new Map(); for (const jump of state.teamFlights) if (!latest.has(jump.athlete_id)) latest.set(jump.athlete_id,jump);
-    const board = node('section',null,'flight-board'); board.append(node('h2',state.language === 'bg' ? 'Последен скок по спортист' : 'Latest flight by athlete'));
+    const scale = Math.ceil(Math.max(40, ...state.teamFlights.filter(measuredFlight).map(jump => jump.jump_height_cm*1.15))/10)*10;
+    const board = node('section',null,'flight-board');
+    board.append(node('h2',(state.language === 'bg' ? 'Последен скок по спортист · обща скала 0–' : 'Latest flight by athlete · shared scale 0–')+scale+(state.language === 'bg' ? ' см' : ' cm')));
     const lanes = node('div',null,'flight-lanes'); board.append(lanes); hero.append(board);
     for (const athlete of state.athletes) {
       const lane = athleteLink(athlete,athlete.name); lane.className = 'flight-lane';
-      const show = jump => lane.replaceChildren(flightGlyph(jump),node('span',athlete.name),node('strong',flightLabel(jump)));
+      const show = jump => lane.replaceChildren(flightGlyph(jump,scale),node('strong',flightLabel(jump)),node('span',athlete.name));
       show(latest.get(athlete.id)); lanes.append(lane);
       if (athlete.jump_count && !latest.has(athlete.id)) {
         const observer = new IntersectionObserver(entries => {
