@@ -52,6 +52,9 @@ class AppChecks : Instrumentation() {
             } else if (only == "nutrition") {
                 targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
                 NutritionStudio(this).screens()
+            } else if (only == "records") {
+                targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
+                RecordsStudio(this).screens(requireNotNull(fixtureServer))
             } else if (only == "capture-parity") output.putString("parity", capture.parity())
             else if (only == "capture-visual") capture.visual()
             else if (only == "cutoff") videoCutoffCheck()
@@ -65,6 +68,7 @@ class AppChecks : Instrumentation() {
                 videoPreviewCheck()
                 videoCutoffCheck()
                 numberChecks()
+                recordChecks()
                 capture.policies()
                 diagnosticChecks()
             }
@@ -266,6 +270,12 @@ class AppChecks : Instrumentation() {
             try { checkinBody(scores, minutes, rpe); error("Invalid check-in accepted") }
             catch (e: AppError) { check(e.resource == R.string.checkin_invalid) }
         }
+    }
+
+    private fun recordChecks() {
+        // A 400 ms flight is a 19.6 cm jump (h = g t² / 8), both ways.
+        check(kotlin.math.abs(recordJump(19.6133).getDouble("flight_time_ms") - 400) < .01)
+        check(kotlin.math.abs(heightFromFlight(400.0) - 19.6133) < .001)
     }
 
     private fun numberChecks() {

@@ -215,6 +215,76 @@ def check():
         page.get_by_role('button', name='Изход', exact=True).click()
         page.locator('#login-form').wait_for()
 
+        # SPEC 8: club leaderboard and per-athlete records (the seed opts in athlete1 and athlete5).
+        login('coach')
+        page.get_by_role('button', name='Класация', exact=True).click()
+        page.locator('.board-table').wait_for()
+        assert sorted(page.locator('.board-table tbody td:nth-child(2)').all_text_contents()) == ['Александра И.', 'Даниел С.']
+        assert page.locator('.board-hidden').inner_text().endswith(': 4')
+        assert page.locator('.board-lanes .flight-lane').count() == 2
+        page.locator('.board-controls').get_by_role('button', name='Време във въздуха', exact=True).click()
+        page.locator('.board-controls button[aria-pressed=true]', has_text='Време във въздуха').wait_for()
+        assert page.locator('.board-table tbody td.num').nth(1).inner_text().endswith('мс')
+        page.locator('.board-controls').get_by_role('button', name='30 дни', exact=True).click()
+        page.locator('.board-controls button[aria-pressed=true]', has_text='30 дни').wait_for()
+        page.locator('#board-group').select_option(label='Състезатели')
+        page.locator('.board-table tbody tr').first.wait_for()
+        assert page.locator('.board-table tbody tr').count() == 1
+        page.locator('#board-group').select_option(label='Целият клуб')
+        page.locator('.board-controls').get_by_role('button', name='Височина на скока', exact=True).click()
+        page.locator('.board-controls button[aria-pressed=true]', has_text='Височина на скока').wait_for()
+        for theme in ['dark', 'light']:
+            page.evaluate(f'document.documentElement.dataset.theme = "{theme}"')
+            for language in ['bg', 'en']:
+                page.locator('#language').select_option(language)
+                for width in [1280, 390]:
+                    page.set_viewport_size({'width': width, 'height': 960})
+                    screenshot(f'coach-leaderboard-{language}-{width}-{theme}', full_page=True)
+        page.locator('#language').select_option('bg')
+        page.set_viewport_size({'width': 1280, 'height': 960})
+        page.get_by_role('button', name='Отбор', exact=True).click()
+        page.get_by_role('button', name='Мартин Колев', exact=True).first.click()
+        page.locator('.subnav').get_by_role('button', name='Рекорди', exact=True).click()
+        page.locator('.record-status').wait_for()
+        page.get_by_role('button', name='Потвърдете участието (под 18 г.)', exact=True).click()
+        page.get_by_role('button', name='Оттеглете потвърждението', exact=True).wait_for()
+        assert page.locator('.record-hero .flight-lane').count() >= 2
+        assert page.locator('.record-hero .flight-glyph').count() >= 2
+        assert page.locator('.club-table tbody tr').count() >= 1
+        assert page.get_by_text('Скокове с предупреждение, които не се броят: 1', exact=True).is_visible()
+        for theme in ['dark', 'light']:
+            page.evaluate(f'document.documentElement.dataset.theme = "{theme}"')
+            for language in ['bg', 'en']:
+                page.locator('#language').select_option(language)
+                for width in [1280, 390]:
+                    page.set_viewport_size({'width': width, 'height': 960})
+                    screenshot(f'coach-records-{language}-{width}-{theme}', full_page=True)
+        page.locator('#language').select_option('bg')
+        page.set_viewport_size({'width': 1280, 'height': 960})
+        page.get_by_role('button', name='Изход', exact=True).click()
+        page.locator('#login-form').wait_for()
+
+        login('athlete1')
+        page.get_by_role('button', name='Класация', exact=True).click()
+        page.locator('.board-table').wait_for()
+        assert page.locator('.board-table tr.own-row').count() == 1
+        assert page.locator('#leaderboard-opt-in').is_checked()
+        assert page.locator('.board-hidden').count() == 0
+        page.locator('#leaderboard-opt-in').uncheck()
+        page.locator('.board-table tr.own-row').wait_for(state='detached')
+        assert not page.locator('#leaderboard-opt-in').is_checked()
+        page.locator('#leaderboard-opt-in').check()
+        page.locator('.board-table tr.own-row').wait_for()
+        page.evaluate('document.documentElement.dataset.theme = "dark"')
+        screenshot('athlete-leaderboard-bg-1280-dark', full_page=True)
+        page.locator('.main-nav').get_by_role('button', name='Преглед', exact=True).click()
+        page.locator('.subnav').get_by_role('button', name='Рекорди', exact=True).click()
+        page.locator('.record-hero .flight-lane').first.wait_for()
+        assert page.locator('.record-status').count() == 0
+        screenshot('athlete-records-bg-1280-dark', full_page=True)
+        page.get_by_role('button', name='Изход', exact=True).click()
+        page.locator('#login-form').wait_for()
+
         login('athlete1')
         page.locator('.overview-hero').wait_for()
         assert page.get_by_role('button', name='Отбор', exact=True).count() == 0

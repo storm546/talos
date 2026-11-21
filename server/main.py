@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from . import assistant_api, training_nutrition_api
+from . import assistant_api, records_api, training_nutrition_api
 from .input_bounds import Offset, SQLITE_MAX, SqliteInt, SqlitePath
 from .response_data import complete_json, spooled_response
 
@@ -192,6 +192,7 @@ def init_db(path):
                    "WHERE client_id IS NOT NULL")
         training_nutrition_api.init_schema(db)  # training and nutrition tables (SPEC 6.2, 6.3)
         assistant_api.init_schema(db)
+        records_api.init_schema(db)  # leaderboard opt-in columns (SPEC 8)
 
 
 def password_hash(password, salt):
@@ -852,6 +853,13 @@ def athlete_viewers(db, athlete):
     return viewers
 
 
+def publish_record(db, athlete, source, row_id, at, emit):
+    """A `record` event (no values) when a new jump, set or form hold beats the athlete's previous best."""
+    if records_api.beats_record(db, athlete["id"], source, row_id, FORM_EXERCISES):
+        emit(athlete_viewers(db, athlete), {"type": "record", "id": row_id, "athlete_id": athlete["id"],
+                                            "club_id": athlete["club_id"], "at": at})
+
+
 def staff_viewers(db, club_id):
     return {row["id"] for row in db.execute(
         "SELECT id FROM users WHERE active = 1 AND (role = 'admin' OR (role = 'coach' AND club_id = ?))",
@@ -947,6 +955,7 @@ def create_app(db_path=None):
     app.add_middleware(RequestBodyLimit)
     app.state.events = EventBus()
     training_tools = training_nutrition_api.install(app, sys.modules[__name__])
+    records_api.install(app, sys.modules[__name__])
     app.mount("/static", StaticFiles(directory=Path(__file__).with_name("static")), name="static")
 
     csp = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -1097,7 +1106,7 @@ def create_app(db_path=None):
         require_role(user, "admin", "coach")
         rows = db.execute(
             "SELECT users.id, users.name, users.club_id, users.active, users.consent_recorded, "
-            "users.consent_by, users.consent_at, users.under_18, COUNT(jumps.id) AS jump_count, "
+            "users.consent_by, users.consent_at, users.under_18, users.leaderboard_opt_in, users.leaderboard_allowed, COUNT(jumps.id) AS jump_count, "
             "MAX(jumps.created_at) AS last_jump_at FROM users LEFT JOIN jumps ON jumps.athlete_id = users.id "
             "WHERE users.role = 'athlete' AND (? = 'admin' OR users.club_id = ?) "
             "GROUP BY users.id ORDER BY users.name, users.id LIMIT ? OFFSET ?",
@@ -1111,7 +1120,7 @@ def create_app(db_path=None):
         for row in rows:
             changes = summary(histories[row["id"]])["metrics"]
             result.append({**dict(row), "active": bool(row["active"]), "under_18": bool(row["under_18"]),
-                           **consent_fields(row),
+                           **consent_fields(row), **records_api.leaderboard_state(row),
                            "changes": {key: changes[key] for key in
                                        ("knee_ankle_ratio", "knee_flexion_peak_mean", "flexion_asymmetry_pct")}})
         return result
@@ -1151,6 +1160,7 @@ def create_app(db_path=None):
         jump_id = cursor.lastrowid
         emit(athlete_viewers(db, user), {"type": "jump", "id": jump_id, "athlete_id": user["id"],
                                        "club_id": user["club_id"], "at": created_at})
+        publish_record(db, user, "jump", jump_id, created_at, emit)
         return JSONResponse(status_code=201, content={"id": jump_id, "created_at": created_at})
 
     @app.get("/api/jumps")
@@ -1226,6 +1236,7 @@ def create_app(db_path=None):
             audit(db, athlete["id"], "form_logged", form_id)
             emit(athlete_viewers(db, athlete), {"type": "form", "id": form_id, "athlete_id": athlete["id"],
                                               "club_id": athlete["club_id"], "at": created_at})
+            publish_record(db, athlete, "form_set", form_id, created_at, emit)
         return JSONResponse(status_code=201, content={"id": form_id, "created_at": created_at})
 
     @app.get("/api/form/exercises")
@@ -1299,9 +1310,10 @@ def create_app(db_path=None):
         comments = (dict(row) for row in db.execute(
             "SELECT id, author_id, jump_id, session_id, body, created_at, read_at FROM comments "
             "WHERE athlete_id = ? ORDER BY created_at, id", (user["id"],)))
-        profile["under_18"] = bool(user["under_18"])
+        profile.update(records_api.leaderboard_state(user))
         result = {"user": profile, "jumps": jump_rows(db, user["id"]), "checkins": checkins,
                   "comments": comments, "form_sets": athlete_form_sets(db, user["id"]),
+                  "records": records_api.compute_records(db, user["id"], FORM_EXERCISES)["records"],
                   **training_nutrition_api.export_data(db, user["id"]),
                   "exported_at": now_iso()}
         def record_export():
