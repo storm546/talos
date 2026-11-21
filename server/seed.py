@@ -20,6 +20,7 @@ DEMO_CLUBS = (
     ("Втори демо клуб", (("coach2", "Втори демо треньор", "coach"), ("athlete3", "Иван Николов", "athlete"))),
 )
 DEMO_GROUPS = {"Юноши": ("athlete1", "athlete2", "athlete4"), "Състезатели": ("athlete5", "athlete6", "athlete7")}
+LEADERBOARD_OPT_IN = ("athlete1", "athlete5")  # adults; the others stay opted out (SPEC 8)
 SESSION_NOTE = "Демо сесия — синтетични данни"
 PLAN_NOTE = "Демо план: синтетични данни"
 
@@ -81,14 +82,16 @@ def seed(path=None, *, reset=False):
                 salt = secrets.token_bytes(16)
                 cursor = db.execute(
                     "INSERT INTO users(club_id, email, name, role, password_salt, password_hash, "
-                    "consent_recorded, consent_by, consent_at, under_18) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "consent_recorded, consent_by, consent_at, under_18, leaderboard_opt_in) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(email) DO UPDATE SET club_id=excluded.club_id, name=excluded.name, role=excluded.role, "
                     "password_salt=excluded.password_salt, password_hash=excluded.password_hash, active=1, "
                     "consent_recorded=excluded.consent_recorded, consent_by=excluded.consent_by, "
-                    "consent_at=excluded.consent_at, under_18=excluded.under_18 RETURNING id",
+                    "consent_at=excluded.consent_at, under_18=excluded.under_18, "
+                    "leaderboard_opt_in=excluded.leaderboard_opt_in RETURNING id",
                     (club_id, email, name, role, salt, password_hash("demo1234", salt), role == "athlete",
                      "Синтетично съгласие за демонстрацията" if role == "athlete" else None,
-                     now.isoformat() if role == "athlete" else None, account == "athlete7"),
+                     now.isoformat() if role == "athlete" else None, account == "athlete7",
+                     account in LEADERBOARD_OPT_IN),
                 )
                 user_id = cursor.fetchone()[0]
                 user_ids[account] = user_id

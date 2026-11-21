@@ -461,7 +461,14 @@ class Program(StrictModel):
 
 
 class Profile(StrictModel):
-    under_18: bool
+    under_18: bool | None = None
+    leaderboard_allowed: bool | None = None  # coach's confirmation for an under-18 athlete (SPEC 8)
+
+    @model_validator(mode="after")
+    def one_field(self):
+        if self.under_18 is None and self.leaderboard_allowed is None:
+            raise ValueError("Send under_18 or leaderboard_allowed")
+        return self
 
 
 def utc_today():
@@ -575,10 +582,15 @@ def install(app, h):
         target = h.managed_user(db, user, target_id)
         if target["role"] != "athlete":
             raise HTTPException(422, "The profile applies to athletes only")
-        db.execute("UPDATE users SET under_18 = ? WHERE id = ?", (body.under_18, target_id))
-        audit(db, user["id"], "profile_changed", target_id, {"under_18": body.under_18})
+        if body.under_18 is not None:
+            db.execute("UPDATE users SET under_18 = ? WHERE id = ?", (body.under_18, target_id))
+            audit(db, user["id"], "profile_changed", target_id, {"under_18": body.under_18})
+        if body.leaderboard_allowed is not None:
+            db.execute("UPDATE users SET leaderboard_allowed = ? WHERE id = ?", (body.leaderboard_allowed, target_id))
+            audit(db, user["id"], "leaderboard_allowed_changed", target_id,
+                  {"leaderboard_allowed": body.leaderboard_allowed})
         db.commit()
-        return {"id": target_id, "under_18": body.under_18}
+        return {"id": target_id, **body.model_dump(exclude_none=True)}
 
     # --- exercises ---
 
@@ -715,6 +727,7 @@ def install(app, h):
              body.plan_id, body.client_id, created_at))
         audit(db, user["id"], "set_logged", cursor.lastrowid)
         publish(db, user, "set", cursor.lastrowid, created_at, emit)
+        h.publish_record(db, user, "set_log", cursor.lastrowid, created_at, emit)
         return JSONResponse(status_code=201, content=set_row(
             db.execute("SELECT * FROM set_logs WHERE id = ?", (cursor.lastrowid,)).fetchone()))
 
