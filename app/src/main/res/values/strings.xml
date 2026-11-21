@@ -311,6 +311,8 @@
     <string name="nutr_total_target">Logged / target</string>
     <string name="nutr_no_targets">No daily targets set.</string>
     <string name="nutr_energy">Energy (kcal)</string>
+    <string name="energy_target">Target %1$s kcal</string>
+    <string name="meal_timeline">Meals</string>
     <string name="nutr_protein">Protein (g)</string>
     <string name="nutr_carbs">Carbohydrates (g)</string>
     <string name="nutr_fat">Fat (g)</string>
@@ -358,6 +360,7 @@
     <string name="training_no_plan">No plan assigned for this week.</string>
     <string name="training_load_plan">Reload plans</string>
     <string name="training_prescribed">%1$d sets × %2$s reps</string>
+    <string name="session_logged">Sets logged</string>
     <string name="training_load_value">load %1$s</string>
     <string name="training_effort">RPE %1$s</string>
     <string name="training_log_exercise">Log set · %1$s</string>

@@ -109,6 +109,8 @@ class JumpCaptureActivity : ComponentActivity() {
     private var lastTick = -1
     private var tone: ToneGenerator? = null
     private lateinit var preview: PreviewView
+    private lateinit var guide: FramingGuide
+    private var guideAspect = 16f / 9f
     private lateinit var status: TextView
     private lateinit var start: Button
     private lateinit var pick: Button
@@ -139,7 +141,11 @@ class JumpCaptureActivity : ComponentActivity() {
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             scaleType = PreviewView.ScaleType.FILL_CENTER
         }
-        root.addView(preview, LinearLayout.LayoutParams(-1, 0, 1f))
+        val stage = android.widget.FrameLayout(this)
+        stage.addView(preview, android.widget.FrameLayout.LayoutParams(-1, -1))
+        guide = FramingGuide(this)
+        stage.addView(guide, android.widget.FrameLayout.LayoutParams(-1, -1))
+        root.addView(stage, LinearLayout.LayoutParams(-1, 0, 1f))
         status = label(R.string.form_finding_camera, 16).apply {
             gravity = Gravity.CENTER
             background = raisedSurface()
@@ -243,6 +249,8 @@ class JumpCaptureActivity : ComponentActivity() {
         clearAt = -1L
         latestFeet = null
         poseAfter = SystemClock.uptimeMillis() + 250
+        guide.clearCountdown()
+        guide.locked(false)
         start.isEnabled = false
         selected = null
         previewBound = false
@@ -286,6 +294,7 @@ class JumpCaptureActivity : ComponentActivity() {
                         landingWatch = JumpLandingWatch(latestFeet)
                         status.textSize = 24f
                         status.setText(R.string.jump_capture_go)
+                        guide.clearCountdown()
                         tone?.startTone(ToneGenerator.TONE_PROP_ACK, 250)
                     }
                 }
@@ -298,6 +307,7 @@ class JumpCaptureActivity : ComponentActivity() {
             if (previewBound && now >= poseAfter && !finishingClip && cameraFeed?.isReady() == true &&
                 preview.previewStreamState.value == PreviewView.StreamState.STREAMING) {
                 preview.bitmap?.let { source ->
+                    guideAspect = source.width.toFloat() / source.height
                     val scale = min(1f, 480f / maxOf(source.width, source.height))
                     val image = Bitmap.createScaledBitmap(source, (source.width * scale).roundToInt(),
                         (source.height * scale).roundToInt(), true)
@@ -321,11 +331,13 @@ class JumpCaptureActivity : ComponentActivity() {
             status.bump()
             status.textSize = 88f
             status.text = getString(R.string.jump_countdown, number)
+            guide.countdown(number)
             tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
         }
     }
 
     private fun observe(frame: Frame) {
+        guide.show(frame, guideAspect)
         val check = jumpFraming(frame)
         if (check == R.string.jump_frame_ready) {
             clearFrames++
@@ -334,6 +346,7 @@ class JumpCaptureActivity : ComponentActivity() {
             clearFrames = 0
             clearAt = -1L
         }
+        guide.locked(clearFrames >= 3)
         val feet = (27..32).map { frame.landmarks[it] }.filter { it.visibility >= .5f && it.y in 0f..1f }
         latestFeet = if (feet.size >= 4) feet.maxOf { it.y } else null
         if (recording != null) {
@@ -411,6 +424,7 @@ class JumpCaptureActivity : ComponentActivity() {
         finishingClip = true
         recording = null
         start.isEnabled = false
+        guide.clearCountdown()
         status.textSize = 16f
         status.setText(if (discard) R.string.jump_frame_body else R.string.jump_capture_saving)
         clip.stop()

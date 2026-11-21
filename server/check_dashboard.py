@@ -213,7 +213,13 @@ def check():
         unique_axes()
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
         page.locator('.subnav').get_by_role('button', name='Техника', exact=True).click()
-        page.get_by_text('Още няма записи на техника.', exact=True).wait_for()
+        # On a freshly seeded database the technique ledger may be empty; then the empty note is a match,
+        # while seeded form sets carry a "Клек" heading. Assert whichever the seed produced.
+        try:
+            page.get_by_text('Още няма записи на техника.', exact=True).wait_for(timeout=3000)
+        except Exception:
+            page.get_by_role('heading', name='Клек', exact=True).first.wait_for()
+            page.get_by_role('cell', name='#1', exact=True).first.wait_for()
         page.route('**/api/form/exercises', lambda route: route.fulfill(json=[{
             'id': 'demo_hold', 'name_bg': 'Тестово задържане', 'name_en': 'Demo hold', 'mode': 'hold',
             'sided': True, 'view': 'side', 'checks': [{'key': 'angle', 'label_bg': 'Ъгъл', 'label_en': 'Angle', 'unit': '°'}]}]))

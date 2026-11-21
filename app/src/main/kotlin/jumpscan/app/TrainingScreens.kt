@@ -18,69 +18,78 @@ internal fun planDays(plan: JSONObject, week: LocalDate): List<Pair<LocalDate, J
 
 internal fun MainActivity.trainingHome(week: LocalDate = weekStart(LocalDate.now()), message: String? = null) {
     val api = featureApi()
-    work(getString(R.string.feature_loading), { api.array("/api/plans") }, { plans ->
-        trainingWeek(week, plans, message)
-    }, { trainingWeek(week, null, it) })
+    work(getString(R.string.feature_loading), {
+        val plans = api.array("/api/plans")
+        val logs = mutableListOf<JSONObject>()
+        do {
+            val batch = api.array("/api/set-logs?from=$week&to=${week.plusDays(6)}&limit=500&offset=${logs.size}")
+            logs.addAll(batch)
+        } while (batch.size == 500)
+        plans to logs
+    }, { (plans, logs) -> trainingWeek(week, plans, logs, message) }, { trainingWeek(week, null, emptyList(), it) })
 }
 
-private fun MainActivity.trainingWeek(week: LocalDate, plans: List<JSONObject>?, message: String? = null) {
+private fun MainActivity.trainingWeek(week: LocalDate, plans: List<JSONObject>?, logs: List<JSONObject>, message: String?) {
     layout(getString(R.string.training_title), "training")
     if (message != null) notice(message, caution = plans == null)
-    val overview = card(hero = true)
     text(getString(R.string.training_week, localDate(week.toString(), locale), localDate(week.plusDays(6).toString(), locale)),
-        16, getColor(R.color.on_hero), overview)
-    button(getString(R.string.training_choose_exercise), primary = true, parent = overview) { exercises(week, plans) }
-    button(getString(R.string.training_other_week), parent = overview) { dayPickerWeek(week, plans) }
-    val scheduled = plans.orEmpty().map { it to planDays(it, week) }.filter { it.second.isNotEmpty() }
+        14).instrumentType(numeric = true)
+    val scheduled = plans.orEmpty().flatMap { plan -> planDays(plan, week).map { (day, item) -> Triple(day, plan, item) } }
     val today = LocalDate.now()
     if (plans != null && week == weekStart(today)) {
-        val items = scheduled.flatMap { it.second }.filter { it.first == today }
-        if (items.isEmpty()) notice(getString(R.string.ui_rest_day))
-        else section(R.string.ui_today_plan).setPadding(0, dp(14), 0, 0)
+        if (scheduled.none { it.first == today }) notice(getString(R.string.ui_rest_day))
     }
     if (plans != null && scheduled.isEmpty()) notice(getString(R.string.training_no_plan))
     if (plans == null) button(getString(R.string.training_load_plan)) { trainingHome(week) }
-    for ((plan, items) in scheduled) {
-        val panel = card()
-        text(plan.getString("title"), 21, green, panel)
-        plan.optString("notes").takeIf { it.isNotBlank() }?.let { text(it, 14, parent = panel) }
-        for ((day, item) in items.sortedBy { it.first != today }) {
-            val dayLabel = if (day == today) getString(R.string.ui_today) else day.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
-            text(dayLabel + " · " + item.getString("exercise"), 17, parent = panel).setPadding(0, dp(14), 0, 0)
+    for ((day, entries) in scheduled.sortedWith(compareBy({ it.first != today }, { it.first })).groupBy { it.first }) {
+        text(if (day == today) getString(R.string.ui_today_plan) else day.dayOfWeek.getDisplayName(TextStyle.FULL, locale), 24)
+        for ((index, entry) in entries.withIndex()) {
+            val (_, plan, item) = entry
+            val panel = timelineEntry(index, index == entries.lastIndex)
+            text(plan.getString("title"), 13, parent = panel)
+            if (index == 0 || entries[index - 1].second != plan) plan.optString("notes").takeIf { it.isNotBlank() }?.let { text(it, 14, parent = panel) }
+            text(item.getString("exercise"), 20, parent = panel)
             val reps = item.getInt("reps")
             val max = item.optInt("reps_max", reps)
             val repRange = if (max == reps) "$reps" else "$reps–$max"
             val load = if (item.isNull("load_kg")) null else getString(R.string.training_load_value, getString(R.string.feature_kg, number(item, "load_kg")))
             val effort = if (item.isNull("rpe_target")) null else getString(R.string.training_effort, number(item, "rpe_target"))
             text(listOfNotNull(getString(R.string.training_prescribed, item.getInt("sets"), repRange), load, effort).joinToString(" · "), 14, parent = panel)
-            button(getString(R.string.training_log_exercise, item.getString("exercise")), parent = panel) {
-                setForm(week, plans, day.toString(), item.getLong("exercise_id"), item.getString("exercise"), plan.getLong("id"))
+            val sets = item.getInt("sets")
+            val done = logs.filter { it.optLong("plan_id") == plan.getLong("id") && it.getLong("exercise_id") == item.getLong("exercise_id") && it.getString("day") == day.toString() }.map { it.getInt("set_no") }.toSet()
+            val completed = (1..sets).count { it in done }
+            targetBar(getString(R.string.session_logged), "$completed / $sets", completed.toDouble() / sets, panel)
+            button(getString(R.string.training_log_exercise, item.getString("exercise")), parent = panel, look = ActionTone.TONAL) {
+                val next = (1..50).firstOrNull { it !in done } ?: 50
+                setForm(week, day.toString(), item.getLong("exercise_id"), item.getString("exercise"), plan.getLong("id"), listOf(next.toString(), "", "", ""))
             }
         }
     }
+    button(getString(R.string.training_choose_exercise), primary = true) { exercises(week) }
+    button(getString(R.string.training_other_week)) { dayPickerWeek(week) }
     pendingControls()
 }
 
-private fun MainActivity.dayPickerWeek(week: LocalDate, plans: List<JSONObject>?) {
+private fun MainActivity.dayPickerWeek(week: LocalDate) {
     android.app.DatePickerDialog(this, { _, year, month, day ->
         val selected = weekStart(LocalDate.of(year, month + 1, day))
-        if (plans == null) trainingHome(selected) else trainingWeek(selected, plans)
+        trainingHome(selected)
     }, week.year, week.monthValue - 1, week.dayOfMonth).show()
 }
 
-private fun MainActivity.exercises(week: LocalDate, plans: List<JSONObject>?) {
+private fun MainActivity.exercises(week: LocalDate) {
     val api = featureApi()
     work(getString(R.string.feature_loading), { api.array("/api/exercises") }, { rows ->
         layout(getString(R.string.training_choose_exercise), "training_exercises")
-        button(getString(R.string.training_title)) { trainingWeek(week, plans) }
+        button(getString(R.string.training_title)) { trainingHome(week) }
         if (rows.isEmpty()) text(getString(R.string.training_no_exercises))
         for (item in rows) button(item.getString("name")) {
-            setForm(week, plans, todayLocal(), item.getLong("id"), item.getString("name"), null)
+            setForm(week, todayLocal(), item.getLong("id"), item.getString("name"), null)
         }
-    }, { trainingWeek(week, plans, it) })
+    }, { trainingHome(week, it) })
 }
 
-private fun MainActivity.setForm(week: LocalDate, plans: List<JSONObject>?, day: String, exercise: Long,
+private fun MainActivity.setForm(week: LocalDate, day: String, exercise: Long,
     name: String, plan: Long?, draft: List<String> = listOf("1", "", "", ""), message: String? = null) {
     layout(getString(R.string.training_log_set), "training_set")
     featureError(message)
@@ -91,17 +100,17 @@ private fun MainActivity.setForm(week: LocalDate, plans: List<JSONObject>?, day:
     val rpe = decimalField(R.string.training_rpe, draft[3])
     fun values() = listOf(ordinal.value(), reps.value(), load.value(), rpe.value())
     text(getString(R.string.feature_day), 14)
-    dayPicker(day) { setForm(week, plans, it, exercise, name, plan, values()) }
+    dayPicker(day) { setForm(week, it, exercise, name, plan, values()) }
     button(getString(R.string.training_save), primary = true) {
         val input = values()
         val payload = setBody(day, exercise, plan, input)
-        if (payload == null) setForm(week, plans, day, exercise, name, plan, input, getString(R.string.training_invalid))
+        if (payload == null) setForm(week, day, exercise, name, plan, input, getString(R.string.training_invalid))
         else saveFeature(FeatureWrite.SET, payload) { status, message ->
-            if (status in listOf(R.string.feature_saved, R.string.saved_pending)) trainingWeek(week, plans, message)
-            else setForm(week, plans, day, exercise, name, plan, input, message)
+            if (status in listOf(R.string.feature_saved, R.string.saved_pending)) trainingHome(week, message)
+            else setForm(week, day, exercise, name, plan, input, message)
         }
     }
-    button(getString(R.string.training_title)) { trainingWeek(week, plans) }
+    button(getString(R.string.training_title)) { trainingHome(week) }
 }
 
 internal fun setBody(day: String, exercise: Long, plan: Long?, input: List<String>): JSONObject? {

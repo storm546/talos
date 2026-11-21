@@ -91,12 +91,12 @@ internal class LiveFormPreview(context: Context) : View(context) {
             for (pass in 0..1) {
                 paint.strokeWidth = (if (pass == 0) 7f else 3.5f) * density
                 paint.color = if (pass == 0) Color.argb(170, 20, 22, 25) else jointColor
-                for ((from, to) in bones) {
+                for ((from, to) in poseBones) {
                     if (points[from].visibility < .5f || points[to].visibility < .5f) continue
                     canvas.drawLine(x(from), y(from), x(to), y(to), paint)
                 }
             }
-            for (joint in joints) if (points[joint].visibility >= .5f) {
+            for (joint in poseJoints) if (points[joint].visibility >= .5f) {
                 paint.color = jointColor
                 paint.alpha = 40; canvas.drawCircle(x(joint), y(joint), 13f * density, paint)
                 paint.alpha = 90; canvas.drawCircle(x(joint), y(joint), 7.5f * density, paint)
@@ -125,10 +125,93 @@ internal class LiveFormPreview(context: Context) : View(context) {
         }
         canvas.restore()
     }
+}
 
-    private companion object {
-        val bones = listOf(11 to 12, 11 to 13, 13 to 15, 12 to 14, 14 to 16, 11 to 23, 12 to 24, 23 to 24,
-            23 to 25, 25 to 27, 27 to 29, 29 to 31, 24 to 26, 26 to 28, 28 to 30, 30 to 32)
-        val joints = bones.flatMap { listOf(it.first, it.second) }.distinct()
+internal val poseBones = listOf(11 to 12, 11 to 13, 13 to 15, 12 to 14, 14 to 16, 11 to 23, 12 to 24, 23 to 24,
+    23 to 25, 25 to 27, 27 to 29, 29 to 31, 24 to 26, 26 to 28, 28 to 30, 30 to 32)
+internal val poseJoints = poseBones.flatMap { listOf(it.first, it.second) }.distinct()
+
+/** Framing overlay for the jump capture camera: live skeleton, a target bracket and the countdown stage. */
+internal class FramingGuide(context: Context) : View(context) {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND }
+    private val muted = context.getColor(R.color.muted)
+    private val ready = context.getColor(R.color.ready)
+    private val signal = context.getColor(R.color.signal)
+    private var pose: Frame? = null
+    private var aspect = 16f / 9f
+    private var locked = false
+    private var number = 0
+
+    init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
+
+    fun show(pose: Frame?, imageAspect: Float) {
+        this.pose = pose
+        if (imageAspect > 0f) aspect = imageAspect
+        invalidate()
+    }
+
+    fun locked(value: Boolean) { if (locked != value) { locked = value; invalidate() } }
+
+    fun countdown(value: Int) { number = value; invalidate() }
+
+    fun clearCountdown() { number = 0; invalidate() }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        if (width <= 0 || height <= 0) return
+        val density = resources.displayMetrics.density
+        // The camera image fills the view, centred; landmarks map onto that crop.
+        val viewAspect = width.toFloat() / height
+        val drawW: Float; val drawH: Float; val ox: Float; val oy: Float
+        if (viewAspect > aspect) {
+            drawW = width.toFloat(); drawH = drawW / aspect; ox = 0f; oy = (height - drawH) / 2f
+        } else {
+            drawH = height.toFloat(); drawW = drawH * aspect; ox = (width - drawW) / 2f; oy = 0f
+        }
+        val accent = if (locked) ready else muted
+        val inset = 18 * density
+        val arm = 20 * density
+        paint.color = accent
+        paint.strokeWidth = 2.5f * density
+        for ((cx, cy) in listOf(ox + inset to oy + inset, ox + drawW - inset to oy + inset,
+                ox + inset to oy + drawH - inset, ox + drawW - inset to oy + drawH - inset)) {
+            val dx = if (cx < ox + drawW / 2) arm else -arm
+            val dy = if (cy < oy + drawH / 2) arm else -arm
+            canvas.drawLine(cx, cy, cx + dx, cy, paint)
+            canvas.drawLine(cx, cy, cx, cy + dy, paint)
+        }
+        paint.strokeWidth = 1.5f * density
+        paint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(6 * density, 6 * density), 0f)
+        canvas.drawLine(ox + inset, oy + inset, ox + drawW - inset, oy + inset, paint)
+        paint.pathEffect = null
+        pose?.landmarks?.let { points ->
+            fun x(i: Int) = ox + points[i].x * drawW
+            fun y(i: Int) = oy + points[i].y * drawH
+            val joint = if (locked) ready else Color.WHITE
+            for (pass in 0..1) {
+                paint.strokeWidth = (if (pass == 0) 7f else 3.5f) * density
+                paint.color = if (pass == 0) Color.argb(170, 20, 22, 25) else joint
+                for ((from, to) in poseBones) {
+                    if (points[from].visibility < .5f || points[to].visibility < .5f) continue
+                    canvas.drawLine(x(from), y(from), x(to), y(to), paint)
+                }
+            }
+            for (i in poseJoints) if (points[i].visibility >= .5f) {
+                paint.color = joint
+                paint.alpha = 40; canvas.drawCircle(x(i), y(i), 13f * density, paint)
+                paint.alpha = 90; canvas.drawCircle(x(i), y(i), 7.5f * density, paint)
+                paint.alpha = 255; canvas.drawCircle(x(i), y(i), 4f * density, paint)
+                paint.color = Color.argb(200, 20, 22, 25); canvas.drawCircle(x(i), y(i), 1.6f * density, paint)
+            }
+        }
+        if (number > 0) {
+            canvas.drawColor(Color.argb(150, 20, 22, 25))
+            paint.typeface = resources.getFont(R.font.spacegrotesk_bold)
+            paint.textAlign = Paint.Align.CENTER
+            paint.textSize = 104 * density
+            paint.color = signal
+            paint.alpha = 255
+            canvas.drawText(number.toString(), width / 2f, height / 2f - (paint.ascent() + paint.descent()) / 2f, paint)
+        }
     }
 }
