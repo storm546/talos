@@ -357,7 +357,9 @@
     <string name="training_other_week">Choose another week</string>
     <string name="training_no_plan">No plan assigned for this week.</string>
     <string name="training_load_plan">Reload plans</string>
-    <string name="training_prescribed">%1$d sets × %2$s reps · load %3$s · RPE %4$s</string>
+    <string name="training_prescribed">%1$d sets × %2$s reps</string>
+    <string name="training_load_value">load %1$s</string>
+    <string name="training_effort">RPE %1$s</string>
     <string name="training_log_exercise">Log set · %1$s</string>
     <string name="training_choose_exercise">Choose exercise</string>
     <string name="training_no_exercises">No exercises available.</string>

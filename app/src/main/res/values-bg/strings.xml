@@ -357,7 +357,9 @@
     <string name="training_other_week">Изберете друга седмица</string>
     <string name="training_no_plan">Няма назначен план за тази седмица.</string>
     <string name="training_load_plan">Заредете плановете отново</string>
-    <string name="training_prescribed">%1$d серии × %2$s повторения · тежест %3$s · усилие %4$s</string>
+    <string name="training_prescribed">%1$d серии × %2$s повторения</string>
+    <string name="training_load_value">тежест %1$s</string>
+    <string name="training_effort">усилие %1$s</string>
     <string name="training_log_exercise">Запишете серия · %1$s</string>
     <string name="training_choose_exercise">Изберете упражнение</string>
     <string name="training_no_exercises">Няма налични упражнения.</string>

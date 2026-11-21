@@ -20,7 +20,7 @@ internal fun MainActivity.goalName(goal: String) = getString(when (goal) {
 internal fun MainActivity.nutritionHome(day: String = todayLocal(), message: String? = null) {
     layout(getString(R.string.nutrition_title), "nutrition")
     if (message != null) notice(message)
-    val panel = hero(R.string.nutr_summary, R.string.ui_food_intro, localDate(day, locale))
+    val panel = hero(localDate(day, locale), getString(R.string.ui_food_intro))
     button(getString(R.string.nutr_summary), primary = true, parent = panel) { diary(day) }
     tiles(UiTile(R.string.nutr_food, "food") { foods(day) }, UiTile(R.string.nutr_weight, "history") { weight(day) },
         UiTile(R.string.nutr_program, "training") { nutritionProgram(day) })
@@ -46,7 +46,12 @@ private fun MainActivity.foods(day: String, query: String = "", rows: List<JSONO
     }
     button(getString(R.string.nutr_search), primary = true) { load(search.value()) }
     if (rows?.isEmpty() == true) text(getString(R.string.nutr_no_foods), 14)
-    for (food in rows.orEmpty()) button(foodName(food)) { foodLog(day, food) { foods(day, query, rows, offset, it) } }
+    for (food in rows.orEmpty()) button(foodName(food), look = ActionTone.TEXT) { foodLog(day, food) { foods(day, query, rows, offset, it) } }.apply {
+        gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+        setTextColor(getColor(R.color.ink)); typeface = resources.getFont(R.font.spacegrotesk_regular)
+        (layoutParams as android.widget.LinearLayout.LayoutParams).topMargin = 0
+        divider(page, inset = false)
+    }
     if (offset > 0) button(getString(R.string.feature_previous)) { load(query, offset - 20) }
     if (rows?.size == 20) button(getString(R.string.feature_more)) { load(query, offset + 20) }
     button(getString(R.string.nutrition_title)) { nutritionHome(day) }
@@ -61,15 +66,21 @@ private fun MainActivity.foodLog(day: String, food: JSONObject, message: String?
     val grams = decimalField(R.string.nutr_grams, gramsText)
     text(getString(R.string.nutr_meal), 14)
     var selected = meal
-    val group = android.widget.RadioGroup(this)
+    val group = android.widget.RadioGroup(this).apply {
+        orientation = android.widget.RadioGroup.HORIZONTAL
+        background = shape(getColor(R.color.hover), 10)
+        setPadding(dp(3), dp(3), dp(3), dp(3))
+    }
     page.addView(group)
     meals.forEach { (key, label) ->
         group.addView(android.widget.RadioButton(this).apply {
             id = android.view.View.generateViewId()
             text = getString(label)
+            textSize = 13f
+            maxLines = 1
             segment()
             setOnClickListener { selected = key }
-        })
+        }, android.widget.RadioGroup.LayoutParams(0, -2, 1f))
     }
     group.check(group.getChildAt(meals.keys.indexOf(meal)).id)
     button(getString(R.string.nutr_food_save), primary = true) {

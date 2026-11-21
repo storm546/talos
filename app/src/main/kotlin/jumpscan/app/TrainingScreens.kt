@@ -50,8 +50,9 @@ private fun MainActivity.trainingWeek(week: LocalDate, plans: List<JSONObject>?,
             val reps = item.getInt("reps")
             val max = item.optInt("reps_max", reps)
             val repRange = if (max == reps) "$reps" else "$reps–$max"
-            val load = number(item, "load_kg").let { if (item.isNull("load_kg")) it else getString(R.string.feature_kg, it) }
-            text(getString(R.string.training_prescribed, item.getInt("sets"), repRange, load, number(item, "rpe_target")), 14, parent = panel)
+            val load = if (item.isNull("load_kg")) null else getString(R.string.training_load_value, getString(R.string.feature_kg, number(item, "load_kg")))
+            val effort = if (item.isNull("rpe_target")) null else getString(R.string.training_effort, number(item, "rpe_target"))
+            text(listOfNotNull(getString(R.string.training_prescribed, item.getInt("sets"), repRange), load, effort).joinToString(" · "), 14, parent = panel)
             button(getString(R.string.training_log_exercise, item.getString("exercise")), parent = panel) {
                 setForm(week, plans, day.toString(), item.getLong("exercise_id"), item.getString("exercise"), plan.getLong("id"))
             }
