@@ -56,4 +56,6 @@ dependencies {
     implementation 'androidx.camera:camera-lifecycle:1.5.1'
     implementation 'androidx.camera:camera-video:1.5.1'
     implementation 'androidx.camera:camera-view:1.5.1'
+    // Bundled barcode model: scanning works offline and sends no image anywhere.
+    implementation 'com.google.mlkit:barcode-scanning:17.3.0'
 }
