@@ -1,6 +1,7 @@
 package jumpscan.app
 
 import android.text.InputFilter
+import android.widget.LinearLayout
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.time.LocalDate
@@ -18,14 +19,67 @@ internal fun MainActivity.goalName(goal: String) = getString(when (goal) {
 })
 
 internal fun MainActivity.nutritionHome(day: String = todayLocal(), message: String? = null) {
+    val api = featureApi()
+    work(getString(R.string.feature_loading), {
+        val summary = api.obj("/api/athletes/${athleteId()}/nutrition/summary?day=$day")
+        val foods = mutableListOf<JSONObject>()
+        do {
+            val batch = api.array("/api/food-logs?from=$day&to=$day&limit=100&offset=${foods.size}")
+            foods.addAll(batch)
+        } while (batch.size == 100)
+        summary to foods
+    }, { (summary, foods) -> nutritionDay(day, message, summary, foods) }, {
+        nutritionDay(day, listOfNotNull(message, it).joinToString("\n"), null, emptyList())
+    })
+}
+
+private fun MainActivity.nutritionDay(day: String, message: String?, summary: JSONObject?, foods: List<JSONObject>) {
     layout(getString(R.string.nutrition_title), "nutrition")
-    if (message != null) notice(message)
-    val panel = hero(localDate(day, locale), getString(R.string.ui_food_intro))
-    button(getString(R.string.nutr_summary), primary = true, parent = panel) { diary(day) }
-    tiles(UiTile(R.string.nutr_food, "food") { foods(day) }, UiTile(R.string.nutr_weight, "history") { weight(day) },
-        UiTile(R.string.nutr_program, "training") { nutritionProgram(day) })
-    text(getString(R.string.feature_day), 14).setPadding(0, dp(14), 0, 0)
+    if (message != null) notice(message, caution = summary == null)
     dayPicker(day) { nutritionHome(it) }
+    if (summary != null) {
+        val totals = summary.getJSONObject("totals")
+        val target = summary.optJSONObject("target") ?: JSONObject()
+        val energy = row(center = true)
+        val goal = target.optDouble("kcal")
+        if (goal > 0) energy.addView(Dial(this).apply {
+            show((100 * totals.getDouble("kcal") / goal).toInt())
+        }, dp(112), dp(106))
+        val values = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        energy.addView(values, LinearLayout.LayoutParams(0, -2, 1f))
+        text(getString(R.string.nutr_energy), 14, parent = values)
+        text("${number(totals, "kcal")} ${getString(R.string.unit_kcal)}", 28, green, values).instrumentType(numeric = true)
+        text(if (goal > 0) getString(R.string.energy_target, number(target, "kcal")) else getString(R.string.nutr_no_targets), 14, parent = values)
+        divider(page, inset = false)
+        section(R.string.nutr_total_target)
+        val macros = row()
+        for ((key, label) in nutrients.entries.drop(1).take(3)) {
+            val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, dp(6), 0) }
+            macros.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
+            val goalGrams = target.optDouble(key)
+            val grams = number(totals, key) + (if (goalGrams > 0) " / ${number(target, key)}" else "")
+            targetBar(getString(label), "$grams ${getString(R.string.unit_grams)}", if (goalGrams > 0) totals.getDouble(key) / goalGrams else null, column)
+        }
+        text(getString(R.string.feature_value, getString(R.string.nutr_fibre), "${number(totals, "fibre_g")} ${getString(R.string.unit_grams)}"), 14)
+    }
+    button(getString(R.string.nutr_food), primary = true) { foods(day) }
+    if (summary != null) {
+        section(R.string.meal_timeline)
+        val byMeal = summary.getJSONObject("by_meal_kcal")
+        meals.entries.forEachIndexed { index, (meal, label) ->
+            val entry = timelineEntry(index, index == meals.size - 1)
+            valueRow(getString(label), "${number(byMeal, meal)} ${getString(R.string.unit_kcal)}", entry)
+            for (food in foods.filter { it.getString("meal") == meal }) {
+                text(getString(R.string.feature_value, foodName(food), "${number(food, "grams")} ${getString(R.string.unit_grams)}"), 14, parent = entry)
+            }
+        }
+        text(getString(R.string.nutr_complete_note), 14)
+        button(getString(R.string.nutr_mark_complete)) {
+            saveFeature(FeatureWrite.COMPLETE, JSONObject(), day) { _, result -> nutritionHome(day, result) }
+        }
+    } else button(getString(R.string.nutr_summary)) { nutritionHome(day) }
+    button(getString(R.string.nutr_weight)) { weight(day) }
+    button(getString(R.string.nutr_program)) { nutritionProgram(day) }
     pendingControls()
 }
 
@@ -67,7 +121,7 @@ private fun MainActivity.foodLog(day: String, food: JSONObject, message: String?
     text(getString(R.string.nutr_meal), 14)
     var selected = meal
     val group = android.widget.RadioGroup(this).apply {
-        orientation = android.widget.RadioGroup.HORIZONTAL
+        orientation = android.widget.RadioGroup.VERTICAL
         background = shape(getColor(R.color.hover), 10)
         setPadding(dp(3), dp(3), dp(3), dp(3))
     }
@@ -77,10 +131,11 @@ private fun MainActivity.foodLog(day: String, food: JSONObject, message: String?
             id = android.view.View.generateViewId()
             text = getString(label)
             textSize = 13f
-            maxLines = 1
             segment()
+            gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(6), dp(16), dp(6))
             setOnClickListener { selected = key }
-        }, android.widget.RadioGroup.LayoutParams(0, -2, 1f))
+        }, android.widget.RadioGroup.LayoutParams(-1, -2))
     }
     group.check(group.getChildAt(meals.keys.indexOf(meal)).id)
     button(getString(R.string.nutr_food_save), primary = true) {
@@ -123,44 +178,6 @@ private fun MainActivity.weight(day: String, rows: List<JSONObject>? = null, mes
         }
     }
     button(getString(R.string.nutrition_title)) { nutritionHome(day) }
-}
-
-private fun MainActivity.diary(day: String, message: String? = null) {
-    val api = featureApi()
-    val path = "/api/athletes/${athleteId()}/nutrition/summary?day=$day"
-    work(getString(R.string.feature_loading), {
-        api.obj(path) to api.array("/api/food-logs?from=$day&to=$day")
-    }, { (summary, foods) ->
-        layout(getString(R.string.nutr_summary), "nutrition_summary")
-        if (message != null) text(message, 15)
-        text(getString(R.string.feature_day), 14)
-        dayPicker(day) { diary(it) }
-        val totals = summary.getJSONObject("totals")
-        val target = summary.optJSONObject("target") ?: JSONObject()
-        val panel = card()
-        section(R.string.nutr_total_target, panel)
-        for ((key, label) in nutrients) {
-            val goal = target.optDouble(key)
-            targetBar(getString(label), if (target.isNull(key)) number(totals, key) else
-                "${number(totals, key)} / ${number(target, key)}",
-                if (goal > 0) totals.optDouble(key, 0.0) / goal else null, panel)
-        }
-        if (target.length() == 0) text(getString(R.string.nutr_no_targets), 14, parent = panel)
-        val byMeal = summary.getJSONObject("by_meal_kcal")
-        for ((meal, label) in meals) {
-            val mealCard = card()
-            val kcal = metricNumber(byMeal.getDouble(meal), "kcal", locale)
-            text(getString(R.string.feature_value, getString(label), "$kcal ${getString(R.string.unit_kcal)}"), 18, green, mealCard)
-            for (food in foods.filter { it.getString("meal") == meal }) {
-                text(getString(R.string.feature_value, foodName(food), "${number(food, "grams")} ${getString(R.string.unit_grams)}"), 14, parent = mealCard)
-            }
-        }
-        text(getString(R.string.nutr_complete_note), 14)
-        button(getString(R.string.nutr_mark_complete)) {
-            saveFeature(FeatureWrite.COMPLETE, JSONObject(), day) { _, message -> nutritionHome(day, message) }
-        }
-        button(getString(R.string.nutrition_title)) { nutritionHome(day) }
-    }, { nutritionHome(day, it) })
 }
 
 private fun MainActivity.nutritionProgram(day: String) {

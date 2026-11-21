@@ -137,6 +137,26 @@ internal fun MainActivity.row(parent: LinearLayout = page, top: Int = 0, center:
     parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(top) })
 }
 
+internal fun MainActivity.timelineEntry(index: Int, last: Boolean): LinearLayout {
+    val line = row()
+    val rail = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+    line.addView(rail, LinearLayout.LayoutParams(dp(36), -1))
+    rail.addView(TextView(this).apply {
+        text = String.format(locale, "%02d", index + 1)
+        instrumentType(numeric = true)
+        gravity = Gravity.CENTER
+        setTextColor(getColor(R.color.accent))
+        background = shape(getColor(R.color.tonal), 8)
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }, dp(32), dp(32))
+    if (!last) rail.addView(View(this).apply { setBackgroundColor(getColor(R.color.line)) }, dp(1), -1)
+    return LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(12), 0, 0, dp(16))
+        line.addView(this, LinearLayout.LayoutParams(0, -2, 1f))
+    }
+}
+
 /** Number cards in equal columns, as on the jump result screen. */
 internal fun MainActivity.statGrid(items: List<Triple<String, String, String>>, columns: Int = 2, parent: LinearLayout = page) {
     items.chunked(columns).forEach { chunk ->

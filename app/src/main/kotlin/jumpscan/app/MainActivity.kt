@@ -920,12 +920,47 @@ class MainActivity : Activity() {
         if (message != null) text(message, 15, getColor(R.color.error)).apply {
             post { announceForAccessibility(message) }
         }
+        // The scrubber: the measured flight arc with take-off and landing markers, the peak fallback,
+        // a needle showing the current frame and the skeleton drawn under it.
+        val total = current.frames.size
+        fun arcHeight(tMs: Long): Float {
+            val takeoff = current.landing.takeoffMs ?: return 0f
+            val landing = current.landing.contactMs ?: return 0f
+            val height = current.metrics.jumpHeightCm ?: return 0f
+            if (landing <= takeoff || tMs !in takeoff..landing) return 0f
+            val fraction = (tMs - takeoff).toFloat() / (landing - takeoff)
+            return (height * 4f * fraction * (1f - fraction)).toFloat()
+        }
+        val arc: List<Float> = current.frames.map { arcHeight(it.tMs) }
+        val peakIndex = if (selection.takeoffMs == null)
+            current.timesUs.indexOfFirst { it / 1000 == peakFlexionFrame(current.frames).tMs }.takeIf { it >= 0 } else -1
+        val takeoffIndex = selection.takeoffMs?.let { t -> current.timesUs.indexOfFirst { it / 1000 == t }.takeIf { it >= 0 } }
+        val landingIndex = selection.landingMs?.let { t -> current.timesUs.indexOfFirst { it / 1000 == t }.takeIf { it >= 0 } }
+        val scrubber = FrameEditorView(this).also { view ->
+            view.frames = arc
+            view.peak = peakIndex ?: -1
+            view.takeoff = takeoffIndex ?: -1
+            view.landing = landingIndex ?: -1
+            view.index = selection.index.coerceIn(0, total - 1)
+            view.contentDescription = getString(R.string.frame_instructions)
+        }
+        val skeletonPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { strokeCap = android.graphics.Paint.Cap.ROUND }
+        scrubber.landmark = { canvas, x, ground, ceiling, density ->
+            val frame = current.frames.getOrNull(selection.index.coerceIn(0, total - 1))
+            if (frame != null) {
+                val scale = minOf(170 * density, (ground - ceiling) - 18 * density).coerceAtLeast(40 * density)
+                fun px(i: Int) = x + (frame.landmarks[i].x - 0.5f) * scale
+                fun py(i: Int) = ground - 18 * density - frame.landmarks[i].y * scale
+                drawSkeleton(canvas, frame, ::px, ::py, skeletonPaint, density)
+            }
+        }
+        page.addView(scrubber, LinearLayout.LayoutParams(-1, dp(150)))
         val image = ImageView(this).apply {
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = getString(R.string.skeleton_description)
         }
-        page.addView(image, LinearLayout.LayoutParams(-1, dp(230)))
+        page.addView(image, LinearLayout.LayoutParams(-1, dp(210)))
         val timestamp = text("", 18).apply { instrumentType(numeric = true) }
         timestamp.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         val loading = text("", 14)
@@ -946,10 +981,13 @@ class MainActivity : Activity() {
         }
         val takeoff = button(getString(R.string.set_takeoff)) {
             selection.takeoffMs = current.timesUs[selection.index] / 1000
+            scrubber.takeoff = selection.index
+            scrubber.peak = -1
             updateEdges()
         }
         val landing = button(getString(R.string.set_landing)) {
             selection.landingMs = current.timesUs[selection.index] / 1000
+            scrubber.landing = selection.index
             updateEdges()
         }
         apply = button(getString(R.string.apply_frames), primary = true) {
@@ -967,7 +1005,8 @@ class MainActivity : Activity() {
             }, { frameEditor(it) })
         }
         button(getString(R.string.cancel)) { cancelWork(); edits = null; result() }
-        fun showFrame() {
+        lateinit var showFrame: () -> Unit
+        showFrame = {
             task?.cancel(true)
             val expected = ++generation
             val index = selection.index
@@ -994,9 +1033,12 @@ class MainActivity : Activity() {
                 }
             }
         }
+        scrubber.onScrub = { value -> selection.index = value.coerceIn(0, total - 1); showFrame() }
         for (step in listOf(-5, -1, 1, 5)) {
             val control = button(if (step > 0) "+$step" else step.toString(), parent = steps) {
-                selection.index += step; showFrame()
+                selection.index += step
+                scrubber.index = selection.index
+                showFrame()
             }.apply {
                 contentDescription = getString(if (step > 0) R.string.frames_forward else R.string.frames_back, kotlin.math.abs(step))
                 layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply {
