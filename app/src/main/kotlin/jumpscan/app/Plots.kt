@@ -156,7 +156,7 @@ internal class SeriesPlot(context: Context, private val bars: List<Double?>, pri
         if (values.isEmpty()) return
         val count = maxOf(bars.size, dots.size, line.size)
         val low = if (bars.isNotEmpty()) 0.0 else kotlin.math.floor(values.min() - 1)
-        val high = if (bars.isNotEmpty()) values.max() * 1.12 else kotlin.math.ceil(values.max() + 1)
+        val high = if (bars.isNotEmpty()) kotlin.math.ceil(values.max() * 1.08 / 500) * 500 else kotlin.math.ceil(values.max() + 1)
         val span = (high - low).coerceAtLeast(1.0)
         fun y(value: Double) = (bottom - (bottom - top) * ((value - low) / span)).toFloat()
         fun x(index: Int) = gutter + (w - gutter) * (index + .5f) / count

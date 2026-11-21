@@ -30,17 +30,15 @@ internal fun MainActivity.recipes(day: String = diaryDay) {
             line.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
             text(recipe.optString("name"), 16, getColor(R.color.ink), column).setPadding(0, 0, 0, 0)
             val portions = recipe.optDouble("servings_count", 1.0).coerceAtLeast(1.0)
-            val total = recipe.optJSONObject("totals")?.optDouble("kcal")
-                ?: recipe.optJSONArray("items")?.objects()?.sumOf { it.optDouble("kcal", 0.0) } ?: 0.0
-            text(getString(R.string.recipe_summary, short(portions), kcalText(total / portions)), 13, parent = column).setPadding(0, dp(2), 0, 0)
+            val perServing = recipe.optJSONObject("per_serving")?.optDouble("kcal")
+                ?: (recipe.optJSONArray("items")?.objects()?.sumOf { it.optDouble("kcal", 0.0) } ?: 0.0) / portions
+            text(getString(R.string.recipe_summary, short(portions), kcalText(perServing)), 13, parent = column).setPadding(0, dp(2), 0, 0)
             iconButton("recipe", getString(R.string.recipe_edit_named, recipe.optString("name")), line) {
                 recipeDraft = RecipeDraft(recipe.getLong("id"), recipe.optString("name"), short(portions).replace(',', '.'),
                     recipe.optJSONArray("items")?.objects().orEmpty().toMutableList())
                 recipeEditor(day)
             }
-            iconButton("plus", getString(R.string.nutr_add_to, recipe.optString("name")), line) {
-                foods(day, recipe.optString("name"))
-            }
+            iconButton("plus", getString(R.string.nutr_add_to, recipe.optString("name")), line) { foodLog(day, recipeAsFood(recipe)) }
             divider(page, inset = false)
         }
     }, { foods(day, message = it) })
@@ -159,19 +157,23 @@ internal fun MainActivity.aiEntry(day: String = diaryDay, draft: String = "", pr
     if (proposal == null) return
     section(R.string.ai_entry_proposal).setPadding(0, dp(18), 0, dp(4))
     if (proposal.isEmpty()) text(getString(R.string.ai_entry_nothing), 14)
-    val chosen = proposal.map { item -> (item.optJSONObject("food") ?: item).let { it.has("id") && !it.isNull("id") || it.has("catalog_id") } }.toMutableList()
+    // Each item carries the model's words, a matched food (or none, then a quick add from the estimate) and a ready entry.
+    val chosen = proposal.map { it.optJSONObject("entry") != null }.toMutableList()
     proposal.forEachIndexed { index, item ->
-        val food = item.optJSONObject("food") ?: item
+        val match = item.optJSONObject("match")
+        val entry = item.optJSONObject("entry") ?: JSONObject()
         val grams = item.optDouble("grams", 0.0)
         val line = row(center = true).apply { setPadding(0, dp(8), 0, dp(8)) }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         line.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
-        text(if (chosen[index]) foodName(food) else item.optString("text", item.optString("name")), 15, getColor(R.color.ink), column).setPadding(0, 0, 0, 0)
-        text(if (chosen[index]) "${gramText(grams)} · ${kcalText(item.optDouble("kcal", food.optDouble("kcal", 0.0) * grams / 100))}"
-            else getString(R.string.ai_entry_no_match), 13, parent = column).setPadding(0, dp(2), 0, 0)
+        val name = match?.let { foodName(it) } ?: item.optString("text")
+        text(name, 15, getColor(R.color.ink), column).setPadding(0, 0, 0, 0)
+        val kcal = match?.let { it.optDouble("kcal", 0.0) * grams / 100 } ?: entry.optDouble("kcal", 0.0)
+        text("“${item.optString("text")}” · ${gramText(grams)} · ${kcalText(kcal)}" + (if (match == null) "\n" + getString(R.string.ai_entry_no_match) else ""),
+            13, parent = column).setPadding(0, dp(2), 0, 0)
         line.addView(android.widget.Switch(this).apply {
             instrumentSwitch(); isChecked = chosen[index]; isEnabled = chosen[index]
-            contentDescription = foodName(food)
+            contentDescription = name
             setOnCheckedChangeListener { _, on -> chosen[index] = on }
         }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
         divider(page, inset = false)
@@ -179,14 +181,7 @@ internal fun MainActivity.aiEntry(day: String = diaryDay, draft: String = "", pr
     if (chosen.any { it }) button(getString(R.string.ai_entry_confirm), primary = true) {
         val entries = JSONArray()
         proposal.forEachIndexed { index, item ->
-            if (!chosen[index]) return@forEachIndexed
-            val food = item.optJSONObject("food") ?: item
-            val entry = JSONObject().put("day", day).put("meal", item.optString("meal").takeIf { it.isNotBlank() } ?: diaryMeal)
-                .put("grams", item.getDouble("grams")).put("client_id", UUID.randomUUID().toString())
-            if (food.has("id") && !food.isNull("id")) entry.put("food_id", food.getLong("id")) else entry.put("catalog_id", food.get("catalog_id"))
-            if (item.has("serving_label") && !item.isNull("serving_label")) entry.put("serving_label", item.getString("serving_label"))
-            if (item.has("quantity") && !item.isNull("quantity")) entry.put("quantity", item.getDouble("quantity"))
-            entries.put(entry)
+            if (chosen[index]) entries.put(JSONObject(item.getJSONObject("entry").toString()).put("client_id", UUID.randomUUID().toString()))
         }
         val api = featureApi()
         work(getString(R.string.feature_saving), { api.post("/api/food-logs/batch", JSONObject().put("entries", entries)) },
@@ -203,7 +198,7 @@ internal fun MainActivity.insights(day: String = diaryDay, days: Int = 7, messag
     work(getString(R.string.feature_loading), {
         fun get(path: String) = runCatching { api.obj(path) }.getOrNull()
         val from = LocalDate.parse(day).minusDays(days - 1L)
-        val result = Insight(get("$base/nutrition/analytics?days=$days&end=$day"),
+        val result = Insight(get("$base/nutrition/analytics?days=$days"),
             get("$base/weights?from=$from&to=$day")?.optJSONArray("weights")?.objects(),
             get("$base/nutrition/goal"), get("$base/nutrition/program"), get("$base/nutrition/expenditure"),
             get("$base/nutrition/summary?day=$day"), runCatching { api.array("/api/nutrient-definitions") }.getOrDefault(emptyList()))
@@ -225,13 +220,13 @@ private fun MainActivity.insightPage(day: String, days: Int, data: Insight, mess
     // Intake against target.
     section(R.string.insight_intake).setPadding(0, dp(18), 0, 0)
     val analytics = data.analytics
-    val series = analytics?.optJSONArray("days")?.objects().orEmpty()
+    val series = analytics?.optJSONArray("daily")?.objects().orEmpty()
     if (analytics == null) text(getString(R.string.insight_unavailable), 14)
     else {
         val averages = analytics.optJSONObject("averages") ?: JSONObject()
-        val adherence = analytics.optJSONObject("adherence") ?: JSONObject()
+        val adherence = analytics.optJSONObject("adherence") ?: JSONObject()  // absent without a target
         val logged = averages.optInt("logged_days", series.count { !it.isNull("kcal") && it.optDouble("kcal", 0.0) > 0 })
-        val target = adherence.optDouble("target_kcal").takeIf { it > 0 } ?: series.lastOrNull { it.optDouble("target_kcal") > 0 }?.optDouble("target_kcal")
+        val target = analytics.optDouble("target_kcal").takeIf { it > 0 }
         val readout = row(center = true)
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         readout.addView(left, LinearLayout.LayoutParams(0, -2, 1f))
@@ -267,31 +262,34 @@ private fun MainActivity.insightPage(day: String, days: Int, data: Insight, mess
             LinearLayout.LayoutParams(-1, dp(160)).apply { topMargin = dp(4) })
         text(getString(R.string.insight_weight_legend), 12)
     }
-    val entry = row(center = true)
-    val kgColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    entry.addView(kgColumn, LinearLayout.LayoutParams(0, -2, 1f))
-    val kg = decimalField(R.string.nutr_weight_kg, weights.firstOrNull { it.optString("day") == day }?.let { number(it, "kg") }.orEmpty(), kgColumn)
-    button(getString(R.string.nutr_weight_save), parent = entry) {
+    val kg = decimalField(R.string.nutr_weight_kg, weights.firstOrNull { it.optString("day") == day }?.let { number(it, "kg") }.orEmpty())
+    button(getString(R.string.nutr_weight_save)) {
         val value = decimal(kg.value())
         if (value == null || value !in 20.0..400.0) kg.error = getString(R.string.nutr_invalid_weight)
         else saveFeature(FeatureWrite.WEIGHT, JSONObject().put("kg", value), day) { _, result -> insights(day, days, result) }
-    }.layoutParams = LinearLayout.LayoutParams(-2, dp(48)).apply { marginStart = dp(10); topMargin = dp(36) }
+    }
     // Goal progress.
     section(R.string.insight_goal).setPadding(0, dp(22), 0, 0)
-    val goal = data.goal?.optJSONObject("goal") ?: data.goal?.takeIf { it.has("phase") }
+    val goal = data.goal?.optJSONObject("goal")
     if (goal == null) text(getString(R.string.insight_no_goal), 14)
     else {
         val progress = data.goal!!
-        val phase = goal.optString("phase", goal.optString("goal", "maintain"))
-        val start = goal.optDouble("start_kg", progress.optDouble("start_kg"))
-        val current = progress.optDouble("current_trend_kg", progress.optDouble("trend_kg"))
-        val targetKg = goal.optDouble("target_kg", progress.optDouble("target_kg"))
-        val fraction = if (start.isFinite() && current.isFinite() && targetKg.isFinite() && start != targetKg)
-            ((current - start) / (targetKg - start)).coerceIn(0.0, 1.0) else null
-        targetBar(goalName(phase), listOf(current, targetKg).joinToString(" → ") { if (it.isFinite()) "${short(it)} kg" else "—" }, fraction, page)
+        fun kg(json: JSONObject, key: String) = json.optDouble(key).takeIf { !json.isNull(key) && it.isFinite() }
+        val current = kg(progress, "current_trend_kg")
+        val target = kg(goal, "target_weight_kg")
+        val line = row(center = true)
+        text(goalName(goal.optString("phase")), 17, getColor(R.color.ink), line).layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+        progress.optBoolean("on_track").takeIf { !progress.isNull("on_track") && progress.has("on_track") }?.let {
+            statusChip(getString(if (it) R.string.insight_on_track else R.string.insight_off_track),
+                if (it) R.color.ready_surface else R.color.notice, if (it) R.color.ready else R.color.warning, line)
+        }
+        text(listOf(current, target).filterIndexed { index, value -> index == 0 || value != null }
+            .joinToString(" → ") { value -> value?.let { "${short(it)} kg" } ?: "—" }, 28, green).instrumentType(numeric = true)
+        kg(progress, "remaining_kg")?.let { valueRow(getString(R.string.insight_remaining), "${short(it)} kg", page) }
+        kg(progress, "trend_kg_week")?.let { valueRow(getString(R.string.insight_trend_week), "${short(it)} kg", page) }
         progress.optString("projected_date").takeIf { it.length == 10 }?.let { valueRow(getString(R.string.insight_projected), localDate(it, locale), page) }
         goal.optString("end_date").takeIf { it.length == 10 }?.let { valueRow(getString(R.string.insight_end_date), localDate(it, locale), page) }
-        goal.optDouble("rate_kg_week").takeIf { it.isFinite() }?.let { valueRow(getString(R.string.nutr_goal), getString(R.string.nutr_rate_row, short(it)), page) }
+        kg(goal, "rate_kg_week")?.let { valueRow(getString(R.string.insight_rate), "${short(it)} kg", page) }
     }
     // Expenditure and the weekly check-in.
     section(R.string.nutr_program).setPadding(0, dp(22), 0, 0)
@@ -314,7 +312,7 @@ private fun MainActivity.insightPage(day: String, days: Int, data: Insight, mess
         val recommendation = program.optJSONObject("recommended_target") ?: JSONObject()
         for ((key, label) in nutrients.entries.take(4)) {
             val field = if (key == "kcal") "calories" else key
-            if (recommendation.has(field)) valueRow(getString(label), number(recommendation, field), page)
+            if (recommendation.has(field)) valueRow(getString(label), metricNumber(recommendation.optDouble(field), "kcal", locale), page)
         }
         text(getString(if (data.program!!.optBoolean("applied")) R.string.nutr_applied else R.string.nutr_not_applied), 13)
         button(getString(R.string.insight_checkin)) {
@@ -336,17 +334,23 @@ private fun MainActivity.insightPage(day: String, days: Int, data: Insight, mess
             else -> emptyList()
         }
     }
-    if (list.isEmpty()) text(getString(R.string.insight_no_micros), 14)
-    for (item in list) {
+    val (known, missing) = list.partition { it.has("amount") && !it.isNull("amount") }
+    if (known.isEmpty()) text(getString(R.string.insight_no_micros), 14)
+    for (item in known) {
         val definition = names[item.optString("key")] ?: JSONObject()
         val label = listOf(if (locale.language == "bg") "name_bg" else "name_en", "name_en", "name", "key")
             .firstNotNullOfOrNull { key -> (definition.optString(key).takeIf { it.isNotBlank() } ?: item.optString(key).takeIf { it.isNotBlank() && !item.isNull(key) }) }.orEmpty()
         val unit = item.optString("unit", definition.optString("unit"))
         val amount = item.optDouble("amount")
         val reference = item.optDouble("reference", definition.optDouble("reference"))
-        val shown = if (amount.isFinite()) "${short(amount)} $unit" else getString(R.string.insight_missing)
-        if (reference.isFinite() && reference > 0) targetBar(label, "$shown / ${short(reference)} $unit", if (amount.isFinite()) amount / reference else 0.0, page)
+        val partial = item.optInt("known_entries", 0).let { part -> item.optInt("total_entries", part).takeIf { it > part }?.let { " · $part/$it" } }.orEmpty()
+        fun fine(value: Double) = if (value < 10) String.format(locale, "%.2f", value).trimEnd('0').trimEnd('.', ',') else short(value)
+        val shown = "${fine(amount)} $unit$partial"
+        if (reference.isFinite() && reference > 0) targetBar(label, "$shown / ${fine(reference)} $unit", if (amount.isFinite()) amount / reference else 0.0, page)
         else valueRow(label, shown, page)
     }
+    if (missing.isNotEmpty()) text(getString(R.string.insight_missing_list, missing.joinToString(", ") { item ->
+        names[item.optString("key")]?.optString("name")?.takeIf { it.isNotBlank() } ?: item.optString("name", item.optString("key")) }), 12)
+    if (known.any { it.optInt("total_entries") > it.optInt("known_entries") }) text(getString(R.string.insight_partial_note), 12)
     button(getString(R.string.nutrition_title)) { nutritionHome(day) }
 }

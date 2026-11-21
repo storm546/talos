@@ -62,9 +62,8 @@ internal fun servingsOf(food: JSONObject): List<Pair<String, Double>> {
     return (listed + ("100 g" to 100.0) + ("g" to 1.0)).distinctBy { it.first }
 }
 
-/** The reference a log carries: a stored food, a catalogue food (stored by the server on first use) or a recipe. */
+/** The reference a log carries: a stored food (recipes are backed by one) or a catalogue food, stored by the server on first use. */
 private fun foodReference(food: JSONObject, body: JSONObject): JSONObject = when {
-    food.has("recipe_id") -> body.put("recipe_id", food.getLong("recipe_id"))
     food.has("id") && !food.isNull("id") -> body.put("food_id", food.getLong("id"))
     else -> body.put("catalog_id", food.get("catalog_id"))
 }
@@ -134,11 +133,12 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
         text(getString(R.string.energy_target, number(target, "kcal")), 13, parent = side)
     } else text(getString(R.string.nutr_no_targets), 14, parent = side)
     val macros = row(top = 6)
-    for ((key, label) in nutrients.entries.drop(1).take(3)) {
+    for ((key, label) in listOf("protein_g" to R.string.macro_protein, "carbs_g" to R.string.macro_carbs, "fat_g" to R.string.macro_fat)) {
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, dp(8), 0) }
         macros.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
         val goalGrams = target.optDouble(key)
-        val grams = number(totals, key) + (if (goalGrams > 0) " / ${number(target, key)}" else "")
+        fun whole(json: JSONObject) = metricNumber(json.optDouble(key, 0.0), "kcal", locale)
+        val grams = whole(totals) + (if (goalGrams > 0) " / ${whole(target)}" else "")
         targetBar(getString(label), "$grams ${getString(R.string.unit_grams)}", if (goalGrams > 0) totals.optDouble(key, 0.0) / goalGrams else null, column)
     }
     toolRow(UiTile(R.string.nutr_add, "plus") { foods(day) }, UiTile(R.string.scan_short, "scan") { scanBarcode() },
@@ -279,7 +279,7 @@ private fun MainActivity.mealGrid(selected: String, picked: (String) -> Unit) {
 }
 
 internal fun MainActivity.foods(day: String = diaryDay, query: String? = null, rows: List<JSONObject>? = null,
-    recipes: List<JSONObject> = emptyList(), offset: Int = 0, message: String? = null) {
+    offset: Int = 0, message: String? = null) {
     if (rows == null) return searchFoods(day, query.orEmpty(), 0)
     layout(getString(R.string.nutr_add), "food_search")
     featureError(message)
@@ -294,8 +294,7 @@ internal fun MainActivity.foods(day: String = diaryDay, query: String? = null, r
     toolRow(UiTile(R.string.scan_short, "scan") { scanBarcode() }, UiTile(R.string.nutr_quick_add, "plus") { quickAdd(day) },
         UiTile(R.string.recipes_title, "recipe") { recipes(day) }, UiTile(R.string.ai_entry_short, "assistant") { aiEntry(day) })
     section(if (query.isNullOrBlank()) R.string.nutr_recent else R.string.nutr_results).setPadding(0, dp(20), 0, dp(4))
-    if (rows.isEmpty() && recipes.isEmpty()) text(getString(if (query.isNullOrBlank()) R.string.nutr_no_recent else R.string.nutr_no_foods), 14)
-    for (recipe in recipes) foodRow(recipeAsFood(recipe), getString(R.string.source_recipe)) { foodLog(day, recipeAsFood(recipe)) }
+    if (rows.isEmpty()) text(getString(if (query.isNullOrBlank()) R.string.nutr_no_recent else R.string.nutr_no_foods), 14)
     for (food in rows) foodRow(food, sourceLabel(food)) { foodLog(day, food) }
     if (offset > 0) button(getString(R.string.feature_previous)) { searchFoods(day, query.orEmpty(), offset - 20) }
     if (rows.size == 20 && !query.isNullOrBlank()) button(getString(R.string.feature_more)) { searchFoods(day, query, offset + 20) }
@@ -306,13 +305,14 @@ private fun MainActivity.searchFoods(day: String, query: String, offset: Int) {
     val api = featureApi()
     val encoded = URLEncoder.encode(query, "UTF-8").replace("+", "%20")
     work(getString(R.string.nutr_searching), {
-        if (query.isBlank()) runCatching { api.array("/api/foods/recent?meal=$diaryMeal") }.getOrDefault(emptyList()) to emptyList<JSONObject>()
-        else api.array("/api/foods?q=$encoded&limit=20&offset=$offset") to (if (offset > 0) emptyList() else
-            runCatching { api.array("/api/recipes") }.getOrDefault(emptyList()).filter { foodName(it).contains(query, ignoreCase = true) })
-    }, { (found, recipes) -> foods(day, query, found, recipes, offset) }, { foods(day, query, emptyList(), message = it) })
+        // Recipes are foods too, so one search covers recent, own, club, catalogue foods and recipes.
+        if (query.isBlank()) runCatching { api.array("/api/foods/recent?meal=$diaryMeal") }.getOrDefault(emptyList())
+        else api.array("/api/foods?q=$encoded&limit=20&offset=$offset")
+    }, { found -> foods(day, query, found, offset) }, { foods(day, query, emptyList(), message = it) })
 }
 
 private fun MainActivity.sourceLabel(food: JSONObject): String = getString(when {
+    food.optString("source") == "recipe" -> R.string.source_recipe
     !food.has("id") || food.isNull("id") -> R.string.source_catalogue
     !food.isNull("owner_id") && food.optLong("owner_id") == athleteId() -> R.string.source_mine
     !food.isNull("club_id") && food.has("club_id") -> R.string.source_club
@@ -337,16 +337,12 @@ private fun MainActivity.foodRow(food: JSONObject, source: String, open: () -> U
     divider(page, inset = false)
 }
 
-private fun MainActivity.recipeAsFood(recipe: JSONObject): JSONObject {
-    val items = recipe.optJSONArray("items")?.objects().orEmpty()
-    val grams = recipe.optDouble("total_grams").takeIf { it > 0 } ?: items.sumOf { it.optDouble("grams", 0.0) }
-    val totals = recipe.optJSONObject("totals") ?: JSONObject().also { sum ->
-        for (key in nutrients.keys) sum.put(key, items.sumOf { it.optDouble(key, 0.0) })
-    }
-    val portions = recipe.optDouble("servings_count", 1.0).coerceAtLeast(1.0)
-    val food = JSONObject().put("name", recipe.optString("name")).put("recipe_id", recipe.getLong("id"))
-    for (key in nutrients.keys) food.put(key, if (grams > 0) totals.optDouble(key, 0.0) * 100 / grams else 0.0)
-    if (grams > 0) food.put("servings", org.json.JSONArray().put(JSONObject().put("label", getString(R.string.recipe_serving)).put("grams", grams / portions)))
+/** The food backing a recipe, logged per serving or in grams. */
+internal fun recipeAsFood(recipe: JSONObject): JSONObject {
+    val food = JSONObject(recipe.optJSONObject("per_100g")?.toString() ?: "{}").put("id", recipe.getLong("food_id"))
+        .put("name", recipe.optString("name")).put("source", "recipe")
+    val serving = recipe.optDouble("serving_grams")
+    if (serving > 0) food.put("servings", org.json.JSONArray().put(JSONObject().put("label", "1 порция").put("grams", serving)))
     return food
 }
 
@@ -356,11 +352,14 @@ internal fun MainActivity.foodLog(day: String, food: JSONObject, log: JSONObject
     featureError(message)
     text(foodName(food), 26, getColor(R.color.ink)).instrumentType(display = true)
     val brand = food.optString("brand").takeIf { !food.isNull("brand") && it.isNotBlank() }
-    val source = food.optString("source").takeIf { !food.isNull("source") && it.isNotBlank() }
+    // Named outside sources (for example the open product database, whose licence asks for attribution) are shown; internal codes are not.
+    val source = food.optString("source").takeIf { !food.isNull("source") && ' ' in it }
     text(listOfNotNull(brand, source, getString(R.string.per_100, kcalText(food.optDouble("kcal", 0.0)))).joinToString(" · "), 13)
     val servings = servingsOf(food)
-    val startLabel = log?.optString("serving_label")?.takeIf { label -> servings.any { it.first == label } }
-    var serving = servings.firstOrNull { it.first == startLabel } ?: servings.first()
+    // An edit starts from the logged serving (plain grams when it had none); a new log from the last one used.
+    val startLabel = (if (log != null) log.optString("serving_label").takeIf { !log.isNull("serving_label") } ?: "g"
+        else food.optString("last_serving_label").takeIf { !food.isNull("last_serving_label") })?.takeIf { label -> servings.any { it.first == label } }
+    var serving = servings.firstOrNull { it.first == startLabel } ?: servings.firstOrNull { it.first != "100 g" && it.first != "g" } ?: servings.first()
     var meal = log?.optString("meal")?.takeIf { it in meals } ?: diaryMeal
     val readout = row(top = 10, center = true)
     val energy = text("", 44, getColor(R.color.ink), readout).apply { instrumentType(numeric = true); layoutParams = LinearLayout.LayoutParams(-2, -2) }
@@ -404,10 +403,11 @@ internal fun MainActivity.foodLog(day: String, food: JSONObject, log: JSONObject
         quantity.setText(short(((decimal(quantity.value()) ?: 0.0) + step).coerceAtLeast(0.0)).replace(',', '.'))
     }
     button("−", parent = quantityLine) { nudge(-1.0) }.apply {
-        contentDescription = getString(R.string.serving_less); layoutParams = LinearLayout.LayoutParams(dp(52), -2) }
+        textSize = 22f; contentDescription = getString(R.string.serving_less); layoutParams = LinearLayout.LayoutParams(dp(52), -2) }
     quantity.apply {
-        setText(log?.optDouble("quantity")?.takeIf { it.isFinite() && startLabel != null }?.let { short(it).replace(',', '.') }
-            ?: if (serving.first == "g") "100" else "1")
+        val previous = if (serving.first == "g") (log ?: food).optDouble(if (log != null) "grams" else "last_grams")
+            else (log ?: food).optDouble(if (log != null) "quantity" else "last_quantity").takeIf { startLabel != null }
+        setText(previous?.takeIf { it.isFinite() && it > 0 }?.let { short(it).replace(',', '.') } ?: if (serving.first == "g") "100" else "1")
         inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
         keyListener = android.text.method.DigitsKeyListener.getInstance("0123456789.,")
         gravity = Gravity.CENTER
@@ -425,14 +425,15 @@ internal fun MainActivity.foodLog(day: String, food: JSONObject, log: JSONObject
         quantityLine.addView(this, LinearLayout.LayoutParams(dp(92), dp(48)).apply { marginStart = dp(6); marginEnd = dp(6) })
     }
     button("+", parent = quantityLine) { nudge(1.0) }.apply {
-        contentDescription = getString(R.string.serving_more); layoutParams = LinearLayout.LayoutParams(dp(52), -2) }
+        textSize = 22f; contentDescription = getString(R.string.serving_more); layoutParams = LinearLayout.LayoutParams(dp(52), -2) }
     refresh()
     mealGrid(meal) { meal = it }
     button(getString(R.string.nutr_food_save), primary = true) {
         val grams = grams()
         if (grams <= 0 || grams > 5000) { quantity.error = getString(R.string.nutr_invalid_grams); return@button }
-        val values = JSONObject().put("meal", meal).put("grams", grams).put("serving_label", serving.first)
-            .put("quantity", decimal(quantity.value()))
+        // Plain grams carry no serving; a named serving lets the server keep label and quantity with the grams.
+        val values = JSONObject().put("meal", meal).put("grams", grams)
+        if (serving.first != "g") values.put("serving_label", serving.first).put("quantity", decimal(quantity.value()))
         if (log != null) {
             val api = featureApi()
             work(getString(R.string.feature_saving), { api.send("PATCH", "/api/food-logs/${log.getLong("id")}", values) },

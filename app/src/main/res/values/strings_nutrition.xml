@@ -115,5 +115,14 @@
     <string name="insight_checked_in">Targets recalculated from this week.</string>
     <string name="insight_micros">Micronutrients</string>
     <string name="insight_no_micros">No micronutrient data for this day.</string>
-    <string name="insight_missing">no data</string>
+    <string name="insight_on_track">On track</string>
+    <string name="insight_off_track">Behind the goal date</string>
+    <string name="insight_remaining">Still to go</string>
+    <string name="insight_trend_week">Trend per week</string>
+    <string name="insight_missing_list">No data yet: %1$s.</string>
+    <string name="insight_partial_note">A fraction such as 2/3 means only that many of the day\'s entries have data for the nutrient.</string>
+    <string name="insight_rate">Weekly rate</string>
+    <string name="macro_protein">Protein</string>
+    <string name="macro_carbs">Carbs</string>
+    <string name="macro_fat">Fat</string>
 </resources>

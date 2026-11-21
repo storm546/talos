@@ -115,5 +115,14 @@
     <string name="insight_checked_in">Целите са преизчислени за тази седмица.</string>
     <string name="insight_micros">Микроелементи</string>
     <string name="insight_no_micros">Няма данни за микроелементи за този ден.</string>
-    <string name="insight_missing">няма данни</string>
+    <string name="insight_on_track">По план</string>
+    <string name="insight_off_track">Изостава от крайната дата</string>
+    <string name="insight_remaining">Остават</string>
+    <string name="insight_trend_week">Тенденция за седмица</string>
+    <string name="insight_missing_list">Още няма данни: %1$s.</string>
+    <string name="insight_partial_note">Дроб като 2/3 означава, че само толкова от записите за деня имат данни за веществото.</string>
+    <string name="insight_rate">Темп за седмица</string>
+    <string name="macro_protein">Протеин</string>
+    <string name="macro_carbs">Въглехидрати</string>
+    <string name="macro_fat">Мазнини</string>
 </resources>

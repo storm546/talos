@@ -14,8 +14,8 @@ internal val uploadLock = Any()
 internal enum class FeatureWrite(val method: String, val keys: Set<String>, val optional: Set<String> = emptySet()) {
     FORM("POST", setOf("exercise", "side", "view", "fps", "quality", "repetitions", "summary", "warnings"),
         setOf("mode", "source")),
-    // A log names a food, a catalogue food or a recipe, or carries quick-add macros with a label.
-    FOOD("POST", setOf("day", "meal"), setOf("food_id", "catalog_id", "recipe_id", "grams", "serving_label", "quantity",
+    // A log names a food or a catalogue food, or carries quick-add macros with a label.
+    FOOD("POST", setOf("day", "meal"), setOf("food_id", "catalog_id", "grams", "serving_label", "quantity",
         "label", "kcal", "protein_g", "carbs_g", "fat_g")),
     COPY("POST", setOf("from_day", "to_day"), setOf("from_meal", "to_meal")),
     WEIGHT("PUT", setOf("kg")),
