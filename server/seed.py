@@ -10,6 +10,7 @@ import secrets
 from statistics import median
 
 from .main import FormSet, Jump, database, database_path, init_db, password_hash
+from .training_nutrition_api import recipe_servings
 
 SOFIA = ZoneInfo("Europe/Sofia")
 DEMO_CLUBS = (
@@ -309,16 +310,14 @@ def seed_food_v2(db, club_id):
         food_id = db.execute(
             "INSERT INTO foods(club_id, name_bg, kcal, protein_g, carbs_g, fat_g, fibre_g, servings, nutrients, source) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'recipe')",
-            (club_id, name, *per100.values(), json.dumps([{"label": "1 порция", "grams": round(total / servings, 1)},
-                                                          {"label": "цялата рецепта", "grams": total}]),
-             json.dumps(nutrients))).lastrowid
+            (club_id, name, *per100.values(), json.dumps(recipe_servings(total, servings)), json.dumps(nutrients))).lastrowid
         recipe_id = db.execute("INSERT INTO recipes(club_id, name, servings_count, food_id) VALUES (?, ?, ?, ?)",
                                (club_id, name, servings, food_id)).lastrowid
         db.executemany("INSERT INTO recipe_items(recipe_id, position, food_id, grams) VALUES (?, ?, ?, ?)",
                        [(recipe_id, n, f["id"], g) for n, (f, g) in enumerate(foods)])
         recipe = [food_id]
     return {"scanned": (bar[0], SCANNED_FOOD["serving"][0], SCANNED_FOOD["serving"][1]),
-            "recipe": (recipe[0], "1 порция", round(total / servings, 1))}
+            "recipe": (recipe[0], "serving", round(total / servings, 1))}
 
 
 def seed_training_nutrition(db, user_ids, athlete_ids, groups, club_ids, today, new_athletes):
@@ -390,7 +389,8 @@ def seed_training_nutrition(db, user_ids, athlete_ids, groups, club_ids, today, 
                             (athlete_id, day.isoformat(), meal, food_id, grams,
                              f"seed-food-{athlete_id}-{day.isoformat()}-{food}", now_isos(day), serving,
                              None if serving is None else 1))
-                if days_ago not in (4, 9):  # two days without a weigh-in
+                # Two days without a weigh-in; the coaching athlete gets one consistent series in seed_coaching.
+                if days_ago not in (4, 9) and account != "athlete6":
                     db.execute("INSERT INTO weights(athlete_id, day, kg) VALUES (?, ?, ?)",
                                (athlete_id, day.isoformat(), round(base + days_ago * .04 + rng.gauss(0, .3), 1)))
     for account, kcal in (("athlete1", 2200), ("athlete7", 2600)):

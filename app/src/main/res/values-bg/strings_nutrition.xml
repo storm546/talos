@@ -125,4 +125,17 @@
     <string name="macro_protein">Протеин</string>
     <string name="macro_carbs">Въглехидрати</string>
     <string name="macro_fat">Мазнини</string>
+    <!-- SPEC 7.4: goal form, recipe portion units, copy from an empty day -->
+    <string name="goal_set">Задайте цел</string>
+    <string name="goal_change">Промяна на целта</string>
+    <string name="goal_form_title">Твоята цел</string>
+    <string name="goal_target_weight">Целево тегло (кг)</string>
+    <string name="goal_end_date">Краен срок: %1$s</string>
+    <string name="goal_save">Запазване на целта</string>
+    <string name="goal_saved">Целта е запазена.</string>
+    <string name="goal_wrong_direction">За сваляне целта трябва да е под текущата тенденция, а за качване – над нея.</string>
+    <string name="goal_too_soon">Изберете краен срок поне седмица напред.</string>
+    <string name="goal_rejected">Сървърът не прие тази цел. Нужни са достатъчно записани хранения и измервания на теглото и най-много 2 кг на седмица.</string>
+    <string name="recipe_unit_recipe">цялата рецепта</string>
+    <string name="nutr_nothing_to_copy">Няма какво да се копира от този ден</string>
 </resources>

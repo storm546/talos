@@ -62,6 +62,15 @@ internal fun servingsOf(food: JSONObject): List<Pair<String, Double>> {
     return (listed + ("100 g" to 100.0) + ("g" to 1.0)).distinctBy { it.first }
 }
 
+/** Recipe portions come as a count and unit (SPEC 7.4); the label is built here in the app's language. Other labels show as typed. */
+internal fun MainActivity.servingName(label: String, food: JSONObject? = null): String {
+    val serving = food?.optJSONArray("servings")?.objects()?.firstOrNull { it.optString("label") == label }
+    val unit = serving?.optString("unit")?.takeIf { it.isNotBlank() } ?: label.takeIf { it == "serving" || it == "recipe" } ?: return label
+    val count = serving?.optDouble("count", 1.0)?.takeIf { it.isFinite() && it > 0 } ?: 1.0
+    val name = getString(if (unit == "recipe") R.string.recipe_unit_recipe else R.string.recipe_serving)
+    return if (count == 1.0) name else "${short(count)} $name"
+}
+
 /** The reference a log carries: a stored food (recipes are backed by one) or a catalogue food, stored by the server on first use. */
 private fun foodReference(food: JSONObject, body: JSONObject): JSONObject = when {
     food.has("id") && !food.isNull("id") -> body.put("food_id", food.getLong("id"))
@@ -179,7 +188,7 @@ private fun MainActivity.servingText(log: JSONObject): String {
     val grams = gramText(log.getDouble("grams"))
     val label = log.optString("serving_label").takeIf { !log.isNull("serving_label") && it.isNotBlank() && it != "100 g" && it != "g" }
     val quantity = log.optDouble("quantity")
-    return if (label != null && quantity.isFinite()) "${short(quantity)} × $label · $grams" else grams
+    return if (label != null && quantity.isFinite()) "${short(quantity)} × ${servingName(label)} · $grams" else grams
 }
 
 private fun MainActivity.logRow(day: String, log: JSONObject, parent: LinearLayout) {
@@ -346,7 +355,8 @@ internal fun recipeAsFood(recipe: JSONObject): JSONObject {
     val food = JSONObject(recipe.optJSONObject("per_100g")?.toString() ?: "{}").put("id", recipe.getLong("food_id"))
         .put("name", recipe.optString("name")).put("source", "recipe")
     val serving = recipe.optDouble("serving_grams")
-    if (serving > 0) food.put("servings", org.json.JSONArray().put(JSONObject().put("label", "1 порция").put("grams", serving)))
+    if (serving > 0) food.put("servings", org.json.JSONArray().put(JSONObject().put("label", "serving").put("count", 1)
+        .put("unit", "serving").put("grams", serving)))
     return food
 }
 
@@ -385,7 +395,7 @@ internal fun MainActivity.foodLog(day: String, food: JSONObject, log: JSONObject
     servings.forEach { option ->
         group.addView(RadioButton(this).apply {
             id = View.generateViewId()
-            text = when (option.first) { "g" -> getString(R.string.serving_grams); "100 g" -> "100 g"; else -> "${option.first} · ${gramText(option.second)}" }
+            text = when (option.first) { "g" -> getString(R.string.serving_grams); "100 g" -> "100 g"; else -> "${servingName(option.first, food)} · ${gramText(option.second)}" }
             textSize = 14f
             segment()
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -449,7 +459,9 @@ internal fun MainActivity.foodLog(day: String, food: JSONObject, log: JSONObject
         }
     }
     if (log != null) button(getString(R.string.nutr_delete_entry)) { deleteLog(day, log) }.setTextColor(getColor(R.color.error))
-    if (log == null && food.has("id") && !food.isNull("id") && (food.optLong("owner_id") == athleteId() || !food.isNull("barcode") && food.has("barcode")))
+    // Own foods, and club foods this athlete scanned or created (the server refuses once another athlete logged one).
+    if (log == null && food.has("id") && !food.isNull("id") && food.optString("source") != "recipe" &&
+        (food.optLong("owner_id") == athleteId() || food.optLong("created_by") == athleteId()))
         button(getString(R.string.food_edit), look = ActionTone.TEXT) { foodForm(day, food = food) }
 }
 
