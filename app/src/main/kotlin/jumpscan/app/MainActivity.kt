@@ -144,7 +144,9 @@ class MainActivity : Activity() {
         setImageResource(R.drawable.flight_wordmark); contentDescription = getString(R.string.brand)
     }, LinearLayout.LayoutParams(dp(112), dp(26)))
 
-    internal fun layout(title: String, name: String) {
+    internal fun stage(height: Int) = LinearLayout.LayoutParams(-1, dp(height)).apply { marginStart = -dp(18); marginEnd = -dp(18) }
+
+    internal fun layout(title: String, name: String, headline: Boolean = true) {
         screen = name
         progress = null
         progressText = null
@@ -200,7 +202,7 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(6) })
             wordmark(header)
         } else wordmark(page)
-        text(title, 40).apply {
+        if (headline) text(title, 40).apply {
             instrumentType(display = true)
             setPadding(0, dp(9), 0, dp(6))
             if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
@@ -216,14 +218,14 @@ class MainActivity : Activity() {
         parent.addView(this, LinearLayout.LayoutParams(-1, -2))
     }
 
-    internal fun button(label: String, primary: Boolean = false, parent: LinearLayout = page,
+    internal fun button(label: String, primary: Boolean = false, parent: LinearLayout = page, look: ActionTone? = null,
                        action: () -> Unit): Button = Button(this).apply {
         text = label
         isAllCaps = false
         minHeight = dp(48)
         minimumWidth = 0
         setPadding(dp(12), dp(10), dp(12), dp(10))
-        val tone = when {
+        val tone = look ?: when {
             primary -> ActionTone.PRIMARY
             label == getString(R.string.home) || label == getString(R.string.cancel) || label == getString(R.string.ui_server_settings) -> ActionTone.TEXT
             label == getString(R.string.continue_offline) -> ActionTone.TONAL
@@ -261,6 +263,7 @@ class MainActivity : Activity() {
 
     internal fun login(message: String? = null, showServer: Boolean = false, server: String = base()) {
         layout(getString(R.string.sign_in), "login")
+        page.addView(FlightView(this, null), stage(230))
         text(getString(R.string.login_intro), 17)
         if (message != null) notice(message, caution = true)
         val email = field(getString(R.string.email), type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
@@ -327,19 +330,20 @@ class MainActivity : Activity() {
     }
 
     internal fun home(message: String? = null) {
-        layout(getString(R.string.ui_today), "home")
+        layout(getString(R.string.ui_today), "home", headline = false)
         val signedIn = token().isNotEmpty()
         val name = prefs.getString("name", "").orEmpty()
         val day = localDate(todayLocal(), locale)
-        text(if (signedIn) "$day  ·  $name" else day, 14)
+        text(getString(R.string.ui_today) + "  ·  " + (if (signedIn) "$day  ·  $name" else day), 13).apply {
+            setPadding(0, dp(14), 0, 0)
+            if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
+        }
         if (message != null) notice(message, caution = true)
-        val jump = card(hero = true)
-        jump.addView(FlightView(this, FlightStrip.read(prefs.getString("flight_strip", null))), LinearLayout.LayoutParams(-1, dp(154)))
-        text(getString(R.string.ready_explainer), 14, getColor(R.color.on_hero), jump)
-        selectedSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 14, getColor(R.color.on_hero), jump) }
+        page.addView(FlightView(this, FlightStrip.read(prefs.getString("flight_strip", null))), stage(340))
+        selectedSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 14, green) }
         val types = RadioGroup(this).apply {
             orientation = RadioGroup.HORIZONTAL
-            background = shape(getColor(R.color.hero), 10)
+            background = shape(getColor(R.color.hover), 10)
             setPadding(dp(3), dp(3), dp(3), dp(3))
         }
         listOf(Triple("cmj", R.string.ui_cmj_short, R.string.cmj),
@@ -348,33 +352,30 @@ class MainActivity : Activity() {
                 id = View.generateViewId()
                 text = getString(label)
                 contentDescription = getString(fullLabel)
-                textSize = 13f
+                textSize = 14f
                 minHeight = dp(48)
                 isChecked = test == value
                 isEnabled = selectedSession == null
-                segment(inverse = true)
+                segment()
                 setOnClickListener { test = value; prefs.edit().putString("jump_test", value).apply() }
             }, RadioGroup.LayoutParams(0, -2, 1f))
         }
-        jump.addView(types)
-        button(getString(R.string.ready_record), primary = true, parent = jump) { recordJump(whenReady = true) }
-        button(getString(R.string.pick_video), parent = jump) {
-            filmingGuide { pickJumpVideo() }
-        }
-        if (!jumpscan.core.FormExercises[formChoice.exercise].experimental || showExperimental) button(getString(R.string.repeat_live, formLabel(formChoice))) { openLiveForm(false) }.apply {
-            styleButton(this, false, ActionTone.TONAL)
-            gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            compoundDrawablePadding = dp(12)
+        page.addView(types, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        button(getString(R.string.ready_record), primary = true) { recordJump(whenReady = true) }.apply { minHeight = dp(56); textSize = 17f }
+        text(getString(R.string.ready_explainer), 13).setPadding(dp(2), dp(8), dp(2), 0)
+        val secondary = row(page)
+        button(getString(R.string.pick_video), parent = secondary) { filmingGuide { pickJumpVideo() } }
+            .apply { layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply { topMargin = dp(10) } }
+        if (!jumpscan.core.FormExercises[formChoice.exercise].experimental || showExperimental) button(getString(R.string.repeat_live, formLabel(formChoice)), parent = secondary, look = ActionTone.TONAL) { openLiveForm(false) }.apply {
+            compoundDrawablePadding = dp(8)
             setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("form", green), null, null, null)
+            layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply { topMargin = dp(10); marginStart = dp(8) }
         }
-        if (signedIn) {
-            section(R.string.ui_tools).setPadding(0, dp(16), 0, dp(4))
-            tiles(UiTile(R.string.history, "history") { history() }, UiTile(R.string.ui_club, "club") { clubHome() },
-                UiTile(R.string.checkin_title, "checkin") { checkin() }, UiTile(R.string.ui_more, "more") { more() })
-        }
-        if (analysis != null) button(getString(R.string.last_result)) { result() }
+        if (analysis != null) button(getString(R.string.last_result), look = ActionTone.TEXT) { result() }
+        if (signedIn) toolRow(UiTile(R.string.history, "history") { history() }, UiTile(R.string.ui_club, "club") { clubHome() },
+            UiTile(R.string.checkin_title, "checkin") { checkin() }, UiTile(R.string.ui_more, "more") { more() })
         if (signedIn) pendingControls()
-        if (!signedIn) text(getString(R.string.coach_note), 14).setPadding(0, dp(18), 0, 0)
+        if (!signedIn) text(getString(R.string.coach_note), 13).setPadding(0, dp(18), 0, 0)
     }
 
     private fun more() {
@@ -500,9 +501,15 @@ class MainActivity : Activity() {
                             } ?: run { selectedSession = null; home(); return@runOnUiThread }
                         }
                         rows.forEach { session ->
-                            button(sessionLabel(session), parent = sessions) {
+                            button(sessionLabel(session), parent = sessions, look = ActionTone.TONAL) {
                                 selectedSession = session; test = session.test; home()
-                            }.isEnabled = !session.cancelled
+                            }.apply {
+                                isEnabled = !session.cancelled
+                                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                                setPadding(dp(16), dp(12), dp(16), dp(12))
+                                compoundDrawablePadding = dp(12)
+                                setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("club", green), null, null, null)
+                            }
                         }
                     }
                 }
@@ -761,7 +768,8 @@ class MainActivity : Activity() {
         } }, { analysis = it; if (trial == null) {
             rememberFlight(it)
             if (it.launchImage != null && it.contactFound && android.animation.ValueAnimator.areAnimatorsEnabled()) {
-                scan.visibility = View.GONE; edgePair(it, scan.parent as LinearLayout)
+                val at = page.indexOfChild(scan); page.removeView(scan)
+                edgePair(it, page, 330)?.let { strip -> page.removeView(strip); page.addView(strip, at.coerceAtLeast(0)) }
                 page.postDelayed({ if (generation == expectedGeneration && screen == "busy" && !isDestroyed) result() }, 750)
             } else result()
         } else diagnostics() }, { if (trial == null) home(it) else diagnostics(it) }, phoneTest = trial != null, scan = scan)
@@ -782,22 +790,32 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun edgePair(run: Analysis, parent: LinearLayout) {
-        val launch = run.launchImage ?: return
+    private fun edgePair(run: Analysis, parent: LinearLayout, tall: Int = 94): LinearLayout? {
+        val launch = run.launchImage ?: return null
         val strip = row(parent)
         listOf(Triple(launch, R.string.flight_takeoff, run.landing.takeoffMs), Triple(run.preview, R.string.landing_frame, run.landing.contactMs)).forEachIndexed { index, (image, name, time) ->
             val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; strip.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
-            cell.addView(ImageView(this).apply { setImageBitmap(image); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(-1, dp(94)))
-            text(getString(name) + " · " + time + " " + getString(R.string.ui_ms), 13, parent = cell); cell.arrive(index*75L)
+            cell.addView(ImageView(this).apply { setImageBitmap(image); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(-1, dp(tall)))
+            text(getString(name), 13, getColor(R.color.ink), cell).setPadding(0, dp(8), 0, 0)
+            text(time.toString() + " " + getString(R.string.ui_ms), 13, parent = cell).apply { instrumentType(numeric = true); setPadding(0, 0, 0, 0) }; cell.arrive(index*75L)
+            if (tall > 94 && android.animation.ValueAnimator.areAnimatorsEnabled()) cell.apply { scaleX = 1.06f; scaleY = 1.06f; animate().scaleX(1f).scaleY(1f).setStartDelay(index * 120L).setDuration(260).setInterpolator(settle).start() }
         }
+        return strip
     }
 
     private fun result(message: String? = null) {
         val current = analysis ?: return home()
-        layout(getString(R.string.result), "result")
+        layout(getString(R.string.result), "result", headline = false)
+        text(getString(R.string.result), 13).apply { setPadding(0, dp(12), 0, 0); if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true }
         val metrics = JSONObject(current.metrics.toJson())
         val hasFlight = hasFlight(metrics)
-        if (hasFlight) FlightStrip.from(current)?.let { card(hero = true).addView(FlightView(this, it), LinearLayout.LayoutParams(-1, dp(154))) }
+        val kind = getString(if (current.metrics.test == "cmj") R.string.cmj else R.string.drop_jump)
+        val side = "single_leg_view" in current.metrics.warnings
+        val band = 9.81 / 4 * metrics.optDouble("flight_time_ms", 0.0) / 1000 * (if (side) .0879 else .0321) * 100
+        val stage = if (!hasFlight) null else FlightStrip.from(current)?.let {
+            FlightView(this, it, localHeights(current.metrics.test).dropLast(1), band.takeIf { b -> b.isFinite() && b > 0 }, kind)
+                .also { view -> page.addView(view, stage(380)) }
+        }
         if (!hasFlight) {
             notice(getString(R.string.no_flight_help), caution = true)
             if (uploadedId == null && queuedId == null) {
@@ -809,10 +827,10 @@ class MainActivity : Activity() {
                 recordJump()
             }
         }
-        text(if (current.metrics.test == "cmj") getString(R.string.cmj) else getString(R.string.drop_jump), 14)
-        if (current.contactFound) edgePair(current, page)
+        if (stage == null) text(kind, 14)
+        if (current.contactFound) edgePair(current, page, 150)
         if (hasFlight) {
-            jumpHighlights(metrics, uploadedId, clientId, localHeights(current.metrics.test).dropLast(1))
+            jumpHighlights(metrics, uploadedId, clientId, localHeights(current.metrics.test).dropLast(1), stage)
             metricWarnings(metrics)
             if (uploadedId == null && queuedId == null) button(getString(R.string.check_frames)) { editFrames(current) }
         }
@@ -1097,7 +1115,7 @@ class MainActivity : Activity() {
             (0 until warnings.length()).none { warnings.optString(it) == "no_flight_detected" }
         } != false
 
-    private fun jumpHighlights(json: JSONObject, beforeId: Long? = null, excludeClient: String? = null, previous: List<Double> = emptyList()) {
+    private fun jumpHighlights(json: JSONObject, beforeId: Long? = null, excludeClient: String? = null, previous: List<Double> = emptyList(), stage: FlightView? = null) {
         val highlights = listOf(
             JumpHighlight("jump_height_cm", R.string.ui_height, R.string.jump_height_meaning, getString(R.string.ui_cm)),
             JumpHighlight("flight_time_ms", R.string.ui_flight, R.string.jump_flight_meaning, getString(R.string.ui_ms)),
@@ -1113,14 +1131,17 @@ class MainActivity : Activity() {
         val errorMs = if (side) 87.9 else 32.1
         val durationMs = json.optDouble("flight_time_ms")
         val textLocale = resources.configuration.locales[0]
-        val ruler = if (json.isNull("jump_height_cm")) null else HeightRule(this, json, previous).also { host.addView(it, LinearLayout.LayoutParams(-1, dp(106))) }
+        val ruler: ((Double?) -> Unit)? = stage?.let { it::baseline } ?: if (json.isNull("jump_height_cm")) null
+            else HeightRule(this, json, previous).also { host.addView(it, LinearLayout.LayoutParams(-1, dp(138))) }::baseline
         if (listOf("knee_flexion_contact_l", "knee_flexion_contact_r").any { json.optDouble(it) >= 30 }) {
             notice(getString(R.string.jump_bent_landing), caution = true)
         }
         section(R.string.jump_comparison, host)
         text(getString(if (auth.isEmpty()) R.string.jump_baseline_sign_in else R.string.jump_baseline_info), 14, parent = host)
-        for (metric in highlights.filterNot { it.key == "jump_height_cm" }) {
-            val panel = stat(getString(metric.label), number(json, metric.key), metric.unit, host)
+        val readout = settingsGroup(host)
+        for ((index, metric) in highlights.filterNot { it.key == "jump_height_cm" }.withIndex()) {
+            if (index > 0) divider(readout, inset = false)
+            val panel = readoutRow(getString(metric.label), number(json, metric.key), metric.unit, readout)
             val band = when (metric.key) {
                 "flight_time_ms" -> errorMs
                 "jump_height_cm" -> 9.81 / 4 * (durationMs / 1000) * (errorMs / 1000) * 100
@@ -1162,7 +1183,7 @@ class MainActivity : Activity() {
                         retry.visibility = View.VISIBLE
                     } else {
                         status.visibility = View.GONE
-                        ruler?.baseline(baseline.optDouble("jump_height_cm"))
+                        ruler?.invoke(baseline.optDouble("jump_height_cm"))
                         for (metric in highlights) {
                             val caption = when {
                                 baseline.isNull(metric.key) -> getString(R.string.jump_baseline_pending)
@@ -1246,11 +1267,6 @@ class MainActivity : Activity() {
         work(getString(R.string.loading_history), { JSONArray(api(savedBase, "/api/jumps", token = savedToken)) }, { rows ->
             layout(getString(R.string.ui_jump_history), "history")
             text(getString(R.string.history_summary, rows.length()), 14)
-            button(getString(R.string.ui_form_history)) { techniqueHistory() }
-            heightTrace(rows.objects().asReversed().mapNotNull { item ->
-                val metrics = item.optJSONObject("metrics") ?: item
-                metrics.optDouble("jump_height_cm").takeIf { hasFlight(metrics) && it.isFinite() }
-            })
             if (rows.length() == 0) {
                 notice(getString(R.string.empty_history))
                 button(getString(R.string.record), primary = true) { recordJump() }
@@ -1265,18 +1281,27 @@ class MainActivity : Activity() {
                 if (rows.length() < 100 && heights.size >= 3) startingHeights[index] = heights.take(3).sorted()[1]
                 if (hasFlight(metrics)) metrics.optDouble("jump_height_cm").takeIf { it.isFinite() }?.let(heights::add)
             }
+            rows.objects().firstOrNull()?.let { newest -> (newest.optJSONObject("metrics") ?: newest).getString("test") }?.let { kind ->
+                heightTrace(rows.objects().asReversed().mapNotNull { item ->
+                    val metrics = item.optJSONObject("metrics") ?: item
+                    metrics.optDouble("jump_height_cm").takeIf { metrics.getString("test") == kind && hasFlight(metrics) && it.isFinite() }?.let { item.getLong("id") to it }
+                }, getString(if (kind == "cmj") R.string.cmj else R.string.drop_jump), startingHeights[0]?.takeIf { (rows.getJSONObject(0).optJSONObject("metrics") ?: rows.getJSONObject(0)).getString("test") == kind })
+            }
+            button(getString(R.string.ui_form_history), look = ActionTone.TEXT) { techniqueHistory() }.apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
             for (i in 0 until rows.length()) {
                 val item = rows.getJSONObject(i)
                 // The API returns metadata and metric fields in the same object.
                 val metrics = item.optJSONObject("metrics") ?: item
-                val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(12), 0, dp(8)) }; page.addView(panel)
-                text(getString(R.string.history_item, item.getLong("id"), localDateTime(item.getString("created_at"), locale)), 16, green, panel)
+                if (i == 0) divider(page, inset = false)
+                val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(14), 0, dp(14)) }; page.addView(panel)
                 val hasFlight = hasFlight(metrics)
-                text(getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump), 14, parent = panel)
-                if (!hasFlight) text(getString(R.string.no_flight_detected), 14, parent = panel)
+                text(getString(R.string.history_item, item.getLong("id"), localDateTime(item.getString("created_at"), locale)) + "  ·  " +
+                    getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump), 13, parent = panel)
+                if (!hasFlight) text(getString(R.string.no_flight_detected), 16, parent = panel)
                 else if (!metrics.isNull("jump_height_cm")) {
-                    panel.addView(HeightRule(this, metrics, priorHeights[i]).apply { baseline(startingHeights[i]) }, LinearLayout.LayoutParams(-1, dp(90)))
+                    panel.addView(HeightRule(this, metrics, priorHeights[i]).apply { baseline(startingHeights[i]) }, LinearLayout.LayoutParams(-1, dp(138)))
                 }
+                divider(page, inset = false)
                 panel.isFocusable = true; panel.pressFeedback()
                 panel.setOnClickListener {
                     layout(getString(R.string.jump_title, item.getLong("id")), "history_detail")
@@ -1303,8 +1328,8 @@ class MainActivity : Activity() {
         val currentGeneration = ++generation
         layout(title, "busy")
         guiding = phoneTest
-        val stage = card()
-        if (scan != null) stage.addView(scan, LinearLayout.LayoutParams(-1, dp(280)))
+        val stage = if (scan != null) page else card()
+        if (scan != null) stage.addView(scan, stage(430))
         else progress = Dial(this).also { stage.addView(it, LinearLayout.LayoutParams(-1, dp(136))) }
         progressText = text(getString(R.string.please_wait), 14, parent = stage).apply { gravity = Gravity.CENTER }
         button(getString(R.string.cancel)) { leaveWork() }

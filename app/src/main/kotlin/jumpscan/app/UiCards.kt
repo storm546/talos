@@ -178,9 +178,10 @@ internal fun MainActivity.settingsGroup(parent: LinearLayout = page) = LinearLay
 }
 
 /** A hairline between grouped rows, indented past the leading icon. */
-internal fun MainActivity.divider(parent: LinearLayout) = View(this).apply {
+internal fun MainActivity.divider(parent: LinearLayout, inset: Boolean = true) = View(this).apply {
     background = shape(getColor(R.color.line), 0)
-    parent.addView(this, LinearLayout.LayoutParams(-1, dp(1)).apply { marginStart = dp(54); marginEnd = dp(12) })
+    alpha = if (inset) 1f else .55f
+    parent.addView(this, LinearLayout.LayoutParams(-1, dp(1)).apply { if (inset) { marginStart = dp(54); marginEnd = dp(12) } })
 }
 
 private class SettingRow(val row: LinearLayout, val value: TextView)
@@ -248,6 +249,55 @@ internal fun MainActivity.notice(value: String, caution: Boolean = false) = text
 
 internal data class UiTile(val label: Int, val icon: String, val action: () -> Unit)
 
+/** The kit switch: a rounded track that fills with the accent and a solid thumb, no stock tint. */
+internal fun android.widget.Switch.instrumentSwitch() {
+    val density = resources.displayMetrics.density
+    fun pill(color: Int, width: Int, height: Int, inset: Int = 0) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE; cornerRadius = height * density / 2; setColor(color)
+        setSize((width * density).toInt(), (height * density).toInt())
+        if (inset > 0) setStroke((inset * density).toInt(), Color.TRANSPARENT)
+    }
+    thumbTintList = null; trackTintList = null
+    thumbDrawable = StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_checked), pill(context.getColor(R.color.on_action), 30, 30, 4))
+        addState(intArrayOf(), pill(context.getColor(R.color.muted), 30, 30, 5))
+    }
+    trackDrawable = StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_checked), pill(context.getColor(R.color.accent), 54, 30))
+        addState(intArrayOf(), pill(context.getColor(R.color.hover), 54, 30))
+    }
+}
+
+/** A row of instrument keys: a round icon well over a short label, for secondary destinations. */
+internal fun MainActivity.toolRow(vararg entries: UiTile, parent: LinearLayout = page) {
+    val row = LinearLayout(this)
+    parent.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
+    entries.forEachIndexed { index, tile ->
+        val key = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dp(4), 0, dp(4))
+            isClickable = true; isFocusable = true
+            contentDescription = getString(tile.label)
+            background = RippleDrawable(ColorStateList.valueOf(getColor(R.color.hover)), null, shape(Color.WHITE, 14))
+            setOnClickListener { tile.action() }
+            pressFeedback()
+            arrive(120L + index * 30L)
+        }
+        key.addView(android.widget.ImageView(this).apply {
+            setImageDrawable(lineIcon(tile.icon, green))
+            scaleType = android.widget.ImageView.ScaleType.CENTER
+            background = raisedSurface().apply { cornerRadius = dp(28).toFloat() }
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(56), dp(56)))
+        text(getString(tile.label), 12, getColor(R.color.ink), key).apply {
+            gravity = Gravity.CENTER; maxLines = 2; setPadding(dp(2), dp(7), dp(2), 0)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        row.addView(key, LinearLayout.LayoutParams(0, -2, 1f))
+    }
+}
+
 internal fun MainActivity.tiles(vararg entries: UiTile, parent: LinearLayout = page) {
     entries.toList().chunked(2).forEach { pair ->
         val row = LinearLayout(this)
@@ -280,6 +330,25 @@ internal fun MainActivity.stat(label: String, value: String, unit: String = "", 
             if (value == "—") contentDescription = getString(R.string.not_available)
         })
     }
+
+/** One line of an instrument readout: label left, measured value right, notes underneath. */
+internal fun MainActivity.readoutRow(label: String, value: String, unit: String, parent: LinearLayout) = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    setPadding(dp(16), dp(14), dp(16), dp(12))
+    parent.addView(this, LinearLayout.LayoutParams(-1, -2))
+    val line = row(this, center = true)
+    text(label, 16, getColor(R.color.ink), line).apply {
+        instrumentType(display = true)
+        layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+    }
+    line.addView(Measurement(this@readoutRow).apply {
+        text = when { value == "—" || unit.isEmpty() -> value; unit == "°" || unit == "%" -> "$value$unit"; else -> "$value $unit" }
+        textSize = 28f
+        setTextColor(getColor(R.color.ink))
+        instrumentType(numeric = true)
+        if (value == "—") contentDescription = getString(R.string.not_available)
+    }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
+}
 
 internal fun MainActivity.targetBar(label: String, value: String, fraction: Double?, parent: LinearLayout) {
     text(label, 13, parent = parent)
