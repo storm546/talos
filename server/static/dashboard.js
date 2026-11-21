@@ -327,7 +327,18 @@ function refreshFor(event) {
       String(event.athlete_id) === String(state.user.id)) {
     api('/api/me/read', {method:'POST'}).catch(() => {});
   }
+  const expectedLoad = loadVersion + 1;
   load().then(() => {
+    if (expectedLoad !== loadVersion || state.view !== view) return;
+    if (event.type === 'jump' && ['team','today','history'].includes(view)) {
+      const jump = (view === 'team' ? state.teamFlights : state.jumps)?.find(row => row.id === event.id);
+      if (jump) {
+        const receipt = node('section', null, 'flight-arrival'); receipt.setAttribute('role','status');
+        const athlete = state.athletes.find(row => row.id === event.athlete_id);
+        receipt.append(flightGlyph(jump), node('strong',(state.language === 'bg' ? 'Нов скок' : 'New jump') + (athlete ? ' · ' + athlete.name : '')), node('span',flightLabel(jump)));
+        $('content').querySelector('.view').prepend(receipt);
+      }
+    }
     window.scrollTo(0, scroll);
     if (activeId) { const el = document.getElementById(activeId); if (el) el.focus(); }
   }).catch(() => {});
@@ -356,7 +367,7 @@ function relevant(event, view) {
 function signedOut() {
   state.liveGeneration++;
   liveController?.abort();
-  Object.assign(state, {todayCheckins:[], lastSession:null, lastReport:null, formCatalogue:[]});
+  Object.assign(state, {todayCheckins:[], teamFlights:[], lastSession:null, lastReport:null, formCatalogue:[]});
   Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],live:'idle',training:null,setLogs:[],exercises:[],plansData:[],nutritionDay:null,nutSummary:null,weightsData:null,expenditure:null,program:null,nutTarget:null,foodLogs:[],foods:[],formSets:[],planEdit:null,assistant:{open:false,conversationId:null,reply:null,proposal:null,note:null,error:null}});
   setLive('idle');
   render();
@@ -371,12 +382,12 @@ async function load(view=state.view) {
   let data;
   const staff = state.user.role !== 'athlete';
   if (view === 'team') {
-    const [athletes, todayCheckins, sessions] = await Promise.all([
-      allPages('/api/athletes'), api('/api/checkins/team?day=' + apiDay()), allPages('/api/sessions')]);
+    const [athletes, todayCheckins, sessions, teamFlights] = await Promise.all([
+      allPages('/api/athletes'), api('/api/checkins/team?day=' + apiDay()), allPages('/api/sessions'), api('/api/jumps?limit=100')]);
     const lastSession = sessions.filter(session => !session.cancelled && Date.parse(session.starts_at) <= Date.now())
       .sort((first, second) => Date.parse(second.starts_at) - Date.parse(first.starts_at))[0];
     const lastReport = lastSession ? await api('/api/sessions/' + lastSession.id + '/report') : null;
-    data = {athletes, todayCheckins, lastSession, lastReport};
+    data = {athletes, todayCheckins, lastSession, lastReport, teamFlights};
   }
   if (view === 'today') {
     const id = state.user.id;
@@ -436,10 +447,13 @@ async function load(view=state.view) {
     if (target) {
       const id = target.id;
       const day = state.nutritionDay || apiDay();
-      const [nutSummary, weightsData, expenditure, program, nutTarget, foodLogs] = await Promise.all([
-        api('/api/athletes/' + id + '/nutrition/summary?day=' + day), api('/api/athletes/' + id + '/weights'),
-        api('/api/athletes/' + id + '/nutrition/expenditure'), api('/api/athletes/' + id + '/nutrition/program'),
-        api('/api/athletes/' + id + '/nutrition/target'), api('/api/food-logs?athlete_id=' + id + '&limit=500')]);
+      const nutrition = '/api/athletes/' + id + '/nutrition/';
+      const [nutSummary, weightsData, foodLogs] = await Promise.all([
+        api(nutrition + 'summary?day=' + day), api('/api/athletes/' + id + '/weights'),
+        api('/api/food-logs?athlete_id=' + id + '&limit=500')]);
+      const expenditure = await api(nutrition + 'expenditure');
+      const program = await api(nutrition + 'program');
+      const nutTarget = await api(nutrition + 'target');
       data = {nutSummary, weightsData, expenditure, program, nutTarget, foodLogs, nutritionDay:day};
     } else data = {nutSummary:null, weightsData:null, expenditure:null, program:null, nutTarget:null, foodLogs:[]};
   }
@@ -464,7 +478,7 @@ function overviewHero(label, title, description) {
 }
 function overviewCard(label, value, detail, icon, valueStyle = 'big-value') {
   const card = node('section', null, 'overview-card');
-  const glyph = node('span', icon, 'card-glyph'); glyph.setAttribute('aria-hidden', 'true');
+  const glyph = node('span', null, 'card-glyph icon-' + icon); glyph.setAttribute('aria-hidden', 'true');
   card.append(glyph, node('h2', label));
   if (value && value !== '—') card.append(node('p', value, valueStyle));
   if (detail) card.append(node('p', detail, 'muted'));
@@ -484,7 +498,7 @@ function teamOverview(content) {
   const due = (state.lastReport?.athletes || []).filter(row => row.trials_done < row.trials);
   const increased = state.athletes.filter(athlete => athlete.active && athlete.changes.flexion_asymmetry_pct.change_absolute >= .05);
   const cards = node('div', null, 'overview-grid team-overview');
-  const checkin = overviewCard(t('checkedToday'), format(checked.length) + ' / ' + format(records.length), '', '✓');
+  const checkin = overviewCard(t('checkedToday'), format(checked.length) + ' / ' + format(records.length), '', 'checkin');
   if (records.length) {
     const list = document.createElement('ul'); list.className = 'status-list';
     for (const row of records) {
@@ -492,12 +506,14 @@ function teamOverview(content) {
       item.append(node('span', row.name), node('span', t(row.checkin ? 'recorded' : 'missing'), 'badge' + (row.checkin ? '' : ' pending')));
       list.append(item);
     }
+    const missing = records.filter(row => !row.checkin);
+    if (missing.length) checkin.append(node('p', t('missing') + ': ' + missing.map(row => row.name).join(', ')));
     checkin.append(details('checkins', list));
   }
   const session = overviewCard(t('lastSession'), state.lastSession?.title,
-    state.lastSession ? dateTime(state.lastSession.starts_at) : t('noCompletedSession'), '◷', 'card-subject');
+    state.lastSession ? dateTime(state.lastSession.starts_at) : t('noCompletedSession'), 'club', 'card-subject');
   const testing = overviewCard(t('testingDue'), state.lastReport ? format(due.length) : '—',
-    state.lastReport ? t(due.length ? 'sessionRemaining' : 'noneDue') : t('noCompletedSession'), '↗');
+    state.lastReport ? t(due.length ? 'sessionRemaining' : 'noneDue') : t('noCompletedSession'), 'index');
   for (const row of due) {
     const athlete = state.athletes.find(item => item.id === row.athlete_id);
     if (athlete) {
@@ -507,7 +523,7 @@ function teamOverview(content) {
     }
   }
   const flags = overviewCard(t('compare'), null,
-    increased.length ? t('increasedAsymmetry') + format(increased.length) : t('noIncrease'), '≋');
+    increased.length ? t('increasedAsymmetry') + format(increased.length) : t('noIncrease'), 'history');
   for (const athlete of increased) {
     const link = athleteLink(athlete, athlete.name);
     link.append(node('span', change(athlete.changes.flexion_asymmetry_pct.change_absolute, 'flexion_asymmetry_pct'), 'change-unit'));
@@ -522,20 +538,20 @@ function today(content) {
   const grid = node('div', null, 'overview-grid today-grid');
   const saved = state.checkins[0];
   const checkin = overviewCard(t('checkinToday'), saved ? wellbeingSum(saved) + '\u00a0/\u00a025' : null,
-    t(saved ? 'checkinTotal' : 'openAppCheckin'), '✓');
+    t(saved ? 'checkinTotal' : 'openAppCheckin'), 'checkin');
   const day = apiDay();
   const weekday = (new Date(day + 'T00:00:00Z').getUTCDay() + 6) % 7;
   const scheduled = state.plansData.filter(plan => {
     const distance = (Date.parse(day) - Date.parse(plan.starts_on)) / 86400000;
     return distance >= 0 && distance < plan.weeks * 7 && plan.items.some(item => item.weekday === weekday);
   });
-  const training = overviewCard(t('todayPlan'), scheduled[0]?.title, scheduled.length ? '' : t('todayRest'), '≋', 'card-subject');
+  const training = overviewCard(t('todayPlan'), scheduled[0]?.title, scheduled.length ? '' : t('todayRest'), 'history', 'card-subject');
   for (const plan of scheduled) for (const item of plan.items.filter(item => item.weekday === weekday)) {
     training.append(node('p', item.exercise + ' · ' + item.sets + ' × ' + item.reps +
       (item.reps_max > item.reps ? '–' + item.reps_max : ''), 'muted'));
   }
   const jump = state.jumps[0];
-  const jumpCard = overviewCard(t('latestJump'), jump ? t(jump.test) : null, jump ? dateTime(jump.created_at) : t('noData'), '↗', 'card-subject');
+  const jumpCard = overviewCard(t('latestJump'), jump ? t(jump.test) : null, jump ? dateTime(jump.created_at) : t('noData'), 'index', 'card-subject');
   if (jump && (!jump.flight_time_ms || jump.warnings.includes('no_flight_detected'))) {
     jumpCard.append(node('p', t('no_flight_detected'), 'muted'));
   } else if (jump) for (const [field, label] of [['jump_height_cm','height'], ['flight_time_ms','flight'],
@@ -601,9 +617,53 @@ function consentEditor(athlete) {
   }));
   form.append(button('cancel',()=>{state.consent=null;render('#consent-'+athlete.id);}));wrap.append(form);return wrap;
 }
+function measuredFlight(jump) {
+  return jump && jump.flight_time_ms > 0 && Number.isFinite(jump.jump_height_cm) && !jump.warnings?.includes('no_flight_detected');
+}
+function flightLabel(jump) {
+  return measuredFlight(jump) ? format(jump.jump_height_cm,'jump_height_cm') + (state.language === 'bg' ? ' см' : ' cm') : '—';
+}
+function flightGlyph(jump, scale = 60) {
+  const glyph = node('span',null,'flight-glyph'); glyph.setAttribute('aria-hidden','true');
+  glyph.append(node('i',null,'flight-rule'));
+  if (measuredFlight(jump)) {
+    const level = Math.min(1, jump.jump_height_cm/scale).toFixed(3);
+    const arc = node('i',null,'flight-path'); arc.style.height = 'calc((100% - 8px) * '+level+')';
+    arc.style.width = (34+Math.min(1,jump.flight_time_ms/700)*52)+'%';
+    const mark = node('i',null,'flight-mark'); mark.style.bottom = 'calc(3px + (100% - 8px) * '+level+')';
+    glyph.append(arc, mark);
+  }
+  return glyph;
+}
 function team(content) {
   content.append(overviewHero(t(state.user.role === 'admin' ? 'adminDesk' : 'coachDesk'), t('team'), date(apiDay())));
+  const hero = content.querySelector('.overview-hero');
+  if (state.todayCheckins.length) {
+    hero.append(node('p',t('checkedToday')+' · '+state.todayCheckins.filter(row => row.checkin).length+' / '+state.todayCheckins.length,'team-count'));
+    const strip = node('div', null, 'attendance-strip');
+    strip.setAttribute('aria-hidden', 'true');
+    for (const row of state.todayCheckins.slice(0, 32)) strip.append(node('i', null, row.checkin ? 'present' : 'absent'));
+    hero.append(strip);
+  }
   teamOverview(content);
+  if (state.athletes.length) {
+    const latest = new Map(); for (const jump of state.teamFlights) if (!latest.has(jump.athlete_id)) latest.set(jump.athlete_id,jump);
+    const scale = Math.ceil(Math.max(40, ...state.teamFlights.filter(measuredFlight).map(jump => jump.jump_height_cm*1.15))/10)*10;
+    const board = node('section',null,'flight-board');
+    board.append(node('h2',(state.language === 'bg' ? 'Последен скок по спортист · обща скала 0–' : 'Latest flight by athlete · shared scale 0–')+scale+(state.language === 'bg' ? ' см' : ' cm')));
+    const lanes = node('div',null,'flight-lanes'); board.append(lanes); hero.append(board);
+    for (const athlete of state.athletes) {
+      const lane = athleteLink(athlete,athlete.name); lane.className = 'flight-lane';
+      const show = jump => lane.replaceChildren(flightGlyph(jump,scale),node('strong',flightLabel(jump)),node('span',athlete.name));
+      show(latest.get(athlete.id)); lanes.append(lane);
+      if (athlete.jump_count && !latest.has(athlete.id)) {
+        const observer = new IntersectionObserver(entries => {
+          if (!entries.some(entry => entry.isIntersecting)) return;
+          observer.disconnect(); api('/api/jumps?athlete_id='+athlete.id+'&limit=1').then(rows => { if (lane.isConnected) show(rows[0]); }).catch(()=>{});
+        }); observer.observe(lane);
+      }
+    }
+  }
   content.append(node('h2', t('roster')), node('p', t('changeNote'), 'muted'));
   if(state.consent)content.append(consentEditor(state.consent));
   const columns=['name','jumps','lastJump','ratio','peakMean','asymmetry','consent'];
@@ -1541,7 +1601,7 @@ function formSetCard(set) {
   if (mode === 'hold') {
     const metrics = node('div', null, 'overview-grid');
     for (const [label, value] of [['holdTime', set.hold_ms ?? s.hold_ms], ['inBand', set.in_band_ms ?? s.in_band_ms]]) {
-      metrics.append(overviewCard(t(label), value == null ? '—' : format(value / 1000), '', '◷'));
+      metrics.append(overviewCard(t(label), value == null ? '—' : format(value / 1000), '', 'club'));
     }
     wrap.append(metrics);
   } else wrap.append(node('p', t('repsCount') + ': ' + (s.repetition_count ?? '—') + ' · ' + t('partialCount') + ': ' +
@@ -1651,25 +1711,31 @@ function render(focusSelector=null) {
   $('session').append(button('signOut',async()=>{await api('/api/auth/logout',{method:'POST'});loadVersion++;signedOut();message('');}));
   const nav=node('nav', null, 'main-nav');nav.setAttribute('aria-label',t('overview'));
   const own = state.user.role === 'athlete';
-  const views=own?[['today','overview','↗'],['sessionsMine','mySessions','◷'],['checkins','myCheckins','✓']]:[
-    ['team','team','↗'],['plans','plans','≋'],['groups','groups','◉'],['sessions','sessions','◷'],['wellbeing','wellbeingView','✓'],
-    ['users','users','◎'],...(state.user.role==='admin'?[['clubs','clubs','◇'],['audit','audit','≡']]:[])];
+  const views=own?[['today','overview','index'],['sessionsMine','mySessions','club'],['checkins','myCheckins','checkin']]:[
+    ['team','team','index'],['plans','plans','training'],['groups','groups','home'],['sessions','sessions','club'],['wellbeing','wellbeingView','checkin'],
+    ['users','users','profile'],...(state.user.role==='admin'?[['clubs','clubs','club'],['audit','audit','more']]:[])];
   const athleteTab = ['history','training','nutrition','form'].includes(state.view);
   for (const [view,key,icon] of views) {
     const control = button(key, () => load(view));
-    const glyph = node('span', icon, 'nav-glyph'); glyph.setAttribute('aria-hidden', 'true'); control.prepend(glyph);
+    const glyph = node('span', null, 'nav-glyph icon-' + icon); glyph.setAttribute('aria-hidden', 'true'); control.prepend(glyph);
     if (state.view === view) control.setAttribute('aria-current', 'page');
     else if (athleteTab && view === (own ? 'today' : 'team')) control.setAttribute('aria-current', 'true');
     nav.append(control);
   }
   content.append(nav);
   const view = node('div', null, 'view');
+  if (content.dataset.previousView !== state.view) view.classList.add('enter');
+  content.dataset.previousView = state.view;
   content.append(view);
   ({today,team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans})[state.view](view);
   setLive(state.live);
   renderAssistant();
   if(focusSelector)content.querySelector(focusSelector)?.focus();
 }
+try {
+  const saved = sessionStorage.getItem('jumpscan-appearance');
+  document.documentElement.dataset.theme = saved === 'light' ? 'light' : 'dark';
+} catch { document.documentElement.dataset.theme = 'dark'; }
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 function updateThemeLabel() {
   const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : systemTheme.matches;
@@ -1679,6 +1745,7 @@ function updateThemeLabel() {
 $('theme').addEventListener('click', () => {
   const root = document.documentElement;
   root.dataset.theme = (root.dataset.theme || (systemTheme.matches ? 'dark' : 'light')) === 'dark' ? 'light' : 'dark';
+  try { sessionStorage.setItem('jumpscan-appearance', root.dataset.theme); } catch {}
   updateThemeLabel();
 });
 systemTheme.addEventListener('change', updateThemeLabel);

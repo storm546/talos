@@ -21,22 +21,24 @@ internal fun MainActivity.techniqueHistory(offset: Int = 0) {
             line.addView(column, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
             renderSetTitle(set, exercise, column)
             val summary = set.optJSONObject("summary") ?: JSONObject()
-            val hold = set.optString("mode", exercise?.optString("mode").orEmpty()) == "hold" || summary.has("hold_ms")
+            val hold = set.optString("mode", exercise?.optString("mode").orEmpty()) == "hold" || !summary.isNull("hold_ms")
             val total = android.widget.LinearLayout(this).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
                 gravity = android.view.Gravity.END
             }
             line.addView(total, android.widget.LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10) })
-            text(if (hold) metricNumber(summary.optLong("hold_ms") / 1000.0, "hold_ms", locale)
-                else summary.optInt("repetition_count").toString(), 24, green, total).apply {
-                typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.NORMAL)
+            val quantity = if (hold) "hold_ms" else "repetition_count"
+            text(if (summary.isNull(quantity)) "—" else if (hold) metricNumber(summary.getLong(quantity) / 1000.0, "hold_ms", locale)
+                else summary.getInt(quantity).toString(), 24, green, total).apply {
+                instrumentType(numeric = true)
                 gravity = android.view.Gravity.END
                 setPadding(0, 0, 0, 0)
             }
-            text(getString(if (hold) R.string.ui_seconds else R.string.ui_reps_unit), 12, parent = total).apply {
+            if (!summary.isNull(quantity)) text(getString(if (hold) R.string.ui_seconds else R.string.ui_reps_unit), 12, parent = total).apply {
                 gravity = android.view.Gravity.END
                 setPadding(0, 0, 0, 0)
             }
+            panel.pressFeedback()
             panel.isClickable = true
             panel.isFocusable = true
             panel.foreground = android.graphics.drawable.RippleDrawable(
@@ -48,8 +50,6 @@ internal fun MainActivity.techniqueHistory(offset: Int = 0) {
         }
         if (offset > 0) button(getString(R.string.feedback_newest)) { techniqueHistory() }
         if (sets.size == 20) button(getString(R.string.form_older)) { techniqueHistory(offset + 20) }
-        button(getString(R.string.form_title), primary = true) { formHome() }
-        button(getString(R.string.home)) { home() }
     }, { home(it) })
 }
 
@@ -75,7 +75,7 @@ private fun MainActivity.renderSetTitle(set: JSONObject, exercise: JSONObject?, 
         }
     } else ""
     text(name + side, 17, parent = panel).apply {
-        setTypeface(null, android.graphics.Typeface.BOLD)
+        instrumentType(display = true)
         setPadding(0, 0, 0, dp(2))
     }
     val view = getString(if (set.optString("view", exercise?.optString("view").orEmpty()) == "front")
@@ -127,6 +127,4 @@ private fun MainActivity.techniqueDetail(set: JSONObject, exercise: JSONObject?,
                 if (values.isNull(key)) "—" else number(values, key)), 14, parent = panel)
         }
     }
-    button(getString(R.string.ui_form_history)) { techniqueHistory(offset) }
-    button(getString(R.string.home)) { home() }
 }

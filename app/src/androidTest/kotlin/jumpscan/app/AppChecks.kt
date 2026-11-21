@@ -30,13 +30,26 @@ import java.time.LocalDate
 
 /** Small platform-only checks; no test library is needed. */
 class AppChecks : Instrumentation() {
+    private var fixtureServer: String? = null
+    private var themeName = "dark"
+    private var movies = false
     private var only: String? = null
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); only = arguments?.getString("only"); start() }
+    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments)
+        only = arguments?.getString("only")
+        fixtureServer = arguments?.getString("fixtureServer")
+        themeName = arguments?.getString("theme") ?: "dark"
+        movies = arguments?.getString("movies") == "yes"
+        start() }
     override fun onStart() {
         val output = Bundle()
         try {
             val capture = CaptureChecks(this)
-            if (only == "capture-parity") output.putString("parity", capture.parity())
+            if (only == "studio") {
+                targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
+                val studio = StudioChecks(this, movies)
+                studio.screens(requireNotNull(fixtureServer))
+                capture.visual(studio)
+            } else if (only == "capture-parity") output.putString("parity", capture.parity())
             else if (only == "capture-visual") capture.visual()
             else if (only == "cutoff") videoCutoffCheck()
             else if (only == "timestamp") videoPreviewCheck()

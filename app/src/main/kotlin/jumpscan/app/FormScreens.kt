@@ -7,7 +7,6 @@ import android.app.Activity
 import android.app.Fragment
 import android.os.Build
 import android.provider.MediaStore
-import android.graphics.Typeface
 import android.widget.LinearLayout
 import jumpscan.core.FormExercise
 import jumpscan.core.FormExercises
@@ -45,7 +44,7 @@ internal fun validateFormFields(body: JSONObject) {
 
 internal fun FormExercise.label(bg: Boolean) = if (bg) nameBg else nameEn
 
-private fun MainActivity.formLabel(choice: FormChoice): String {
+internal fun MainActivity.formLabel(choice: FormChoice): String {
     val name = FormExercises[choice.exercise].label(locale.language == "bg")
     return when (choice.side) {
         "L" -> getString(R.string.form_named_side, name, getString(R.string.form_left))
@@ -82,15 +81,18 @@ private fun MainActivity.repLabel(key: String) = getString(repFields.getValue(ke
 internal fun MainActivity.formHome(message: String? = null) {
     layout(getString(R.string.form_title), "form")
     message?.let { notice(it, caution = true) }
-    hero(getString(R.string.ui_form_hero), getString(R.string.form_modes_guide),
-        getString(R.string.ui_form_eyebrow, FormExercises.validated.size)).also { panel ->
-        val links = row(panel)
-        if (token().isNotEmpty()) button(getString(R.string.ui_form_history), parent = links) { techniqueHistory() }
-            .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(12) }
-        lastForm?.let { result -> button(getString(R.string.last_result), parent = links) { formResult(result.metrics, result) }
-            .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(12); marginStart = dp(8) } }
+    text(getString(R.string.ui_form_eyebrow, FormExercises.validated.size).uppercase(locale), 12, green).apply { letterSpacing = .1f; instrumentType(display = true) }
+    text(getString(R.string.form_modes_guide), 16)
+    val links = row(page)
+    if (token().isNotEmpty()) button(getString(R.string.ui_form_history), parent = links, look = ActionTone.TONAL) { techniqueHistory() }
+        .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10) }
+    lastForm?.let { result -> button(getString(R.string.last_result), parent = links) { formResult(result.metrics, result) }
+        .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10); if (links.childCount > 1) marginStart = dp(8) } }
+    text(getString(R.string.ui_form_validated_note), 13).apply {
+        compoundDrawablePadding = dp(10)
+        setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("info", currentTextColor), null, null, null)
+        setPadding(0, dp(14), 0, 0)
     }
-    notice(getString(R.string.ui_form_validated_note))
     val replay = BuildConfig.DEBUG && File(filesDir, LIVE_REPLAY_FILE).isFile
     if (replay) text(getString(R.string.ui_replay_hint), 13)
     for (group in formGroups) {
@@ -108,11 +110,7 @@ internal fun MainActivity.formHome(message: String? = null) {
             experimental.size)) { showExperimental = !showExperimental; formHome() }
         if (showExperimental) experimental.forEach { exerciseCard(it, formIcon(it.id), replay) }
     }
-    button(getString(R.string.home)) { home() }
 }
-
-/** Collapsed on every app start. */
-private var showExperimental = false
 
 private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, replay: Boolean) {
     val panel = card()
@@ -121,7 +119,7 @@ private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, repl
     val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     head.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
     text(exercise.label(locale.language == "bg"), 18, parent = column).apply {
-        setTypeface(null, Typeface.BOLD)
+        instrumentType(display = true)
         setPadding(0, 0, 0, 0)
     }
     val chips = row(column)
@@ -149,11 +147,15 @@ private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, repl
         mark()
     }
     val actions = row(panel, 4)
-    fun choose() { formChoice = FormChoice(exercise.id, side) }
+    fun choose() {
+            formChoice = FormChoice(exercise.id, side)
+            getSharedPreferences("account", android.content.Context.MODE_PRIVATE).edit()
+                .putString("exercise", exercise.id).putString("exercise_side", side).apply()
+        }
     button(getString(R.string.ui_live), primary = true, parent = actions) { choose(); openLiveForm(false) }.apply {
         layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10) }
         contentDescription = getString(R.string.ui_live_for, exercise.label(locale.language == "bg"))
-        setCompoundDrawablesRelativeWithIntrinsicBounds(UiIcon("form", getColor(R.color.hero), dp(18)), null, null, null)
+        setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("form", getColor(R.color.hero)), null, null, null)
         if (replay) setOnLongClickListener { choose(); openLiveForm(true); true }
     }
     button(getString(R.string.ui_from_video), parent = actions) { choose(); formVideo() }.apply {
@@ -179,7 +181,6 @@ internal fun MainActivity.formVideo() {
     if (!exercise.signal.legacy) notice(getString(R.string.form_experimental), caution = true)
     text(getString(R.string.form_clip_limit), 14)
     text(getString(R.string.no_video_upload), 14)
-    button(getString(R.string.ui_all_exercises)) { formHome() }
 }
 
 private fun median(values: List<Double>) = values.sorted().let { if (it.isEmpty()) null
@@ -194,7 +195,7 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
     val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     head.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
     text(formLabel(FormChoice(exercise.id, if (metrics.isNull("side")) null else metrics.getString("side"))), 20, parent = column)
-        .setTypeface(null, Typeface.BOLD)
+        .instrumentType(display = true)
     text(listOfNotNull(getString(if (metrics.getString("view") == "front") R.string.form_front else R.string.form_side),
         when (metrics.optString("source")) { "live" -> getString(R.string.ui_live); "video" -> getString(R.string.ui_video); else -> null },
         if (metrics.has("created_at")) localDateTime(metrics.getString("created_at"), locale) else null)
@@ -202,9 +203,28 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
     val summary = metrics.getJSONObject("summary")
     if (exercise.mode == "hold") statGrid(listOf("hold_ms" to R.string.ui_hold, "in_band_ms" to R.string.ui_in_band).map { (key, label) ->
         Triple(getString(label), if (summary.isNull(key)) "—" else metricNumber(summary.getLong(key) / 1000.0, key, locale), getString(R.string.ui_seconds))
-    }) else statGrid(listOf(Triple(getString(R.string.ui_complete), "${summary.getInt("repetition_count")}", ""),
-        Triple(getString(R.string.ui_partial), "${summary.getInt("partial_count")}", ""),
-        Triple(getString(R.string.ui_unclear), "${summary.getInt("unclear_count")}", "")), columns = 3)
+    }) else {
+        // The repetition ring from the live screen, settled on this set's count.
+        val complete = summary.getInt("repetition_count"); val partial = summary.getInt("partial_count"); val unclear = summary.getInt("unclear_count")
+        val deck = row(page, 14, center = true)
+        val dial = android.widget.FrameLayout(this)
+        val ring = RepRing(this)
+        dial.addView(ring, android.widget.FrameLayout.LayoutParams(-1, -1))
+        val middle = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = android.view.Gravity.CENTER }
+        middle.addView(Measurement(this).apply { text = "$complete"; textSize = 48f; setTextColor(getColor(R.color.ink)); instrumentType(numeric = true); gravity = android.view.Gravity.CENTER; includeFontPadding = false })
+        text(getString(R.string.ui_complete), 12, parent = middle).gravity = android.view.Gravity.CENTER
+        dial.addView(middle, android.widget.FrameLayout.LayoutParams(-1, -1))
+        dial.contentDescription = getString(R.string.ui_complete) + ": " + complete
+        deck.addView(dial, LinearLayout.LayoutParams(dp(150), dp(150)))
+        val counts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        deck.addView(counts, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(20) })
+        for ((label, value) in listOf(R.string.ui_partial to partial, R.string.ui_unclear to unclear)) {
+            text(getString(label), 13, parent = counts).setPadding(0, dp(6), 0, 0)
+            text("$value", 28, parent = counts).apply { instrumentType(numeric = true); setPadding(0, 0, 0, dp(6)) }
+        }
+        val total = complete + partial + unclear
+        ring.post { ring.show(if (total == 0) 0f else complete.toFloat() / total, total.coerceAtMost(40)) }
+    }
     val warnings = metrics.getJSONArray("warnings").let { array -> List(array.length()) { array.getString(it) } }
     if (warnings.isNotEmpty()) notice(getString(R.string.ui_reviews) + "\n" + warnings.joinToString("\n") { getString(when (it) {
         "unclear_reps" -> R.string.form_unclear_warning
@@ -241,7 +261,11 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
     }
     if (medians.isNotEmpty()) {
         section(R.string.form_medians).setPadding(0, dp(20), 0, 0)
-        statGrid(medians)
+        val readout = settingsGroup()
+        medians.forEachIndexed { index, (label, value, unit) ->
+            if (index > 0) divider(readout, inset = false)
+            readoutRow(label, value, unit, readout)
+        }
         if (!summary.isNull("worst_repetition")) text(getString(R.string.form_shallowest, summary.getInt("worst_repetition")), 13)
     }
     if (reps.isNotEmpty()) section(R.string.ui_repetitions).setPadding(0, dp(20), 0, 0)
@@ -249,7 +273,7 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
         val panel = card()
         val title = row(panel, center = true)
         text(getString(R.string.ui_rep_number, rep.getInt("index")), 17, parent = title).apply {
-            setTypeface(null, Typeface.BOLD)
+            instrumentType(display = true)
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
         }
         val status = rep.getString("status")
@@ -285,7 +309,6 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
     }
     if (result != null) button(getString(R.string.ui_another_set)) { formHome() }
     if (token().isNotEmpty()) button(getString(R.string.ui_form_history)) { techniqueHistory() }
-    button(getString(R.string.home)) { home() }
 }
 
 private fun MainActivity.saveFormResult(result: FormResult, done: (Int?, String) -> Unit) {

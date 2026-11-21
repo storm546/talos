@@ -1,16 +1,23 @@
 <resources>
-    <color name="paper">#F2F4EF</color>
-    <color name="surface">#FFFFFF</color>
-    <color name="ink">#152119</color>
-    <color name="muted">#526056</color>
-    <color name="line">#CDD6CA</color>
-    <color name="accent">#325720</color>
-    <color name="accent_pressed">#33829435</color>
-    <color name="hover">#E8EFDF</color>
-    <color name="hero">#18271F</color>
-    <color name="signal">#D8FC68</color>
-    <color name="on_hero">#D1DFD0</color>
-    <color name="notice">#FFF0D8</color>
-    <color name="warning">#85421D</color>
-    <color name="error">#8A3428</color>
+    <color name="paper">#F3EFE7</color>
+    <color name="surface">#FFFCF5</color>
+    <color name="surface_top">#FFFFFC</color>
+    <color name="ink">#242321</color>
+    <color name="muted">#635E57</color>
+    <color name="line">#BCB4A8</color>
+    <color name="accent">#9F4114</color>
+    <color name="accent_pressed">#339F4114</color>
+    <color name="hover">#E8E2D8</color>
+    <color name="hero">#211F21</color>
+    <color name="hero_top">#2C292A</color>
+    <color name="signal">#FF965B</color>
+    <color name="on_hero">#DBDBD8</color>
+    <color name="notice">#FFE9BC</color>
+    <color name="warning">#744B05</color>
+    <color name="error">#9B352C</color>
+    <color name="ready">#195E58</color>
+    <color name="ready_surface">#D9EAE6</color>
+    <color name="tonal">#F3DFD0</color>
+    <color name="on_action">#211A15</color>
+    <color name="segment_selected">#3D3834</color>
 </resources>

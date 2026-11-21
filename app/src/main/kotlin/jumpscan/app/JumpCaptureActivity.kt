@@ -80,6 +80,8 @@ internal class JumpLandingWatch(initialFeet: Float?) {
 
 @OptIn(ExperimentalSessionConfig::class, ExperimentalHighSpeedVideo::class)
 class JumpCaptureActivity : ComponentActivity() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(base.instrumentTheme())
+
     private data class Mode(val fps: Int, val config: SessionConfig, val video: VideoCapture<Recorder>)
 
     private val main = Handler(Looper.getMainLooper())
@@ -102,6 +104,8 @@ class JumpCaptureActivity : ComponentActivity() {
     private var latestFeet: Float? = null
     private var landingWatch: JumpLandingWatch? = null
     private var stopAt = Long.MAX_VALUE
+    private var manualStart: Button? = null
+    private var armed = false
     private var lastTick = -1
     private var tone: ToneGenerator? = null
     private lateinit var preview: PreviewView
@@ -116,10 +120,11 @@ class JumpCaptureActivity : ComponentActivity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        armed = state == null && intent.getBooleanExtra("when_ready", false)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.surface))
+            setBackgroundColor(getColor(R.color.paper))
             setOnApplyWindowInsetsListener { view, insets ->
                 @Suppress("DEPRECATION")
                 view.setPadding(insets.systemWindowInsetLeft + dp(12), insets.systemWindowInsetTop,
@@ -127,7 +132,7 @@ class JumpCaptureActivity : ComponentActivity() {
                 insets
             }
         }
-        root.addView(label(R.string.jump_capture_title, 22))
+        root.addView(label(R.string.jump_capture_title, 28))
         root.addView(label(if (intent.getStringExtra("test") == "drop_jump") R.string.jump_capture_drop_tips
             else R.string.jump_capture_tips, 14))
         preview = PreviewView(this).apply {
@@ -137,16 +142,21 @@ class JumpCaptureActivity : ComponentActivity() {
         root.addView(preview, LinearLayout.LayoutParams(-1, 0, 1f))
         status = label(R.string.form_finding_camera, 16).apply {
             gravity = Gravity.CENTER
+            background = raisedSurface()
             minHeight = dp(64)
             accessibilityLiveRegion = TextView.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         root.addView(status)
+        if (armed) manualStart = styleButton(Button(this), false).apply {
+            setText(R.string.manual_start)
+            setOnClickListener { armed = false; visibility = android.view.View.GONE; start.setText(R.string.jump_record_start) }
+        }.also { root.addView(it) }
         rateChoices = LinearLayout(this).apply { gravity = Gravity.CENTER }
         root.addView(rateChoices)
         rateNotice = label(R.string.jump_rate_unavailable, 14).apply { visibility = View.GONE }
         root.addView(rateNotice)
         start = styleButton(Button(this), primary = true).apply {
-            setText(R.string.jump_record_start)
+            setText(if (armed) R.string.armed_hint else R.string.jump_record_start)
             isEnabled = false
             setOnClickListener { if (recording == null) record() else stopRecording() }
         }
@@ -166,8 +176,9 @@ class JumpCaptureActivity : ComponentActivity() {
     }
 
     private fun label(resource: Int, size: Int) = TextView(this).apply {
+        instrumentType(display = size >= 20)
         setText(resource)
-        textSize = size.toFloat()
+        typeSize(size)
         setTextColor(getColor(R.color.ink))
         setPadding(dp(4), dp(5), dp(4), dp(5))
     }
@@ -199,7 +210,8 @@ class JumpCaptureActivity : ComponentActivity() {
                 val fast = Recorder.getHighSpeedVideoCapabilities(info)?.getSupportedQualities(DynamicRange.SDR).orEmpty()
                 modes = listOfNotNull(mode(60, regular, info), mode(120, fast, info), mode(240, fast, info))
                 previewOnly = SessionConfig(listOf(newPreview()))
-                bind(modes.firstOrNull())
+                val lastRate = getSharedPreferences("instrument", MODE_PRIVATE).getInt("capture_fps", 60)
+                bind(modes.firstOrNull { it.fps == lastRate } ?: modes.firstOrNull())
             }.onFailure { cameraError() }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -255,7 +267,7 @@ class JumpCaptureActivity : ComponentActivity() {
         for (mode in modes) rateChoices.addView(styleButton(Button(this), primary = mode == selected).apply {
             text = getString(R.string.jump_capture_rate, mode.fps)
             isEnabled = recording == null && !finishingClip && mode != selected
-            setOnClickListener { bind(mode) }
+            setOnClickListener { bind(mode); selected?.let { getSharedPreferences("instrument", MODE_PRIVATE).edit().putInt("capture_fps", it.fps).apply() } }
         }, LinearLayout.LayoutParams(0, -2, 1f))
     }
 
@@ -305,7 +317,9 @@ class JumpCaptureActivity : ComponentActivity() {
         val number = (3 - elapsed / 1000).toInt()
         if (number != lastTick) {
             lastTick = number
-            status.textSize = 40f
+            status.instrumentType(numeric = true)
+            status.bump()
+            status.textSize = 88f
             status.text = getString(R.string.jump_countdown, number)
             tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
         }
@@ -325,6 +339,7 @@ class JumpCaptureActivity : ComponentActivity() {
         if (recording != null) {
             if (lastTick != 0 && startedAt > 0 && clearFrames == 0) stopRecording(discard = true)
             if (stopAt == Long.MAX_VALUE && latestFeet?.let { landingWatch?.landed(it) } == true) {
+                status.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
                 stopAt = SystemClock.uptimeMillis() + POST_LANDING_MS
                 status.textSize = 16f
                 status.setText(R.string.jump_capture_landed)
@@ -332,7 +347,16 @@ class JumpCaptureActivity : ComponentActivity() {
         } else if (!finishingClip && previewBound) {
             start.isEnabled = selected != null && clearFrames >= 3
             val message = if (clearFrames < 3 && check == R.string.jump_frame_ready) R.string.jump_frame_hold else check
-            if (status.text != getString(message)) status.setText(message)
+            if (status.text != getString(message)) {
+                status.setText(message)
+                status.setTextColor(getColor(if (message == R.string.jump_frame_ready) R.color.ready else R.color.ink))
+                status.arrive()
+            }
+            if (armed && start.isEnabled) {
+                armed = false
+                manualStart?.visibility = android.view.View.GONE
+                record()
+            }
         }
     }
 

@@ -86,11 +86,13 @@ internal class CaptureChecks(private val test: Instrumentation) {
             "60 fps capture analysis: ${capture.metrics.toJson()}"
     }
 
-    fun visual() {
+    fun visual(studio: StudioChecks? = null) {
+        fun movie(name: String, action: () -> Unit) { if (studio == null) action() else studio.record(name, action) }
         val locale = context.resources.configuration.locales[0].language
         fun shot(name: String) {
             test.waitForIdleSync()
             SystemClock.sleep(380)
+            test.requireAppWindow(name)
             val image = checkNotNull(test.uiAutomation.takeScreenshot())
             File(context.filesDir, "$locale-$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
             image.recycle()
@@ -137,17 +139,21 @@ internal class CaptureChecks(private val test: Instrumentation) {
         }
         shot("framing-ready-fixture")
         test.runOnMainSync {
-            val status = field(capture, "status").get(capture) as TextView
             (field(capture, "rateNotice").get(capture) as View).visibility = View.GONE
             (field(capture, "start").get(capture) as Button).apply {
                 setText(R.string.jump_record_stop)
                 isEnabled = true
             }
             (field(capture, "pick").get(capture) as Button).isEnabled = false
-            call(capture, "showCountdown", 0L)
-            check(status.text == "3")
-            call(capture, "showCountdown", 1_000L)
-            check(status.text == "2")
+        }
+        movie("countdown") {
+            test.runOnMainSync { call(capture, "showCountdown", 0L) }
+            SystemClock.sleep(720)
+            test.runOnMainSync {
+                check((statusField.get(capture) as TextView).text == "3")
+                call(capture, "showCountdown", 1_000L)
+                check((statusField.get(capture) as TextView).text == "2")
+            }
         }
         shot("countdown-fixture")
         test.runOnMainSync {
@@ -156,15 +162,44 @@ internal class CaptureChecks(private val test: Instrumentation) {
             capture.finish()
         }
 
-        val result = analyzeVideo(context, clip(60), "cmj", "replay") {}
+        var result = analyzeVideo(context, clip(60), "cmj", "replay") {}
         val prefs = context.getSharedPreferences("account", 0)
-        prefs.edit().putString("server", "http://10.0.2.2:18767").putString("token", "capture-fixture").apply()
+        if (studio == null) prefs.edit().putString("server", "http://10.0.2.2:18767").putString("token", "capture-fixture").apply()
         val main = launch(MainActivity::class.java)
-        test.runOnMainSync {
-            field(main, "analysis").set(main, result)
-            call(main, "result", null)
+        if (studio != null) {
+            fun scan(view: android.view.View): LiveFormPreview? {
+                if (view is LiveFormPreview) return view
+                if (view is android.view.ViewGroup) for (index in 0 until view.childCount) scan(view.getChildAt(index))?.let { return it }
+                return null
+            }
+            fun awaitState(timeout: Long, predicate: () -> Boolean) {
+                val end = SystemClock.uptimeMillis() + timeout
+                while (SystemClock.uptimeMillis() < end) {
+                    var ready = false; test.runOnMainSync { ready = predicate() }; if (ready) return
+                    SystemClock.sleep(100)
+                }; error("Timed out waiting for analysed frames")
+            }
+            test.runOnMainSync { call(main, "startAnalysis", clip(30), "full", null, null) }
+            awaitState(90000) { (scan(main.page)?.scanFraction ?: -1f) >= 0 }
+            movie("analysis-scan") { shot("analysis") }
+            awaitState(150000) { (scan(main.page)?.scanFraction ?: 1f) >= .87f }
+            movie("edge-lock") { }
+            awaitState(150000) { field(main, "screen").get(main) == "result" }
+            result = field(main, "analysis").get(main) as Analysis
+            checkNotNull(FlightStrip.read(prefs.getString("flight_strip", null)))
+            movie("today-flight") { test.runOnMainSync { main.home() } }; SystemClock.sleep(2600); shot("today-measured")
+        }
+        movie("digit-roll") {
+            test.runOnMainSync {
+                field(main, "analysis").set(main, result)
+                call(main, "result", null)
+            }
         }
         shot("result")
+        if (studio != null) {
+            test.runOnMainSync { call(main, "editFrames", result) }
+            shot("frame-editor")
+        }
         test.runOnMainSync { main.finish() }
         prefs.edit().clear().commit()
 
@@ -189,15 +224,39 @@ internal class CaptureChecks(private val test: Instrumentation) {
         }
         SystemClock.sleep(900)
         shot("live-cue-fixture")
-        test.runOnMainSync {
-            val content = form.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0) as android.view.ViewGroup
-            val header = content.getChildAt(0) as android.view.ViewGroup
-            (header.getChildAt(header.childCount - 1) as Switch).isChecked = true
-            call(form, "updateFeedback", FormProgress(complete = 2, partial = 3), listOf(FormEvent.End(rep.copy(index = 5))), true)
-            check((field(form, "banner").get(form) as TextView).text != form.getString(R.string.form_more_range))
-            check((field(form, "counter").get(form) as TextView).text == "2")
+        movie("live-counter") {
+            test.runOnMainSync {
+                fun mute(view: View): Switch? = when (view) {
+                    is Switch -> view
+                    is android.view.ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { mute(view.getChildAt(it)) }
+                    else -> null
+                }
+                checkNotNull(mute(form.findViewById(android.R.id.content))).isChecked = true
+                call(form, "updateFeedback", FormProgress(complete = 2, partial = 3), listOf(FormEvent.End(rep.copy(index = 5))), true)
+                check((field(form, "banner").get(form) as TextView).text != form.getString(R.string.form_more_range))
+                check((field(form, "counter").get(form) as TextView).text == "2")
+            }
         }
         shot("live-muted-fixture")
+        if (studio != null) {
+            val (aspect, frames) = File(context.filesDir,"form-poses.csv").bufferedReader().use { jumpscan.core.readLandmarkCsv(it) }
+            val realStream = FormStream("squat", null, aspect)
+            val states = frames.map { frame -> val events = realStream.feed(frame); realStream.progress to events }
+            val change = states.indexOfFirst { it.first.complete > 0 }; check(change > 0)
+            val retriever = android.media.MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(File(context.filesDir,"form-clip.mp4").path)
+                val shots = ((change-18).coerceAtLeast(0)..(change+15).coerceAtMost(frames.lastIndex) step 2).map { index ->
+                    index to checkNotNull(retriever.getFrameAtTime(frames[index].tMs*1000, android.media.MediaMetadataRetriever.OPTION_CLOSEST))
+                }
+                movie("measured-set") { for ((index, image) in shots) {
+                    test.runOnMainSync {
+                        (field(form, "preview").get(form) as LiveFormPreview).show(image, frames[index], false)
+                        call(form,"updateFeedback",states[index].first,states[index].second,jumpscan.core.formInFrame(frames[index]))
+                    }; SystemClock.sleep(65)
+                } }; shot("measured-set")
+            } finally { retriever.release() }
+        }
         test.runOnMainSync {
             field(form, "stream").set(form, null)
             form.finish()

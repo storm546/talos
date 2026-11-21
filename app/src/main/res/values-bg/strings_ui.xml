@@ -71,4 +71,10 @@
     <string name="ui_another_set">Нова серия</string>
     <string name="ui_reps_unit">повторения</string>
     <string name="ui_held">секунди задържане</string>
+    <string name="flight_demo">Примерен скок</string>
+    <string name="flight_last">Измерен полет</string>
+    <string name="flight_replay">↻  Вижте отново</string>
+    <string name="flight_reference">Начално ниво · %1$s %2$s</string>
+    <string name="flight_target">Цел · %1$d повторения</string>
+    <string name="flight_takeoff">Оттласкване</string>
 </resources>

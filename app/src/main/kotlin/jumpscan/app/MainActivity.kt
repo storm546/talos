@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
@@ -26,6 +25,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
 class MainActivity : Activity() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(base.instrumentTheme())
+
     private val executor = Executors.newSingleThreadExecutor()
     private val clubExecutor = Executors.newSingleThreadExecutor()
     private var task: Future<*>? = null
@@ -44,6 +45,7 @@ class MainActivity : Activity() {
     private val pendingRoot by lazy { java.io.File(filesDir, "pending") }
     private fun pending() = PendingUploads(pendingRoot, base(), athleteId())
     internal var formChoice = FormChoice("squat", null)
+    internal var showExperimental = false
     internal var lastForm: FormResult? = null
     private var pendingTrial: PhoneTrial? = null
     private var guiding = false
@@ -51,8 +53,9 @@ class MainActivity : Activity() {
     private var test = "cmj"
     internal lateinit var page: LinearLayout
         private set
+    private var previousTab = -1
     private var screen = "login"
-    private var progress: ProgressBar? = null
+    private var progress: Dial? = null
     private var progressText: TextView? = null
     internal val green by lazy { getColor(R.color.accent) }
     private val ink by lazy { getColor(R.color.ink) }
@@ -75,6 +78,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        test = prefs.getString("jump_test", "cmj") ?: "cmj"
+        formChoice = FormChoice(prefs.getString("exercise", "squat") ?: "squat", prefs.getString("exercise_side", null))
         val retained = lastNonConfigurationInstance as? RetainedResult
         if (retained != null) { analysis = retained.analysis; uploadedId = retained.uploadedId; test = retained.test; queuedId = retained.queuedId; edits = retained.edits; clientId = retained.clientId; selectedSession = retained.selectedSession; resultSession = retained.resultSession }
         lastForm = retained?.form
@@ -84,6 +89,7 @@ class MainActivity : Activity() {
             pendingTrial = PhoneTrial(it, savedInstanceState.getInt("phone_fps").takeIf { fps -> fps > 0 })
         }
         if (savedInstanceState?.getString("screen") == "diagnostics" || pendingTrial != null) diagnostics()
+        else if (savedInstanceState?.getString("screen") == "profile") profile()
         else if (lastForm != null && retained?.screen == "form_result") formResult(lastForm!!.metrics, lastForm)
         else if (analysis != null && retained?.screen in listOf("frames", "result")) { if (edits != null) frameEditor() else result() } else if (!openVideo(intent)) {
             if (token().isEmpty()) login() else home()
@@ -134,7 +140,13 @@ class MainActivity : Activity() {
         else "https://jumpscan.stormlabs.cloud").orEmpty()
     internal fun athleteId() = prefs.getLong("user_id", 0)
 
-    internal fun layout(title: String, name: String) {
+    private fun wordmark(parent: LinearLayout) = parent.addView(ImageView(this).apply {
+        setImageResource(R.drawable.flight_wordmark); contentDescription = getString(R.string.brand)
+    }, LinearLayout.LayoutParams(dp(112), dp(26)))
+
+    internal fun stage(height: Int) = LinearLayout.LayoutParams(-1, dp(height)).apply { marginStart = -dp(18); marginEnd = -dp(18) }
+
+    internal fun layout(title: String, name: String, headline: Boolean = true) {
         screen = name
         progress = null
         progressText = null
@@ -148,7 +160,19 @@ class MainActivity : Activity() {
         }
         scroll.addView(page)
         // Target 35 draws edge-to-edge. Keep controls outside system bars and the keyboard.
-        scroll.setOnApplyWindowInsetsListener { view, insets ->
+        val shell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(getColor(R.color.paper))
+            addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+        val tabs = listOf(UiTile(R.string.ui_today, "home") { home() }, UiTile(R.string.ui_technique, "form") { formHome() },
+            UiTile(R.string.ui_profile, "profile") { profile() })
+        val selected = listOf("home", "form", "profile").indexOf(name)
+        if (selected >= 0) {
+            shell.addView(navigation(tabs, selected, previousTab))
+            previousTab = selected
+        }
+        shell.setOnApplyWindowInsetsListener { view, insets ->
             if (Build.VERSION.SDK_INT >= 30) {
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
                 view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -159,14 +183,27 @@ class MainActivity : Activity() {
             }
             insets
         }
-        setContentView(scroll)
-        scroll.requestApplyInsets()
-        text("↗  " + getString(R.string.brand), 13, green).apply {
-            letterSpacing = 0.12f
-            setTypeface(null, Typeface.BOLD)
-        }
-        text(title, 34).apply {
-            typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
+        setContentView(shell)
+        page.arrive()
+        shell.requestApplyInsets()
+        val backable = name !in listOf("home", "form", "profile", "login", "busy", "guide", "frames")
+        if (backable) {
+            val header = row(center = true).apply { setPadding(0, 0, 0, dp(4)) }
+            header.addView(android.widget.ImageView(this).apply {
+                setImageDrawable(lineIcon("back", ink))
+                scaleType = android.widget.ImageView.ScaleType.CENTER
+                setPadding(dp(7), dp(7), dp(7), dp(7))
+                contentDescription = getString(R.string.nav_back)
+                isClickable = true
+                isFocusable = true
+                background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(getColor(R.color.hover)),
+                    null, shape(Color.TRANSPARENT, 0))
+                setOnClickListener { onBackPressed() }
+            }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(6) })
+            wordmark(header)
+        } else wordmark(page)
+        if (headline) text(title, 40).apply {
+            instrumentType(display = true)
             setPadding(0, dp(9), 0, dp(6))
             if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
         }
@@ -174,20 +211,27 @@ class MainActivity : Activity() {
 
     internal fun text(value: String, size: Int = 16, color: Int = if (size <= 14) muted else ink, parent: LinearLayout = page): TextView = TextView(this).apply {
         text = value
-        textSize = size.toFloat()
+        typeSize(size)
+        instrumentType(display = size >= 17)
         setTextColor(color)
         setPadding(0, dp(5), 0, dp(5))
         parent.addView(this, LinearLayout.LayoutParams(-1, -2))
     }
 
-    internal fun button(label: String, primary: Boolean = false, parent: LinearLayout = page,
+    internal fun button(label: String, primary: Boolean = false, parent: LinearLayout = page, look: ActionTone? = null,
                        action: () -> Unit): Button = Button(this).apply {
         text = label
         isAllCaps = false
         minHeight = dp(48)
         minimumWidth = 0
         setPadding(dp(12), dp(10), dp(12), dp(10))
-        styleButton(this, primary)
+        val tone = look ?: when {
+            primary -> ActionTone.PRIMARY
+            label == getString(R.string.home) || label == getString(R.string.cancel) || label == getString(R.string.ui_server_settings) -> ActionTone.TEXT
+            label == getString(R.string.continue_offline) -> ActionTone.TONAL
+            else -> ActionTone.SECONDARY
+        }
+        styleButton(this, primary, tone)
         setOnClickListener { action() }
         parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
     }
@@ -201,6 +245,7 @@ class MainActivity : Activity() {
             inputType = type
             setSingleLine(true)
             setText(value)
+            instrumentType()
             setTextColor(ink)
             setHintTextColor(muted)
             setPadding(dp(12), dp(10), dp(12), dp(10))
@@ -218,8 +263,8 @@ class MainActivity : Activity() {
 
     internal fun login(message: String? = null, showServer: Boolean = false, server: String = base()) {
         layout(getString(R.string.sign_in), "login")
-        hero(R.string.ui_workbench, R.string.privacy)
-        text(getString(R.string.login_intro))
+        page.addView(FlightView(this, null), stage(230))
+        text(getString(R.string.login_intro), 17)
         if (message != null) notice(message, caution = true)
         val email = field(getString(R.string.email), type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
         val password = field(getString(R.string.password), type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
@@ -228,13 +273,17 @@ class MainActivity : Activity() {
         lateinit var url: EditText
         button(getString(R.string.sign_in), primary = true) {
             val address = try { serverUrl(url.text.toString()) } catch (e: IOException) {
-                Toast.makeText(this, errorMessage(e), Toast.LENGTH_LONG).show()
+                connection.visibility = View.VISIBLE
+                url.error = errorMessage(e)
+                url.requestFocus()
                 return@button
             }
             val emailValue = email.text.toString().trim()
             val passwordValue = password.text.toString()
             if (emailValue.isBlank() || passwordValue.isBlank()) {
-                Toast.makeText(this, getString(R.string.credentials_required), Toast.LENGTH_LONG).show()
+                val field = if (emailValue.isBlank()) email else password
+                field.error = getString(if (emailValue.isBlank()) R.string.need_email else R.string.need_password)
+                field.requestFocus()
                 return@button
             }
             password.text.clear()
@@ -251,6 +300,7 @@ class MainActivity : Activity() {
             }, { (newToken, name, id) ->
                 val prior = prefs.getLong("user_id", 0)
                 if (prior != id || base() != address) {
+                    clearFlightMemory()
                     selectedSession = null
                     resultSession = null
                     if (prior != 0L) lastForm = null
@@ -272,10 +322,6 @@ class MainActivity : Activity() {
                 connection.requestRectangleOnScreen(android.graphics.Rect(0, 0, connection.width, connection.height))
             }
         }.apply {
-            val style = android.util.TypedValue()
-            theme.resolveAttribute(android.R.attr.selectableItemBackground, style, true)
-            setBackgroundResource(style.resourceId)
-            setTextColor(green)
             textSize = 14f
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
         }
@@ -284,47 +330,52 @@ class MainActivity : Activity() {
     }
 
     internal fun home(message: String? = null) {
-        layout(getString(R.string.home), "home")
+        layout(getString(R.string.ui_today), "home", headline = false)
         val signedIn = token().isNotEmpty()
         val name = prefs.getString("name", "").orEmpty()
         val day = localDate(todayLocal(), locale)
-        text(if (signedIn) "$day  ·  $name" else day, 14)
+        text(getString(R.string.ui_today) + "  ·  " + (if (signedIn) "$day  ·  $name" else day), 13).apply {
+            setPadding(0, dp(14), 0, 0)
+            if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
+        }
         if (message != null) notice(message, caution = true)
-        val jump = hero(R.string.ui_jump, R.string.ui_jump_intro)
-        selectedSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 14, getColor(R.color.on_hero), jump) }
-        val types = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
+        page.addView(FlightView(this, FlightStrip.read(prefs.getString("flight_strip", null))), stage(340))
+        selectedSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 14, green) }
+        val types = RadioGroup(this).apply {
+            orientation = RadioGroup.HORIZONTAL
+            background = shape(getColor(R.color.hover), 10)
+            setPadding(dp(3), dp(3), dp(3), dp(3))
+        }
         listOf(Triple("cmj", R.string.ui_cmj_short, R.string.cmj),
             Triple("drop_jump", R.string.ui_drop_short, R.string.drop_jump)).forEach { (value, label, fullLabel) ->
             types.addView(RadioButton(this).apply {
                 id = View.generateViewId()
                 text = getString(label)
                 contentDescription = getString(fullLabel)
-                textSize = 13f
-                setTextColor(Color.WHITE)
-                buttonTintList = ColorStateList.valueOf(getColor(R.color.signal))
+                textSize = 14f
                 minHeight = dp(48)
                 isChecked = test == value
                 isEnabled = selectedSession == null
-                setOnClickListener { test = value }
+                segment()
+                setOnClickListener { test = value; prefs.edit().putString("jump_test", value).apply() }
             }, RadioGroup.LayoutParams(0, -2, 1f))
         }
-        jump.addView(types)
-        button(getString(R.string.record), primary = true, parent = jump) { recordJump() }
-        button(getString(R.string.pick_video), parent = jump) {
-            filmingGuide { pickJumpVideo() }
+        page.addView(types, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        button(getString(R.string.ready_record), primary = true) { recordJump(whenReady = true) }.apply { minHeight = dp(56); textSize = 17f }
+        text(getString(R.string.ready_explainer), 13).setPadding(dp(2), dp(8), dp(2), 0)
+        val secondary = row(page)
+        button(getString(R.string.pick_video), parent = secondary) { filmingGuide { pickJumpVideo() } }
+            .apply { layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply { topMargin = dp(10) } }
+        if (!jumpscan.core.FormExercises[formChoice.exercise].experimental || showExperimental) button(getString(R.string.repeat_live, formLabel(formChoice)), parent = secondary, look = ActionTone.TONAL) { openLiveForm(false) }.apply {
+            compoundDrawablePadding = dp(8)
+            setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("form", green), null, null, null)
+            layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply { topMargin = dp(10); marginStart = dp(8) }
         }
-        section(R.string.ui_tools).setPadding(0, dp(14), 0, dp(3))
-        if (signedIn) {
-            tiles(UiTile(R.string.ui_technique, "form") { formHome() }, UiTile(R.string.history, "history") { history() },
-                UiTile(R.string.ui_club, "club") { clubHome() }, UiTile(R.string.checkin_title, "checkin") { checkin() },
-                UiTile(R.string.ui_profile, "profile") { profile() })
-            button(getString(R.string.ui_more)) { more() }
-        } else {
-            tiles(UiTile(R.string.ui_technique, "form") { formHome() }, UiTile(R.string.ui_profile, "profile") { profile() })
-        }
-        if (analysis != null) button(getString(R.string.last_result)) { result() }
+        if (analysis != null) button(getString(R.string.last_result), look = ActionTone.TEXT) { result() }
+        if (signedIn) toolRow(UiTile(R.string.history, "history") { history() }, UiTile(R.string.ui_club, "club") { clubHome() },
+            UiTile(R.string.checkin_title, "checkin") { checkin() }, UiTile(R.string.ui_more, "more") { more() })
         if (signedIn) pendingControls()
-        text(getString(R.string.coach_note), 14).setPadding(0, dp(18), 0, 0)
+        if (!signedIn) text(getString(R.string.coach_note), 13).setPadding(0, dp(18), 0, 0)
     }
 
     private fun more() {
@@ -333,26 +384,51 @@ class MainActivity : Activity() {
         tiles(UiTile(R.string.training_title, "training") { trainingHome() },
             UiTile(R.string.nutrition_title, "food") { nutritionHome() },
             UiTile(R.string.assistant_title, "assistant") { assistantScreen() })
-        button(getString(R.string.home)) { home() }
     }
 
     internal fun profile() {
         layout(getString(R.string.ui_profile), "profile")
-        if (token().isEmpty()) button(getString(R.string.sign_in)) { login() }
-        else {
-            card().also {
-                text(prefs.getString("name", "").orEmpty(), 21, parent = it).setTypeface(null, Typeface.BOLD)
-                text(getString(R.string.server_url), 13, parent = it)
-                text(base(), 14, parent = it)
+        val account = card()
+        val head = row(account, center = true)
+        iconTile("profile", head)
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        head.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
+        if (token().isEmpty()) {
+            text(getString(R.string.not_signed_in), 18, parent = column).apply {
+                instrumentType(display = true); setPadding(0, 0, 0, 0)
             }
+            text(getString(R.string.login_intro), 13, parent = column).setPadding(0, dp(2), 0, 0)
+            button(getString(R.string.sign_in), primary = true, parent = account) { login() }
+        } else {
+            text(prefs.getString("name", "").orEmpty(), 18, parent = column).apply {
+                instrumentType(display = true); setPadding(0, 0, 0, 0)
+            }
+            text(base(), 13, parent = column).setPadding(0, dp(2), 0, 0)
         }
-        button(getString(R.string.diagnostics)) { diagnostics() }
+        val settings = getSharedPreferences("instrument", android.content.Context.MODE_PRIVATE)
+        val options = listOf("dark" to R.string.dark_mode, "light" to R.string.light_mode, "system" to R.string.system_mode)
+        val group = settingsGroup()
+        settingRow("appearance", getString(R.string.appearance),
+            getString(options.first { it.first == settings.getString("appearance", "dark") }.second), group) {
+            appearanceSheet()
+        }
+        divider(group)
+        settingRow("diagnostics", getString(R.string.diagnostics), diagnosticsProgress(), group) { diagnostics() }
         if (token().isNotEmpty()) {
-            pendingControls()
-            button(getString(R.string.ui_change_server)) { leaveProfile(showServer = true) }
-            button(getString(R.string.sign_out)) { leaveProfile(showServer = false) }
+            divider(group)
+            settingRow("server", getString(R.string.server_url), base(), group) { leaveProfile(showServer = true) }
+            divider(group)
+            settingRow("signout", getString(R.string.sign_out), null, group, subtle = true) { leaveProfile(showServer = false) }
         }
-        button(getString(R.string.home)) { home() }
+        if (token().isNotEmpty()) pendingControls()
+    }
+
+    private fun diagnosticsProgress(): String? {
+        val rows = DiagnosticLog(this).read()
+        val jumps = rows.filter { it.completedJump() }.map { it.getInt("trial") }.toSet()
+        val sets = rows.filter { it.completedSquat() && it.has("human_reps") }.map { it.getInt("trial") }.toSet()
+        val done = (jumps + sets).size
+        return if (done > 0) "$done/23" else null
     }
 
     private fun leaveProfile(showServer: Boolean) {
@@ -366,6 +442,7 @@ class MainActivity : Activity() {
     }
 
     private fun signOutLocal() {
+        clearFlightMemory(); showExperimental = false
         prefs.edit().remove("token").remove("name").remove("user_id").apply()
         selectedSession = null
         resultSession = null
@@ -391,19 +468,22 @@ class MainActivity : Activity() {
         layout(getString(R.string.ui_club), "club")
         val host = page
         val day = todayLocal()
-        val actions = card()
-        val checkin = button(getString(R.string.checkin_title), primary = true, parent = actions) { checkin() }
-        val feedback = button(getString(R.string.feedback_title), parent = actions) { feedback() }
-        checkin.isEnabled = token().isNotEmpty()
-        feedback.isEnabled = token().isNotEmpty()
+        var checkin: TextView? = null
+        var feedback: TextView? = null
+        if (token().isNotEmpty()) {
+            val statusGroup = settingsGroup()
+            checkin = statusRow("checkin", getString(R.string.checkin_title), statusGroup) { checkin() }
+            divider(statusGroup)
+            feedback = statusRow("assistant", getString(R.string.feedback_title), statusGroup) { feedback() }
+        }
         val sessions = card()
         section(R.string.sessions_title, sessions)
         val status = text(getString(if (token().isEmpty()) R.string.club_sign_in else R.string.club_loading), 14, parent = sessions)
+        val placeholders = if (token().isNotEmpty()) skeleton(sessions) else null
         selectedSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 14, parent = sessions) }
         if (selectedSession != null) button(getString(R.string.session_clear), parent = sessions) {
             selectedSession = null; clubHome()
         }
-        button(getString(R.string.home)) { home() }
         if (token().isEmpty()) return
         val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
         fun current() = !isDestroyed && page === host && token() == savedToken && base() == savedBase
@@ -412,7 +492,8 @@ class MainActivity : Activity() {
                 val rows = parseSessions(api(savedBase, "/api/sessions?from=${Instant.now()}&limit=5", token = savedToken))
                 runOnUiThread {
                     if (current()) {
-                        status.text = if (rows.isEmpty()) getString(R.string.sessions_empty) else ""
+                        placeholders?.let { sessions.removeView(it) }
+                    status.text = if (rows.isEmpty()) getString(R.string.sessions_empty) else ""
                         selectedSession?.let { chosen ->
                             rows.firstOrNull { it.id == chosen.id }?.let { fresh ->
                                 if (fresh.cancelled) { selectedSession = null; home(); return@runOnUiThread }
@@ -420,28 +501,40 @@ class MainActivity : Activity() {
                             } ?: run { selectedSession = null; home(); return@runOnUiThread }
                         }
                         rows.forEach { session ->
-                            button(sessionLabel(session), parent = sessions) {
+                            button(sessionLabel(session), parent = sessions, look = ActionTone.TONAL) {
                                 selectedSession = session; test = session.test; home()
-                            }.isEnabled = !session.cancelled
+                            }.apply {
+                                isEnabled = !session.cancelled
+                                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                                setPadding(dp(16), dp(12), dp(16), dp(12))
+                                compoundDrawablePadding = dp(12)
+                                setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("club", green), null, null, null)
+                            }
                         }
                     }
                 }
-            } catch (_: Exception) { runOnUiThread { if (current()) status.text = getString(R.string.sessions_offline) } }
+            } catch (_: Exception) { runOnUiThread { if (current()) { placeholders?.let { sessions.removeView(it) }; status.text = getString(R.string.sessions_offline) } } }
         }
         clubExecutor.submit {
             val queued = synchronized(uploadLock) { runCatching { pending().checkin(day) }.getOrNull() }
             val done = if (queued != null) true else runCatching {
                 JSONArray(api(savedBase, "/api/checkins?athlete_id=$owner&from=$day&to=$day", token = savedToken)).length() > 0
             }.getOrNull()
-            runOnUiThread { if (current()) checkin.text = getString(when {
-                queued != null -> R.string.checkin_pending
-                done == true -> R.string.checkin_done
-                done == false -> R.string.checkin_not_done
-                else -> R.string.checkin_unknown
-            }) }
+            runOnUiThread { if (current()) {
+                checkin?.text = getString(when {
+                    queued != null -> R.string.checkin_pending
+                    done == true -> R.string.checkin_done
+                    done == false -> R.string.checkin_not_done
+                    else -> R.string.checkin_unknown
+                })
+                checkin?.visibility = View.VISIBLE
+            } }
             val unread = runCatching { JSONObject(api(savedBase, "/api/me/unread", token = savedToken)).getInt("comments") }.getOrNull()
-            runOnUiThread { if (current()) feedback.text = if (unread == null) getString(R.string.feedback_unknown)
-                else getString(R.string.feedback_unread, unread) }
+            runOnUiThread { if (current()) {
+                feedback?.text = if (unread == null) getString(R.string.feedback_unknown)
+                    else getString(R.string.feedback_unread, unread)
+                feedback?.visibility = View.VISIBLE
+            } }
         }
     }
 
@@ -471,6 +564,7 @@ class MainActivity : Activity() {
                     id = View.generateViewId(); text = score.toString(); tag = score
                     setTextColor(ink); buttonTintList = ColorStateList.valueOf(green)
                     minHeight = dp(48); setPadding(0, 0, 0, 0)
+                    segment()
                     contentDescription = getString(label) + ": " + score
                     isChecked = score == (saved?.optInt(keys[index], 3) ?: 3)
                 }, RadioGroup.LayoutParams(0, -2, 1f))
@@ -490,7 +584,7 @@ class MainActivity : Activity() {
                     group.findViewById<RadioButton>(id).tag as Int
                 },
                 minutes.text.toString(), rpe.text.toString()) } catch (e: AppError) {
-                Toast.makeText(this, errorMessage(e), Toast.LENGTH_LONG).show(); return@button
+                snack(errorMessage(e)); return@button
             }
             val queue = pending(); val savedToken = token(); val savedBase = base()
             work(getString(R.string.checkin_saving), {
@@ -505,10 +599,9 @@ class MainActivity : Activity() {
                 }
             }, {
                 home()
-                Toast.makeText(this, getString(R.string.checkin_saved), Toast.LENGTH_LONG).show()
+                snack(getString(R.string.checkin_saved))
             }, { checkinForm(day, body, getString(R.string.checkin_queued) + "\n" + it) })
         }
-        button(getString(R.string.home)) { home() }
     }
 
     private fun feedback(offset: Int = 0) {
@@ -541,7 +634,6 @@ class MainActivity : Activity() {
                 api(savedBase, "/api/comments", "POST", savedToken, JSONObject().put("athlete_id", owner).put("body", body))
             }, { feedback() }, { feedbackForm(rows, offset, body, it) })
         }
-        button(getString(R.string.home)) { home() }
         for (comment in rows) {
             text(getString(R.string.feedback_author, comment.authorName, getString(when (comment.authorRole) {
                 "coach" -> R.string.role_coach
@@ -557,8 +649,8 @@ class MainActivity : Activity() {
         if (offset > 0) button(getString(R.string.feedback_newest)) { feedback() }
     }
 
-    private fun recordJump() {
-        launchVideo(Intent(this, JumpCaptureActivity::class.java).putExtra("test", test), 10)
+    private fun recordJump(whenReady: Boolean = false) {
+        launchVideo(Intent(this, JumpCaptureActivity::class.java).putExtra("test", test).putExtra("when_ready", whenReady), 10)
     }
 
     private fun pickJumpVideo() {
@@ -635,11 +727,11 @@ class MainActivity : Activity() {
 
     private fun startRecordedForm(uri: Uri, choice: FormChoice, trial: PhoneTrial? = null) {
         val expectedGeneration = generation + 1
-        work(getString(R.string.analysing), { analyzeFormVideo(this, uri, choice, trial) { value ->
+        val scan = LiveFormPreview(this)
+        work(getString(R.string.analysing), { analyzeFormVideo(this, uri, choice, trial, scanFeed(scan, expectedGeneration)) { value ->
             runOnUiThread {
                 if (!isDestroyed && generation == expectedGeneration) {
-                    progress?.isIndeterminate = false
-                    progress?.progress = value
+                    progress?.show(value)
                     progressText?.text = getString(R.string.progress, value)
                 }
             }
@@ -647,7 +739,13 @@ class MainActivity : Activity() {
             val result = FormResult(JSONObject(metrics.toJson()))
             lastForm = result
             if (trial != null) diagnostics() else formResult(result.metrics, result)
-        }, { if (trial != null) diagnostics(it) else formHome(it) }, phoneTest = trial != null)
+        }, { if (trial != null) diagnostics(it) else formHome(it) }, phoneTest = trial != null, scan = scan)
+    }
+
+    private fun scanFeed(view: LiveFormPreview, ticket: Int): (android.graphics.Bitmap, jumpscan.core.Frame, Float) -> Unit = { image, frame, fraction ->
+        runOnUiThread { if (generation == ticket && !isDestroyed && view.isAttachedToWindow) {
+            view.scanFraction = fraction; view.jointColor = getColor(R.color.signal); view.show(image, frame, false)
+        } else image.recycle() }
     }
 
     private fun startAnalysis(uri: Uri, mode: String = "full", trial: PhoneTrial? = null, captureFps: Int? = null) {
@@ -659,25 +757,65 @@ class MainActivity : Activity() {
         resultSession = if (trial == null) selectedSession else null
         val expectedGeneration = generation + 1
         val jumpTest = if (trial == null) test else "cmj"
-        work(getString(R.string.analysing), { analyzeVideo(this, uri, jumpTest, mode, trial, captureFps) { value ->
+        val scan = LiveFormPreview(this)
+        work(getString(R.string.analysing), { analyzeVideo(this, uri, jumpTest, mode, trial, captureFps, scanFeed(scan, expectedGeneration)) { value ->
             runOnUiThread {
                 if (screen == "busy" && !isDestroyed && generation == expectedGeneration) {
-                    progress?.isIndeterminate = false
-                    progress?.progress = value
+                    progress?.show(value)
                     progressText?.text = getString(R.string.progress, value)
                 }
             }
-        } }, { analysis = it; if (trial == null) result() else diagnostics() },
-            { if (trial == null) home(it) else diagnostics(it) }, phoneTest = trial != null)
-        progress?.isIndeterminate = false
+        } }, { analysis = it; if (trial == null) {
+            rememberFlight(it)
+            if (it.launchImage != null && it.contactFound && android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                val at = page.indexOfChild(scan); page.removeView(scan)
+                edgePair(it, page, 330)?.let { strip -> page.removeView(strip); page.addView(strip, at.coerceAtLeast(0)) }
+                page.postDelayed({ if (generation == expectedGeneration && screen == "busy" && !isDestroyed) result() }, 750)
+            } else result()
+        } else diagnostics() }, { if (trial == null) home(it) else diagnostics(it) }, phoneTest = trial != null, scan = scan)
         text(getString(R.string.first_ten), 14)
+    }
+
+    private fun clearFlightMemory() {
+        prefs.edit().remove("flight_strip").remove("flight_cmj").remove("flight_drop_jump").apply()
+    }
+
+    private fun localHeights(test: String): List<Double> = prefs.getString("flight_$test", "").orEmpty().split(',').mapNotNull { it.toDoubleOrNull() }
+
+    private fun rememberFlight(run: Analysis, replace: Boolean = false) {
+        FlightStrip.from(run)?.let {
+            val heights = localHeights(run.metrics.test)
+            prefs.edit().putString("flight_strip", it.encode()).putString("flight_${run.metrics.test}",
+                ((if (replace && heights.isNotEmpty()) heights.dropLast(1) else heights) + it.heightCm).takeLast(7).joinToString(",")).apply()
+        }
+    }
+
+    private fun edgePair(run: Analysis, parent: LinearLayout, tall: Int = 94): LinearLayout? {
+        val launch = run.launchImage ?: return null
+        val strip = row(parent)
+        listOf(Triple(launch, R.string.flight_takeoff, run.landing.takeoffMs), Triple(run.preview, R.string.landing_frame, run.landing.contactMs)).forEachIndexed { index, (image, name, time) ->
+            val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; strip.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
+            cell.addView(ImageView(this).apply { setImageBitmap(image); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(-1, dp(tall)))
+            text(getString(name), 13, getColor(R.color.ink), cell).setPadding(0, dp(8), 0, 0)
+            text(time.toString() + " " + getString(R.string.ui_ms), 13, parent = cell).apply { instrumentType(numeric = true); setPadding(0, 0, 0, 0) }; cell.arrive(index*75L)
+            if (tall > 94 && android.animation.ValueAnimator.areAnimatorsEnabled()) cell.apply { scaleX = 1.06f; scaleY = 1.06f; animate().scaleX(1f).scaleY(1f).setStartDelay(index * 120L).setDuration(260).setInterpolator(settle).start() }
+        }
+        return strip
     }
 
     private fun result(message: String? = null) {
         val current = analysis ?: return home()
-        layout(getString(R.string.result), "result")
+        layout(getString(R.string.result), "result", headline = false)
+        text(getString(R.string.result), 13).apply { setPadding(0, dp(12), 0, 0); if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true }
         val metrics = JSONObject(current.metrics.toJson())
         val hasFlight = hasFlight(metrics)
+        val kind = getString(if (current.metrics.test == "cmj") R.string.cmj else R.string.drop_jump)
+        val side = "single_leg_view" in current.metrics.warnings
+        val band = 9.81 / 4 * metrics.optDouble("flight_time_ms", 0.0) / 1000 * (if (side) .0879 else .0321) * 100
+        val stage = if (!hasFlight) null else FlightStrip.from(current)?.let {
+            FlightView(this, it, localHeights(current.metrics.test).dropLast(1), band.takeIf { b -> b.isFinite() && b > 0 }, kind)
+                .also { view -> page.addView(view, stage(380)) }
+        }
         if (!hasFlight) {
             notice(getString(R.string.no_flight_help), caution = true)
             if (uploadedId == null && queuedId == null) {
@@ -689,11 +827,12 @@ class MainActivity : Activity() {
                 recordJump()
             }
         }
-        text(if (current.metrics.test == "cmj") getString(R.string.cmj) else getString(R.string.drop_jump), 14)
+        if (stage == null) text(kind, 14)
+        if (current.contactFound) edgePair(current, page, 150)
         if (hasFlight) {
+            jumpHighlights(metrics, uploadedId, clientId, localHeights(current.metrics.test).dropLast(1), stage)
             metricWarnings(metrics)
             if (uploadedId == null && queuedId == null) button(getString(R.string.check_frames)) { editFrames(current) }
-            jumpHighlights(metrics, uploadedId, clientId)
         }
         if (message != null) notice(message, caution = true)
         resultSession?.let { text(getString(R.string.chosen_session, sessionLabel(it)), 16, green) }
@@ -717,7 +856,8 @@ class MainActivity : Activity() {
         for ((label, color) in listOf(R.string.left_blue to LEFT_COLOR, R.string.right_orange to RIGHT_COLOR)) {
             legend.addView(TextView(this).apply {
                 text = getString(label); textSize = 14f
-                setTextColor(if (color == LEFT_COLOR) Color.rgb(0, 78, 162) else Color.rgb(139, 76, 0))
+                setTextColor(ink)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("index", color), null, null, null)
                 setPadding(0, dp(8), dp(16), dp(8))
             })
         }
@@ -753,7 +893,6 @@ class MainActivity : Activity() {
         }
         pendingControls()
         if (token().isNotEmpty()) button(getString(R.string.history)) { history() }
-        button(getString(R.string.home)) { home() }
         text(getString(R.string.no_video_upload), 13)
     }
 
@@ -787,13 +926,13 @@ class MainActivity : Activity() {
             contentDescription = getString(R.string.skeleton_description)
         }
         page.addView(image, LinearLayout.LayoutParams(-1, dp(230)))
-        val timestamp = text("", 18)
+        val timestamp = text("", 18).apply { instrumentType(numeric = true) }
         timestamp.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         val loading = text("", 14)
         val steps = LinearLayout(this)
         page.addView(steps)
         val stepButtons = mutableListOf<Pair<Int, Button>>()
-        val edges = text(edgeTimes(selection.takeoffMs, selection.landingMs), 16)
+        val edges = text(edgeTimes(selection.takeoffMs, selection.landingMs), 16).apply { instrumentType(numeric = true) }
         val flight = text("", 16)
         flight.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         lateinit var apply: Button
@@ -819,6 +958,7 @@ class MainActivity : Activity() {
                 catch (_: IllegalArgumentException) { throw AppError(R.string.manual_analysis_error) }
             }, {
                 analysis = it
+                    rememberFlight(it, replace = current.metrics.jumpHeightCm != null)
                 edits = null
                 uploadedId = null
                 queuedId = null
@@ -873,7 +1013,7 @@ class MainActivity : Activity() {
     internal fun pendingControls() {
         val count = if (token().isNotEmpty()) pending().count() else
             pendingRoot.walkTopDown().count { it.isFile && it.name.endsWith(".json") }
-        text(getString(R.string.pending_count, count), 14).setPadding(0, dp(18), 0, dp(8))
+        if (count > 0) text(getString(R.string.pending_count, count), 14).setPadding(0, dp(18), 0, dp(8))
         if (token().isNotEmpty()) {
             val rejected = pending().rejectedCount()
             if (rejected > 0) text(getString(R.string.pending_rejected, rejected), 14, warning)
@@ -962,8 +1102,8 @@ class MainActivity : Activity() {
                         if (screen == "result") result() else if (screen == "home") home() else if (screen == "profile") profile()
                         else if (screen == "form_result") lastForm?.let { formResult(it.metrics, it) }
                         if (error != null && error !is InterruptedException) {
-                            Toast.makeText(this, errorMessage(error!!), Toast.LENGTH_LONG).show()
-                        } else if (!automatic) Toast.makeText(this, getString(R.string.pending_sent), Toast.LENGTH_LONG).show()
+                            snack(errorMessage(error!!))
+                        } else if (!automatic) snack(getString(R.string.pending_sent))
                     }
                 }
             }
@@ -975,7 +1115,7 @@ class MainActivity : Activity() {
             (0 until warnings.length()).none { warnings.optString(it) == "no_flight_detected" }
         } != false
 
-    private fun jumpHighlights(json: JSONObject, beforeId: Long? = null, excludeClient: String? = null) {
+    private fun jumpHighlights(json: JSONObject, beforeId: Long? = null, excludeClient: String? = null, previous: List<Double> = emptyList(), stage: FlightView? = null) {
         val highlights = listOf(
             JumpHighlight("jump_height_cm", R.string.ui_height, R.string.jump_height_meaning, getString(R.string.ui_cm)),
             JumpHighlight("flight_time_ms", R.string.ui_flight, R.string.jump_flight_meaning, getString(R.string.ui_ms)),
@@ -991,14 +1131,17 @@ class MainActivity : Activity() {
         val errorMs = if (side) 87.9 else 32.1
         val durationMs = json.optDouble("flight_time_ms")
         val textLocale = resources.configuration.locales[0]
+        val ruler: ((Double?) -> Unit)? = stage?.let { it::baseline } ?: if (json.isNull("jump_height_cm")) null
+            else HeightRule(this, json, previous).also { host.addView(it, LinearLayout.LayoutParams(-1, dp(138))) }::baseline
         if (listOf("knee_flexion_contact_l", "knee_flexion_contact_r").any { json.optDouble(it) >= 30 }) {
             notice(getString(R.string.jump_bent_landing), caution = true)
         }
         section(R.string.jump_comparison, host)
-        text(getString(if (side) R.string.jump_error_side else R.string.jump_error_front), 14, parent = host)
         text(getString(if (auth.isEmpty()) R.string.jump_baseline_sign_in else R.string.jump_baseline_info), 14, parent = host)
-        val comparisons = highlights.associateWith { metric ->
-            val panel = stat(getString(metric.label), number(json, metric.key), metric.unit, host)
+        val readout = settingsGroup(host)
+        for ((index, metric) in highlights.filterNot { it.key == "jump_height_cm" }.withIndex()) {
+            if (index > 0) divider(readout, inset = false)
+            val panel = readoutRow(getString(metric.label), number(json, metric.key), metric.unit, readout)
             val band = when (metric.key) {
                 "flight_time_ms" -> errorMs
                 "jump_height_cm" -> 9.81 / 4 * (durationMs / 1000) * (errorMs / 1000) * 100
@@ -1007,41 +1150,63 @@ class MainActivity : Activity() {
             if (band != null && band.isFinite()) {
                 text(getString(R.string.jump_error_band, String.format(textLocale, "%.1f", band), metric.unit), 14, parent = panel)
             }
-            val comparison = text(getString(if (auth.isEmpty()) R.string.jump_baseline_offline else R.string.jump_baseline_loading),
-                14, parent = panel)
             text(getString(metric.meaning), 14, parent = panel)
-            comparison
         }
+        text(getString(if (side) R.string.jump_error_side else R.string.jump_error_front), 14, parent = host)
         if (auth.isEmpty()) return
+        val panel = card()
+        section(R.string.jump_vs_baseline, panel)
+        val status = text(getString(R.string.jump_baseline_loading), 14, parent = panel)
+        val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        panel.addView(rows)
+        val retry = button(getString(R.string.retry), parent = panel) { }.apply {
+            styleButton(this, false, ActionTone.TONAL)
+            textSize = 14f
+            visibility = View.GONE
+        }
         val path = buildString {
             append("/api/jumps/baseline?test=").append(if (json.optString("test") == "cmj") "cmj" else "drop_jump")
             beforeId?.let { append("&before_id=").append(it) }
             excludeClient?.let { append("&exclude_client_id=").append(Uri.encode(it)) }
         }
-        clubExecutor.submit {
-            val baseline = runCatching { JSONObject(api(address, path, token = auth)) }.getOrNull()
-            runOnUiThread {
-                if (host !== page || auth != token() || address != base()) return@runOnUiThread
-                for ((metric, caption) in comparisons) {
-                    caption.text = when {
-                        baseline == null -> getString(R.string.jump_baseline_unavailable)
-                        baseline.isNull(metric.key) -> getString(R.string.jump_baseline_pending)
-                        else -> {
-                            val change = json.getDouble(metric.key) - baseline.getDouble(metric.key)
-                            val value = metricNumber(kotlin.math.abs(change), metric.key, locale)
-                            val unit = if (metric.unit == "%") getString(R.string.jump_percentage_points) else metric.unit
-                            val comparison = when {
-                                value == metricNumber(0.0, metric.key, locale) -> getString(R.string.jump_baseline_equal)
-                                change > 0 -> getString(R.string.jump_baseline_higher, value, unit)
-                                else -> getString(R.string.jump_baseline_lower, value, unit)
+        fun loadBaseline() {
+            status.visibility = View.VISIBLE
+            status.text = getString(R.string.jump_baseline_loading)
+            rows.removeAllViews()
+            retry.visibility = View.GONE
+            clubExecutor.submit {
+                val baseline = runCatching { JSONObject(api(address, path, token = auth)) }.getOrNull()
+                runOnUiThread {
+                    if (host !== page || auth != token() || address != base()) return@runOnUiThread
+                    if (baseline == null) {
+                        status.text = getString(R.string.jump_baseline_unavailable)
+                        retry.visibility = View.VISIBLE
+                    } else {
+                        status.visibility = View.GONE
+                        ruler?.invoke(baseline.optDouble("jump_height_cm"))
+                        for (metric in highlights) {
+                            val caption = when {
+                                baseline.isNull(metric.key) -> getString(R.string.jump_baseline_pending)
+                                else -> {
+                                    val change = json.getDouble(metric.key) - baseline.getDouble(metric.key)
+                                    val value = metricNumber(kotlin.math.abs(change), metric.key, locale)
+                                    val unit = if (metric.unit == "%") getString(R.string.jump_percentage_points) else metric.unit
+                                    when {
+                                        value == metricNumber(0.0, metric.key, locale) -> getString(R.string.jump_baseline_equal)
+                                        change > 0 -> getString(R.string.jump_baseline_higher, value, unit)
+                                        else -> getString(R.string.jump_baseline_lower, value, unit)
+                                    }
+                                }
                             }
-                            val reference = metricNumber(baseline.getDouble(metric.key), metric.key, locale)
-                            getString(R.string.jump_baseline_value, reference, metric.unit, comparison)
+                            text(getString(R.string.feature_value, getString(metric.label), caption), 14, parent = rows)
+                                .setPadding(0, dp(2), 0, dp(2))
                         }
                     }
                 }
             }
         }
+        retry.setOnClickListener { loadBaseline() }
+        loadBaseline()
     }
 
     private data class JumpHighlight(val key: String, val label: Int, val meaning: Int, val unit: String)
@@ -1102,25 +1267,46 @@ class MainActivity : Activity() {
         work(getString(R.string.loading_history), { JSONArray(api(savedBase, "/api/jumps", token = savedToken)) }, { rows ->
             layout(getString(R.string.ui_jump_history), "history")
             text(getString(R.string.history_summary, rows.length()), 14)
-            button(getString(R.string.home)) { home() }
-            button(getString(R.string.ui_form_history)) { techniqueHistory() }
-            if (rows.length() == 0) notice(getString(R.string.empty_history))
+            if (rows.length() == 0) {
+                notice(getString(R.string.empty_history))
+                button(getString(R.string.record), primary = true) { recordJump() }
+            }
+            val pastByTest = mutableMapOf<String, MutableList<Double>>()
+            val priorHeights = Array(rows.length()) { emptyList<Double>() }
+            val startingHeights = arrayOfNulls<Double>(rows.length())
+            for (index in rows.length()-1 downTo 0) {
+                val item = rows.getJSONObject(index); val metrics = item.optJSONObject("metrics") ?: item
+                val heights = pastByTest.getOrPut(metrics.getString("test")) { mutableListOf() }
+                priorHeights[index] = heights.takeLast(6)
+                if (rows.length() < 100 && heights.size >= 3) startingHeights[index] = heights.take(3).sorted()[1]
+                if (hasFlight(metrics)) metrics.optDouble("jump_height_cm").takeIf { it.isFinite() }?.let(heights::add)
+            }
+            rows.objects().firstOrNull()?.let { newest -> (newest.optJSONObject("metrics") ?: newest).getString("test") }?.let { kind ->
+                heightTrace(rows.objects().asReversed().mapNotNull { item ->
+                    val metrics = item.optJSONObject("metrics") ?: item
+                    metrics.optDouble("jump_height_cm").takeIf { metrics.getString("test") == kind && hasFlight(metrics) && it.isFinite() }?.let { item.getLong("id") to it }
+                }, getString(if (kind == "cmj") R.string.cmj else R.string.drop_jump), startingHeights[0]?.takeIf { (rows.getJSONObject(0).optJSONObject("metrics") ?: rows.getJSONObject(0)).getString("test") == kind })
+            }
+            button(getString(R.string.ui_form_history), look = ActionTone.TEXT) { techniqueHistory() }.apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
             for (i in 0 until rows.length()) {
                 val item = rows.getJSONObject(i)
                 // The API returns metadata and metric fields in the same object.
                 val metrics = item.optJSONObject("metrics") ?: item
-                val panel = card()
-                text(getString(R.string.history_item, item.getLong("id"), localDateTime(item.getString("created_at"), locale)), 16, green, panel)
+                if (i == 0) divider(page, inset = false)
+                val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(14), 0, dp(14)) }; page.addView(panel)
                 val hasFlight = hasFlight(metrics)
-                text(getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump), 14, parent = panel)
-                if (!hasFlight) text(getString(R.string.no_flight_detected), 14, parent = panel)
+                text(getString(R.string.history_item, item.getLong("id"), localDateTime(item.getString("created_at"), locale)) + "  ·  " +
+                    getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump), 13, parent = panel)
+                if (!hasFlight) text(getString(R.string.no_flight_detected), 16, parent = panel)
                 else if (!metrics.isNull("jump_height_cm")) {
-                    text(getString(R.string.jump_history_height, number(metrics, "jump_height_cm")), 14, parent = panel)
+                    panel.addView(HeightRule(this, metrics, priorHeights[i]).apply { baseline(startingHeights[i]) }, LinearLayout.LayoutParams(-1, dp(138)))
                 }
-                button(getString(R.string.view_jump, item.getLong("id")), parent = panel) {
+                divider(page, inset = false)
+                panel.isFocusable = true; panel.pressFeedback()
+                panel.setOnClickListener {
                     layout(getString(R.string.jump_title, item.getLong("id")), "history_detail")
                     if (hasFlight) {
-                        jumpHighlights(metrics, item.getLong("id"))
+                        jumpHighlights(metrics, item.getLong("id"), previous = priorHeights[i])
                         metricWarnings(metrics)
                         metricRows(metrics)
                     } else {
@@ -1131,27 +1317,21 @@ class MainActivity : Activity() {
                             recordJump()
                         }
                     }
-                    button(getString(R.string.history)) { history() }
-                    button(getString(R.string.home)) { home() }
                 }
             }
         }, { home(it) })
     }
 
     internal fun <T> work(title: String, action: () -> T, success: (T) -> Unit, failure: (String) -> Unit,
-        phoneTest: Boolean = false) {
+        phoneTest: Boolean = false, scan: LiveFormPreview? = null) {
         task?.cancel(true)
         val currentGeneration = ++generation
         layout(title, "busy")
         guiding = phoneTest
-        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
-            isIndeterminate = true
-            progressTintList = ColorStateList.valueOf(green)
-            indeterminateTintList = ColorStateList.valueOf(green)
-            page.addView(this, LinearLayout.LayoutParams(-1, dp(16)))
-        }
-        progressText = text(getString(R.string.please_wait), 14)
+        val stage = if (scan != null) page else card()
+        if (scan != null) stage.addView(scan, stage(430))
+        else progress = Dial(this).also { stage.addView(it, LinearLayout.LayoutParams(-1, dp(136))) }
+        progressText = text(getString(R.string.please_wait), 14, parent = stage).apply { gravity = Gravity.CENTER }
         button(getString(R.string.cancel)) { leaveWork() }
         task = executor.submit {
             try {
@@ -1198,6 +1378,11 @@ class MainActivity : Activity() {
             "diagnostics" -> profile()
             "frames" -> { cancelWork(); edits = null; result() }
             "login" -> if (analysis != null) result() else super.onBackPressed()
+            "checkin", "feedback" -> clubHome()
+            "history_detail" -> history()
+            "technique_history" -> formHome()
+            "technique_detail" -> techniqueHistory()
+            "form_video", "form_detail", "form_result" -> formHome()
             else -> home()
         }
     }

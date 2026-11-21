@@ -154,3 +154,7 @@ Questions a jury or the organisers could ask, which only the author can answer:
   opentelemetry-api.
 - Open for the author: the nutrition method's origin (section 7), and "GPL-3.0-or-later" versus the
   wording he signs in Appendix 4.
+# Interface fonts
+
+The Android app and dashboard bundle Space Grotesk (regular and bold) and JetBrains Mono (regular), licensed under the SIL Open Font License 1.1. The complete copyright notices and licenses accompany the Android assets in `app/src/main/assets/licenses/` and the self-hosted web fonts in `server/static/fonts/`.
+

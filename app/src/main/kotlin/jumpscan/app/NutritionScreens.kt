@@ -20,14 +20,13 @@ internal fun MainActivity.goalName(goal: String) = getString(when (goal) {
 internal fun MainActivity.nutritionHome(day: String = todayLocal(), message: String? = null) {
     layout(getString(R.string.nutrition_title), "nutrition")
     if (message != null) notice(message)
-    val panel = hero(R.string.nutr_summary, R.string.ui_food_intro, localDate(day, locale))
+    val panel = hero(localDate(day, locale), getString(R.string.ui_food_intro))
     button(getString(R.string.nutr_summary), primary = true, parent = panel) { diary(day) }
     tiles(UiTile(R.string.nutr_food, "food") { foods(day) }, UiTile(R.string.nutr_weight, "history") { weight(day) },
         UiTile(R.string.nutr_program, "training") { nutritionProgram(day) })
     text(getString(R.string.feature_day), 14).setPadding(0, dp(14), 0, 0)
     dayPicker(day) { nutritionHome(it) }
     pendingControls()
-    button(getString(R.string.home)) { home() }
 }
 
 private fun MainActivity.foodName(food: JSONObject): String =
@@ -47,7 +46,12 @@ private fun MainActivity.foods(day: String, query: String = "", rows: List<JSONO
     }
     button(getString(R.string.nutr_search), primary = true) { load(search.value()) }
     if (rows?.isEmpty() == true) text(getString(R.string.nutr_no_foods), 14)
-    for (food in rows.orEmpty()) button(foodName(food)) { foodLog(day, food) { foods(day, query, rows, offset, it) } }
+    for (food in rows.orEmpty()) button(foodName(food), look = ActionTone.TEXT) { foodLog(day, food) { foods(day, query, rows, offset, it) } }.apply {
+        gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+        setTextColor(getColor(R.color.ink)); typeface = resources.getFont(R.font.spacegrotesk_regular)
+        (layoutParams as android.widget.LinearLayout.LayoutParams).topMargin = 0
+        divider(page, inset = false)
+    }
     if (offset > 0) button(getString(R.string.feature_previous)) { load(query, offset - 20) }
     if (rows?.size == 20) button(getString(R.string.feature_more)) { load(query, offset + 20) }
     button(getString(R.string.nutrition_title)) { nutritionHome(day) }
@@ -62,19 +66,23 @@ private fun MainActivity.foodLog(day: String, food: JSONObject, message: String?
     val grams = decimalField(R.string.nutr_grams, gramsText)
     text(getString(R.string.nutr_meal), 14)
     var selected = meal
-    val choices = meals.map { (key, label) ->
-        android.widget.RadioButton(this).apply {
+    val group = android.widget.RadioGroup(this).apply {
+        orientation = android.widget.RadioGroup.HORIZONTAL
+        background = shape(getColor(R.color.hover), 10)
+        setPadding(dp(3), dp(3), dp(3), dp(3))
+    }
+    page.addView(group)
+    meals.forEach { (key, label) ->
+        group.addView(android.widget.RadioButton(this).apply {
             id = android.view.View.generateViewId()
             text = getString(label)
-            buttonTintList = android.content.res.ColorStateList.valueOf(green)
-            minHeight = dp(48)
+            textSize = 13f
+            maxLines = 1
+            segment()
             setOnClickListener { selected = key }
-        }
+        }, android.widget.RadioGroup.LayoutParams(0, -2, 1f))
     }
-    page.addView(android.widget.RadioGroup(this).apply {
-        choices.forEach { addView(it) }
-        check(choices[meals.keys.indexOf(meal)].id)
-    })
+    group.check(group.getChildAt(meals.keys.indexOf(meal)).id)
     button(getString(R.string.nutr_food_save), primary = true) {
         val value = decimal(grams.value())
         if (value == null || value <= 0 || value > 5000) grams.error = getString(R.string.nutr_invalid_grams)

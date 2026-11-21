@@ -1,14 +1,9 @@
 package jumpscan.app
 
 import android.content.Context
+import android.graphics.Color
+import android.view.View
 import android.content.res.ColorStateList
-import android.graphics.Canvas
-import android.graphics.ColorFilter
-import android.graphics.Paint
-import android.graphics.PixelFormat
-import android.graphics.RectF
-import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.graphics.drawable.StateListDrawable
@@ -26,34 +21,79 @@ internal fun Context.shape(fill: Int, radius: Int, border: Int? = null) = Gradie
     border?.let { setStroke(px(1), it) }
 }
 
-/** The one button style: accent fill for the primary action, outlined surface otherwise. */
-internal fun Context.styleButton(button: Button, primary: Boolean) = button.apply {
-    setTypeface(null, Typeface.BOLD)
+internal enum class ActionTone { PRIMARY, SECONDARY, TONAL, TEXT }
+
+internal fun Context.styleButton(button: Button, primary: Boolean, tone: ActionTone = if (primary) ActionTone.PRIMARY else ActionTone.SECONDARY) = button.apply {
+    instrumentType(display = true)
+    val foreground = when (tone) {
+        ActionTone.PRIMARY -> R.color.on_action
+        ActionTone.SECONDARY -> R.color.ink
+        else -> R.color.accent
+    }
+    val normal = when (tone) {
+        ActionTone.PRIMARY -> getColor(R.color.signal)
+        ActionTone.TEXT -> Color.TRANSPARENT
+        ActionTone.TONAL -> getColor(R.color.tonal)
+        ActionTone.SECONDARY -> getColor(R.color.hover)
+    }
     setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
-        intArrayOf(getColor(R.color.muted), getColor(if (primary) R.color.hero else R.color.ink))))
-    fun fill(color: Int) = shape(color, 14, if (primary) color else getColor(R.color.line))
+        intArrayOf(getColor(R.color.muted), getColor(foreground))))
+    fun fill(color: Int) = shape(color, 10)
     val states = StateListDrawable().apply {
         addState(intArrayOf(-android.R.attr.state_enabled), fill(getColor(R.color.hover)))
-        addState(intArrayOf(android.R.attr.state_focused), shape(getColor(R.color.hover), 14, getColor(R.color.accent)))
-        addState(intArrayOf(), fill(getColor(if (primary) R.color.signal else R.color.surface)))
+        addState(intArrayOf(android.R.attr.state_focused), shape(normal, 10, getColor(if (primary) R.color.ink else R.color.accent)))
+        addState(intArrayOf(), fill(normal))
     }
     backgroundTintList = null
-    background = RippleDrawable(ColorStateList.valueOf(getColor(if (primary) R.color.accent_pressed else R.color.hover)),
+    background = RippleDrawable(ColorStateList.valueOf(getColor(R.color.accent_pressed)),
         states, null)
+    isAllCaps = false
+    minHeight = resources.getDimensionPixelSize(R.dimen.touch_target)
+    textSize = 15f
     stateListAnimator = null
+    pressFeedback()
+}
+
+internal fun MainActivity.skeleton(parent: LinearLayout) = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+    for (width in listOf(172, 108)) addView(View(context).apply { background = shape(getColor(R.color.hover), 4) },
+        LinearLayout.LayoutParams(dp(width), dp(7)).apply { topMargin = dp(7) })
+    parent.addView(this)
+}
+
+internal fun MainActivity.snack(message: String) {
+    val shell = (page.parent as? android.widget.ScrollView)?.parent as? LinearLayout ?: return
+    shell.findViewWithTag<View>("message")?.let { shell.removeView(it) }
+    val messageView = TextView(this).apply {
+        tag = "message"
+        text = message
+        instrumentType()
+        textSize = 15f
+        setPadding(dp(16), dp(12), dp(16), dp(12))
+        background = shape(getColor(R.color.hero), 10)
+        setTextColor(getColor(R.color.on_hero))
+        accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+    }
+    shell.addView(messageView, 1, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(12), 0, dp(12), dp(8)) })
+    messageView.arrive()
+    val timeout = if (android.os.Build.VERSION.SDK_INT >= 29) getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+        .getRecommendedTimeoutMillis(4500, android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT) else 4500
+    messageView.postDelayed({ shell.removeView(messageView) }, timeout.toLong())
 }
 
 internal fun MainActivity.card(parent: LinearLayout = page, hero: Boolean = false): LinearLayout = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
-    val pad = dp(if (hero) 20 else 16)
+    val pad = resources.getDimensionPixelSize(if (hero) R.dimen.space_feature else R.dimen.space_panel)
     setPadding(pad, pad, pad, pad)
-    background = if (hero) TrackCard(getColor(R.color.hero), dp(24).toFloat()) else
-        shape(getColor(R.color.surface), 20, getColor(R.color.line))
-    parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+    background = raisedSurface(hero)
+    elevation = resources.getDimension(if (hero) R.dimen.lift_feature else R.dimen.lift_panel)
+    if (parent === page && parent.childCount < 9) arrive((parent.childCount * 18L).coerceAtMost(90))
+    parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = resources.getDimensionPixelSize(R.dimen.space_gap) })
 }
 
 internal fun MainActivity.section(label: Int, parent: LinearLayout = page) = text(getString(label), 20, parent = parent).apply {
-    typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+    instrumentType(display = true)
     if (android.os.Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
 }
 
@@ -63,7 +103,7 @@ internal fun MainActivity.hero(title: Int, subtitle: Int, eyebrow: String? = nul
 internal fun MainActivity.hero(title: String, subtitle: String, eyebrow: String? = null): LinearLayout = card(hero = true).also { panel ->
     val signal = getColor(R.color.signal)
     if (eyebrow != null) text(eyebrow, 12, signal, panel).apply { letterSpacing = .09f }
-    text(title, 29, android.graphics.Color.WHITE, panel).apply { setTypeface(null, Typeface.BOLD) }
+    text(title, 29, android.graphics.Color.WHITE, panel).apply { instrumentType(display = true) }
     text(subtitle, 14, getColor(R.color.on_hero), panel)
 }
 
@@ -71,11 +111,23 @@ internal fun MainActivity.hero(title: String, subtitle: String, eyebrow: String?
 internal fun MainActivity.chip(value: String, parent: LinearLayout, caution: Boolean = false) = TextView(this).apply {
     text = value
     textSize = 12f
-    setTypeface(null, Typeface.BOLD)
+    instrumentType(display = true)
     setTextColor(getColor(if (caution) R.color.warning else R.color.accent))
     background = shape(getColor(if (caution) R.color.notice else R.color.hover), 10)
     setPadding(dp(9), dp(4), dp(9), dp(4))
     parent.addView(this, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6); topMargin = dp(6) })
+}
+
+/** A status pill whose fill and foreground are colour resources chosen by the caller. */
+internal fun MainActivity.statusChip(value: String, fill: Int, foreground: Int, parent: LinearLayout) = TextView(this).apply {
+    text = value
+    textSize = 12f
+    instrumentType(display = true)
+    setTextColor(getColor(foreground))
+    background = shape(getColor(fill), 10)
+    setPadding(dp(9), dp(4), dp(9), dp(4))
+    gravity = Gravity.CENTER
+    parent.addView(this, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
 }
 
 /** A horizontal row. Centred rows must not give children top margins; LinearLayout then clips their bottoms. */
@@ -104,29 +156,147 @@ internal fun MainActivity.valueRow(label: String, value: String, parent: LinearL
     setPadding(0, dp(4), 0, dp(4))
     text(label, 14, getColor(R.color.muted), this).layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
     text(value, 15, getColor(R.color.ink), this).apply {
-        setTypeface(null, Typeface.BOLD)
+        instrumentType(display = true)
         layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) }
     }
 }
 
 /** A 48 dp rounded tile holding one line icon. */
 internal fun MainActivity.iconTile(icon: String, parent: LinearLayout, dark: Boolean = false) = android.widget.ImageView(this).apply {
-    setImageDrawable(UiIcon(icon, getColor(if (dark) R.color.signal else R.color.accent), dp(26)))
+    setImageDrawable(lineIcon(icon, getColor(if (dark) R.color.signal else R.color.accent)))
     scaleType = android.widget.ImageView.ScaleType.CENTER
     background = shape(getColor(if (dark) R.color.hero else R.color.hover), 14)
     importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
     parent.addView(this, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(14) })
 }
 
+/** A rounded surface that stacks settings rows, like Hermes Companion's modules list. */
+internal fun MainActivity.settingsGroup(parent: LinearLayout = page) = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    background = raisedSurface()
+    parent.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+}
+
+/** A hairline between grouped rows, indented past the leading icon. */
+internal fun MainActivity.divider(parent: LinearLayout, inset: Boolean = true) = View(this).apply {
+    background = shape(getColor(R.color.line), 0)
+    alpha = if (inset) 1f else .55f
+    parent.addView(this, LinearLayout.LayoutParams(-1, dp(1)).apply { if (inset) { marginStart = dp(54); marginEnd = dp(12) } })
+}
+
+private class SettingRow(val row: LinearLayout, val value: TextView)
+
+private fun MainActivity.settingRowCore(icon: String, title: String, parent: LinearLayout,
+                                        subtle: Boolean, action: () -> Unit): SettingRow {
+    val row = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(16), dp(12), dp(12), dp(12))
+        minimumHeight = dp(60)
+        isClickable = true
+        isFocusable = true
+        foreground = RippleDrawable(ColorStateList.valueOf(getColor(R.color.hover)), null, shape(Color.TRANSPARENT, 0))
+        background = null
+        setOnClickListener { action() }
+        pressFeedback()
+    }
+    row.addView(android.widget.ImageView(this).apply {
+        setImageDrawable(lineIcon(icon, getColor(if (subtle) R.color.error else R.color.accent)))
+        scaleType = android.widget.ImageView.ScaleType.CENTER
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginEnd = dp(14) })
+    val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    row.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
+    text(title, 16, getColor(if (subtle) R.color.error else R.color.ink), column).apply {
+        instrumentType(display = true)
+        setPadding(0, 0, 0, 0)
+    }
+    val value = text("", 13, getColor(R.color.muted), column).apply {
+        setPadding(0, dp(3), 0, 0)
+        setSingleLine(true)
+        ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+        visibility = View.GONE
+    }
+    row.addView(android.widget.ImageView(this).apply {
+        setImageDrawable(lineIcon("chevron", getColor(R.color.muted)))
+        scaleType = android.widget.ImageView.ScaleType.CENTER
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginStart = dp(10) })
+    parent.addView(row, LinearLayout.LayoutParams(-1, -2))
+    return SettingRow(row, value)
+}
+
+/** A tappable settings row: line icon, title, optional current value and a chevron. */
+internal fun MainActivity.settingRow(icon: String, title: String, value: String?, parent: LinearLayout,
+                                     subtle: Boolean = false, action: () -> Unit): LinearLayout =
+    settingRowCore(icon, title, parent, subtle, action).also { core ->
+        if (value != null) { core.value.text = value; core.value.visibility = View.VISIBLE }
+    }.row
+
+/** A settings row whose current value is filled in later; returns the value view. */
+internal fun MainActivity.statusRow(icon: String, title: String, parent: LinearLayout, action: () -> Unit): TextView =
+    settingRowCore(icon, title, parent, false, action).value
+
 internal fun MainActivity.notice(value: String, caution: Boolean = false) = text(value, 14,
-    getColor(if (caution) R.color.warning else R.color.accent)).apply {
-    background = shape(getColor(if (caution) R.color.notice else R.color.hover), 14)
+    getColor(if (caution) R.color.warning else R.color.muted)).apply {
+    background = shape(getColor(if (caution) R.color.notice else R.color.surface), 14)
+    compoundDrawablePadding = dp(10)
+    setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon(if (caution) "notice" else "info", currentTextColor), null, null, null)
     setPadding(dp(14), dp(12), dp(14), dp(12))
     accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
     (layoutParams as LinearLayout.LayoutParams).apply { topMargin = dp(8); bottomMargin = dp(8) }
 }
 
 internal data class UiTile(val label: Int, val icon: String, val action: () -> Unit)
+
+/** The kit switch: a rounded track that fills with the accent and a solid thumb, no stock tint. */
+internal fun android.widget.Switch.instrumentSwitch() {
+    val density = resources.displayMetrics.density
+    fun pill(color: Int, width: Int, height: Int, inset: Int = 0) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE; cornerRadius = height * density / 2; setColor(color)
+        setSize((width * density).toInt(), (height * density).toInt())
+        if (inset > 0) setStroke((inset * density).toInt(), Color.TRANSPARENT)
+    }
+    thumbTintList = null; trackTintList = null
+    thumbDrawable = StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_checked), pill(context.getColor(R.color.on_action), 30, 30, 4))
+        addState(intArrayOf(), pill(context.getColor(R.color.muted), 30, 30, 5))
+    }
+    trackDrawable = StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_checked), pill(context.getColor(R.color.accent), 54, 30))
+        addState(intArrayOf(), pill(context.getColor(R.color.hover), 54, 30))
+    }
+}
+
+/** A row of instrument keys: a round icon well over a short label, for secondary destinations. */
+internal fun MainActivity.toolRow(vararg entries: UiTile, parent: LinearLayout = page) {
+    val row = LinearLayout(this)
+    parent.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
+    entries.forEachIndexed { index, tile ->
+        val key = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dp(4), 0, dp(4))
+            isClickable = true; isFocusable = true
+            contentDescription = getString(tile.label)
+            background = RippleDrawable(ColorStateList.valueOf(getColor(R.color.hover)), null, shape(Color.WHITE, 14))
+            setOnClickListener { tile.action() }
+            pressFeedback()
+            arrive(120L + index * 30L)
+        }
+        key.addView(android.widget.ImageView(this).apply {
+            setImageDrawable(lineIcon(tile.icon, green))
+            scaleType = android.widget.ImageView.ScaleType.CENTER
+            background = raisedSurface().apply { cornerRadius = dp(28).toFloat() }
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(56), dp(56)))
+        text(getString(tile.label), 12, getColor(R.color.ink), key).apply {
+            gravity = Gravity.CENTER; maxLines = 2; setPadding(dp(2), dp(7), dp(2), 0)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        row.addView(key, LinearLayout.LayoutParams(0, -2, 1f))
+    }
+}
 
 internal fun MainActivity.tiles(vararg entries: UiTile, parent: LinearLayout = page) {
     entries.toList().chunked(2).forEach { pair ->
@@ -136,8 +306,8 @@ internal fun MainActivity.tiles(vararg entries: UiTile, parent: LinearLayout = p
             button(getString(tile.label), parent = row, action = tile.action).apply {
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 minHeight = dp(66)
-                compoundDrawablePadding = dp(8)
-                setCompoundDrawablesRelativeWithIntrinsicBounds(UiIcon(tile.icon, green, dp(21)), null, null, null)
+                compoundDrawablePadding = resources.getDimensionPixelSize(R.dimen.space_small)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon(tile.icon, green), null, null, null)
                 layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply { if (index > 0) marginStart = dp(8) }
             }
         }
@@ -146,91 +316,80 @@ internal fun MainActivity.tiles(vararg entries: UiTile, parent: LinearLayout = p
 
 internal fun MainActivity.stat(label: String, value: String, unit: String = "", parent: LinearLayout = page) =
     card(parent).apply {
-        text(label, 13, parent = this)
+        text(label, 14, parent = this)
         val measurement = when {
             value == "—" || unit.isEmpty() -> value
             unit == "°" || unit == "%" -> "$value$unit"
             else -> "$value $unit"
         }
-        text(measurement, 26, green, this).apply {
-            typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
+        addView(Measurement(this@stat).apply {
+            text = measurement
+            textSize = 32f
+            setTextColor(getColor(R.color.ink))
+            instrumentType(numeric = true)
             if (value == "—") contentDescription = getString(R.string.not_available)
-        }
+        })
     }
+
+/** One line of an instrument readout: label left, measured value right, notes underneath. */
+internal fun MainActivity.readoutRow(label: String, value: String, unit: String, parent: LinearLayout) = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    setPadding(dp(16), dp(14), dp(16), dp(12))
+    parent.addView(this, LinearLayout.LayoutParams(-1, -2))
+    val line = row(this, center = true)
+    text(label, 16, getColor(R.color.ink), line).apply {
+        instrumentType(display = true)
+        layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+    }
+    line.addView(Measurement(this@readoutRow).apply {
+        text = when { value == "—" || unit.isEmpty() -> value; unit == "°" || unit == "%" -> "$value$unit"; else -> "$value $unit" }
+        textSize = 28f
+        setTextColor(getColor(R.color.ink))
+        instrumentType(numeric = true)
+        if (value == "—") contentDescription = getString(R.string.not_available)
+    }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
+}
 
 internal fun MainActivity.targetBar(label: String, value: String, fraction: Double?, parent: LinearLayout) {
     text(label, 13, parent = parent)
-    text(value, 20, green, parent).setTypeface(null, Typeface.BOLD)
+    text(value, 20, green, parent).instrumentType(display = true)
     if (fraction != null) parent.addView(ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+        progressDrawable = android.graphics.drawable.LayerDrawable(arrayOf(
+            shape(getColor(R.color.hover), 4),
+            android.graphics.drawable.ClipDrawable(shape(getColor(R.color.accent), 4), Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL)
+        )).apply { setId(0, android.R.id.background); setId(1, android.R.id.progress) }
         max = 100
-        progress = (fraction.coerceIn(0.0, 1.0) * 100).toInt()
+        setProgress((fraction.coerceIn(0.0, 1.0) * 100).toInt(), android.animation.ValueAnimator.areAnimatorsEnabled())
         progressTintList = ColorStateList.valueOf(green)
         progressBackgroundTintList = ColorStateList.valueOf(getColor(R.color.hover))
         importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    }, LinearLayout.LayoutParams(-1, dp(12)).apply { bottomMargin = dp(10) })
+    }, LinearLayout.LayoutParams(-1, dp(6)).apply { bottomMargin = dp(10) })
 }
 
-private class TrackCard(private val fill: Int, private val radius: Float) : Drawable() {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    override fun draw(canvas: Canvas) {
-        val box = RectF(bounds)
-        paint.style = Paint.Style.FILL
-        paint.color = fill
-        canvas.drawRoundRect(box, radius, radius, paint)
-        canvas.save()
-        canvas.clipRect(box.left + radius, box.top, box.right - radius, box.bottom)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = radius / 16
-        paint.color = 0xff394e34.toInt()
-        repeat(5) { lane ->
-            val width = radius * (2 + lane * .58f)
-            val edge = box.right + radius * .84f
-            canvas.drawOval(edge - width, box.top - width, edge + width, box.top + width, paint)
-        }
-        canvas.restore()
-    }
-    override fun setAlpha(alpha: Int) {}
-    override fun setColorFilter(colorFilter: ColorFilter?) {}
-    @Deprecated("Deprecated in Android") override fun getOpacity() = PixelFormat.TRANSLUCENT
-}
-
-internal class UiIcon(private val name: String, color: Int, private val size: Int) : Drawable() {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.color = color
-        strokeWidth = 1.8f
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-        style = Paint.Style.STROKE
-    }
-    override fun draw(canvas: Canvas) {
-        canvas.save()
-        canvas.translate(bounds.left.toFloat(), bounds.top.toFloat())
-        canvas.scale(bounds.width() / 24f, bounds.height() / 24f)
-        fun path(vararg points: Int) {
-            for (index in 2 until points.size step 2) canvas.drawLine(points[index - 2].toFloat(),
-                points[index - 1].toFloat(), points[index].toFloat(), points[index + 1].toFloat(), paint)
-        }
-        when (name) {
-            "form" -> { canvas.drawCircle(12f, 4f, 2f, paint); path(4, 10, 12, 9, 20, 10); path(12, 9, 12, 15, 7, 21); path(12, 15, 17, 21) }
-            "training" -> { path(6, 12, 18, 12); path(6, 7, 6, 17); path(18, 7, 18, 17); path(3, 9, 3, 15); path(21, 9, 21, 15) }
-            "food" -> { path(4, 3, 4, 10, 10, 10, 10, 3); path(7, 3, 7, 21); path(19, 21, 19, 3, 15, 9, 15, 13, 19, 13) }
-            "assistant" -> { path(12, 3, 14, 10, 21, 12, 14, 14, 12, 21, 10, 14, 3, 12, 10, 10, 12, 3) }
-            "club" -> { path(4, 5, 20, 5, 20, 21, 4, 21, 4, 5); path(4, 10, 20, 10); path(8, 3, 8, 7); path(16, 3, 16, 7) }
-            "checkin" -> { canvas.drawCircle(12f, 12f, 8.5f, paint); path(8, 12, 11, 15, 16, 9) }
-            "profile" -> { canvas.drawCircle(12f, 7f, 3.5f, paint); canvas.drawArc(5f, 13f, 19f, 26f, 180f, 180f, false, paint) }
-            "legs" -> { canvas.drawCircle(8f, 4f, 2.2f, paint); path(8, 7, 10, 13, 17, 13, 16, 21, 19, 21); path(9, 9, 18, 9) }
-            "hinge" -> { canvas.drawCircle(19f, 6f, 2.2f, paint); path(17, 8, 8, 12, 9, 21, 12, 21); path(14, 10, 14, 17); path(11, 17, 17, 17) }
-            "push" -> { path(4, 5, 20, 5); path(12, 20, 12, 9); path(8, 13, 12, 9, 16, 13) }
-            "pull" -> { path(4, 4, 20, 4); path(12, 20, 12, 8); path(8, 12, 12, 8, 16, 12) }
-            "core" -> { canvas.drawCircle(19.5f, 11f, 2f, paint); path(3, 19, 21, 19); path(4, 15, 17, 12); path(15, 12, 15, 19) }
-            "conditioning" -> { canvas.drawCircle(12f, 4f, 2f, paint); path(12, 7, 12, 14); path(5, 4, 12, 9, 19, 4); path(7, 21, 12, 14, 17, 21) }
-            else -> { path(3, 19, 21, 19); path(4, 15, 9, 10, 13, 13, 20, 5); path(15, 5, 20, 5, 20, 10) }
-        }
-        canvas.restore()
-    }
-    override fun getIntrinsicWidth() = size
-    override fun getIntrinsicHeight() = size
-    override fun setAlpha(alpha: Int) { paint.alpha = alpha }
-    override fun setColorFilter(colorFilter: ColorFilter?) { paint.colorFilter = colorFilter }
-    @Deprecated("Deprecated in Android") override fun getOpacity() = PixelFormat.TRANSLUCENT
-}
+internal fun Context.lineIcon(name: String, tint: Int) = getDrawable(when (name) {
+    "form" -> R.drawable.ic_form
+    "training" -> R.drawable.ic_training
+    "food" -> R.drawable.ic_food
+    "assistant" -> R.drawable.ic_assistant
+    "club" -> R.drawable.ic_club
+    "checkin" -> R.drawable.ic_checkin
+    "notice" -> R.drawable.ic_notice
+    "info" -> R.drawable.ic_info
+    "profile" -> R.drawable.ic_profile
+    "legs" -> R.drawable.ic_legs
+    "hinge" -> R.drawable.ic_hinge
+    "push" -> R.drawable.ic_push
+    "pull" -> R.drawable.ic_pull
+    "core" -> R.drawable.ic_core
+    "conditioning" -> R.drawable.ic_conditioning
+    "home" -> R.drawable.ic_home
+    "index" -> R.drawable.ic_index
+    "more" -> R.drawable.ic_more
+    "back" -> R.drawable.ic_back
+    "chevron" -> R.drawable.ic_chevron
+    "appearance" -> R.drawable.ic_appearance
+    "diagnostics" -> R.drawable.ic_diagnostics
+    "server" -> R.drawable.ic_server
+    "signout" -> R.drawable.ic_signout
+    else -> R.drawable.ic_history
+})!!.mutate().apply { setTint(tint) }
