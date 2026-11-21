@@ -155,6 +155,11 @@ def check():
         page.locator('.daypicker').wait_for()
         page.locator('figure svg').first.wait_for()
         unique_axes()
+        # SPEC 7.3: adherence, the 30-day analytics chart and goal progress in the coach view.
+        page.get_by_role('heading', name='Придържане към целта', exact=True).wait_for()
+        page.get_by_role('heading', name='Напредък към целта', exact=True).wait_for()
+        assert page.locator('figcaption', has_text='Прием за 30 дни').count() == 1
+        assert page.locator('.adherence p').first.inner_text().split(' / ')[0].isdigit()
         page.screenshot(path=str(output / 'coach-nutrition.png'), full_page=True)
         page.locator('.subnav').get_by_role('button', name='Техника', exact=True).click()
         page.get_by_role('button', name='Към отбора', exact=True).wait_for()

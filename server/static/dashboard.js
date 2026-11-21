@@ -79,6 +79,10 @@ const dictionary = {
     under18:'Под 18 г.', noProgram:'Няма програма. Задайте цел и темп.', notEnoughData:'Недостатъчно записи за оценка.',
     guardrailNote:'Препоръката не минава правилата (под 18 г. или под 1500 ккал) и не е записана — обсъдете с треньора.',
     nutritionNote:'Обсъдете тези стойности с треньора си.', noNutrition:'Още няма данни за хранене.',
+    adherence:'Придържане към целта', adherenceLine:'дни в ±10 % от дневната цел', averagesLogged:'Средно за дни със записи',
+    analyticsTitle:'Прием за 30 дни', analyticsLegend:'Ккал на ден · пунктир: дневна цел', goalProgress:'Напредък към целта',
+    noGoal:'Още няма цел за тегло.', currentTrend:'Текущ тренд', targetWeight:'Целево тегло', endDate:'Краен срок',
+    kgUnit:'кг', remainingKg:'Остават', trendPerWeek:'Тренд на седмица', projectedDate:'Прогнозна дата', onTrack:'В срок', offTrack:'Извън срока',
     formHistoryTitle:'История на техниката', squat:'Клек', single_leg_squat:'Клек на един крак', repetition:'Повторение',
     depth:'Дълбочина (°)', fppa:'Ъгъл в челната равнина (°)', repStatus:'Състояние', complete:'Пълно', partial:'Частично',
     unclear:'Неясно', repsCount:'Повторения', partialCount:'Частични', unclearCount:'Неясни', worstRep:'Най-слабо',
@@ -169,6 +173,10 @@ const dictionary = {
     under18:'Under 18', noProgram:'No program yet. Set a goal and weekly rate.', notEnoughData:'Not enough logged data for an estimate.',
     guardrailNote:'The recommendation was not saved (under 18 or below 1,500 kcal). Discuss it with your coach.',
     nutritionNote:'Use these numbers to start a conversation with your coach.', noNutrition:'No nutrition data yet.',
+    adherence:'Adherence', adherenceLine:'days within ±10% of the daily target', averagesLogged:'Average of logged days',
+    analyticsTitle:'Intake, last 30 days', analyticsLegend:'Kcal per day · dashed: daily target', goalProgress:'Goal progress',
+    noGoal:'No weight goal yet.', currentTrend:'Current trend', targetWeight:'Target weight', endDate:'End date',
+    kgUnit:'kg', remainingKg:'Remaining', trendPerWeek:'Trend per week', projectedDate:'Projected date', onTrack:'On track', offTrack:'Behind schedule',
     formHistoryTitle:'Form history', squat:'Squat', single_leg_squat:'Single-leg squat', repetition:'Repetition',
     depth:'Depth (°)', fppa:'Frontal angle (°)', repStatus:'Status', complete:'Complete', partial:'Partial',
     unclear:'Unclear', repsCount:'Reps', partialCount:'Partial', unclearCount:'Unclear', worstRep:'Worst',
@@ -216,7 +224,7 @@ Object.assign(dictionary.en, {
 });
 const state = {language:'bg', token:null, user:null, view:'team', athletes:[], users:[], clubs:[], audit:[], offset:0, selected:null, jumps:[], summary:null, sort:'name', ascending:true, consent:null, reset:null, deleting:false, groups:[], groupEdit:null, membersEdit:null, sessions:[], sessionEdit:null, sessionReport:null, wellbeing:[], wellbeingDay:null, checkins:[], sessionsMine:[], comments:[], live:'idle', liveGeneration:0,
   training:null, setLogs:[], exercises:[], plansData:[], nutritionDay:null, nutSummary:null, weightsData:null,
-  expenditure:null, program:null, nutTarget:null, foodLogs:[], foods:[], formSets:[], planEdit:null,
+  expenditure:null, program:null, nutTarget:null, analytics:null, goal:null, foodLogs:[], foods:[], formSets:[], planEdit:null,
   assistant:{open:false, conversationId:null, reply:null, proposal:null, note:null, error:null}};
 const t = key => dictionary[state.language][key] ?? key;
 const locale = () => state.language === 'bg' ? 'bg-BG' : 'en-GB';
@@ -454,8 +462,10 @@ async function load(view=state.view) {
       const expenditure = await api(nutrition + 'expenditure');
       const program = await api(nutrition + 'program');
       const nutTarget = await api(nutrition + 'target');
-      data = {nutSummary, weightsData, expenditure, program, nutTarget, foodLogs, nutritionDay:day};
-    } else data = {nutSummary:null, weightsData:null, expenditure:null, program:null, nutTarget:null, foodLogs:[]};
+      const analytics = await api(nutrition + 'analytics?days=30');
+      const goal = await api(nutrition + 'goal');
+      data = {nutSummary, weightsData, expenditure, program, nutTarget, analytics, goal, foodLogs, nutritionDay:day};
+    } else data = {nutSummary:null, weightsData:null, expenditure:null, program:null, nutTarget:null, analytics:null, goal:null, foodLogs:[]};
   }
   if (view === 'form') {
     const target = athleteTarget();
@@ -1461,6 +1471,39 @@ function expenditureChart(exp) {
   fig.append(node('p', t('expenditureNote'), 'legend'));
   return fig;
 }
+function analyticsChart(a) {
+  const labels = a.daily.map(d => date(d.day));
+  const kcal = a.daily.map((d, i) => ({i, v: d.kcal}));
+  const series = [{type:'line', cls:'series-left', data:kcal}, {type:'dots', cls:'chart-dot', data:kcal}];
+  if (a.target_kcal != null) series.push({type:'line', cls:'series-right', data:a.daily.map((d, i) => ({i, v:a.target_kcal}))});
+  const fig = svgChart(t('analyticsTitle'), labels, series);
+  fig.append(node('p', t('analyticsLegend'), 'legend'));
+  return fig;
+}
+function adherenceView(a) {
+  const section = node('section', null, 'inline-panel adherence'); section.append(node('h2', t('adherence')));
+  if (a.adherence && a.adherence.logged_days) section.append(node('p', a.adherence.days_within + ' / ' +
+    a.adherence.logged_days + ' ' + t('adherenceLine') + ' (' + formatNumber(a.adherence.pct) + ' %)'));
+  else section.append(node('p', t(a.target_kcal == null ? 'noTargetShort' : 'noNutrition'), 'muted'));
+  if (a.averages.logged_days) section.append(node('p', t('averagesLogged') + ' (' + a.averages.logged_days + '): ' +
+    formatNumber(a.averages.kcal) + ' ' + t('kcalUnit') + ' · ' + t('protein') + ' ' + formatNumber(a.averages.protein_g) +
+    ' · ' + t('carbs') + ' ' + formatNumber(a.averages.carbs_g) + ' · ' + t('fat') + ' ' + formatNumber(a.averages.fat_g), 'muted'));
+  return section;
+}
+function goalView(g) {
+  const section = node('section', null, 'inline-panel goal-progress'); section.append(node('h2', t('goalProgress')));
+  if (!g || !g.goal) { section.append(node('p', t('noGoal'), 'muted')); return section; }
+  const kg = (v, key) => v == null ? '—' : format(v, key) + ' ' + t('kgUnit');
+  const meta = node('p'); meta.append(node('span', t(g.goal.phase), 'badge'));
+  if (g.on_track != null) meta.append(document.createTextNode(' '), node('span', t(g.on_track ? 'onTrack' : 'offTrack'), 'badge' + (g.on_track ? '' : ' pending')));
+  section.append(meta);
+  for (const [label, value] of [['currentTrend', kg(g.current_trend_kg)], ['targetWeight', kg(g.goal.target_weight_kg)],
+      ['remainingKg', kg(g.remaining_kg)], ['trendPerWeek', kg(g.trend_kg_week, 'rate')],
+      ['endDate', g.goal.end_date ? date(g.goal.end_date) : '—'], ['projectedDate', g.projected_date ? date(g.projected_date) : '—']]) {
+    const row = node('div', null, 'stat-line'); row.append(node('span', t(label)), node('strong', value)); section.append(row);
+  }
+  return section;
+}
 function nutritionSummaryView(s) {
   const section = node('section', null, 'overview-card nutrition-totals');
   section.append(node('h2', t('dailyTotals') + ' · ' + date(s.day)));
@@ -1584,7 +1627,12 @@ function nutrition(content) {
   const charts = node('div', null, 'charts');
   if (state.weightsData && state.weightsData.weights.length) charts.append(weightChart(state.weightsData));
   if (state.expenditure && state.expenditure.history && state.expenditure.history.length) charts.append(expenditureChart(state.expenditure));
+  if (state.analytics) charts.append(analyticsChart(state.analytics));
   if (charts.children.length) content.append(charts);
+  const progress = node('div', null, 'overview-grid');
+  if (state.analytics) progress.append(adherenceView(state.analytics));
+  progress.append(goalView(state.goal));
+  content.append(progress);
   const settings = node('div', null, 'overview-grid');
   settings.append(programView(state.program, athlete), targetView(state.nutTarget, athlete));
   content.append(settings);
