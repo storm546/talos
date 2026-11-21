@@ -344,7 +344,7 @@ class FormResultBridge : Fragment() {
     }
 }
 
-internal fun FormExercise.viewGuide() = when (view) {
+internal fun FormExercise.viewGuide() = if (signalFront != null) R.string.form_camera_either else when (view) {
     "front" -> R.string.form_camera_front
     "side" -> R.string.form_camera_side
     else -> R.string.form_camera_either

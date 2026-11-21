@@ -71,6 +71,53 @@ class FormStreamTest {
     }
 
     @Test
+    fun pushUpUsesPlankViewAndCountsWithOneVisibleWrist() {
+        val frames = buildList {
+            repeat(10) {
+                val frame = geometry("biceps_curl", 174.0, size * 50L)
+                val image = frame.landmarks.toMutableList()
+                image[12] = image[11].copy(x = image[11].x + .03f)
+                image[24] = image[23].copy(x = image[23].x + .03f)
+                add(frame.copy(landmarks = image))
+            }
+            fun plank(noseY: Float) {
+                val frame = geometry("push_up", 177.0, size * 50L)
+                val image = frame.landmarks.toMutableList()
+                image[0] = image[0].copy(y = noseY)
+                image[12] = image[11].copy(x = image[11].x + .08f)
+                image[24] = image[23].copy(x = image[23].x + .04f)
+                image[15] = image[15].copy(y = .62f)
+                image[16] = image[16].copy(visibility = 0f)
+                add(frame.copy(landmarks = image))
+            }
+            repeat(10) { plank(.45f) }
+            for (step in 1..8) plank(.45f + .015f * step)
+            repeat(4) { plank(.57f) }
+            for (step in 7 downTo 0) plank(.45f + .015f * step)
+            repeat(8) { plank(.45f) }
+        }
+        assertEquals(JumpAnalyzer.View.SIDE, FormStream.cameraView(frames.take(10), 1f))
+        val stream = FormStream("push_up", null, 1f)
+        frames.forEach { stream.feed(it) }
+        assertEquals(1, stream.progress.complete)
+        val result = stream.finish()
+        assertEquals("front", result.view)
+        assertEquals(result, FormAnalyzer.analyze(frames, "push_up", null, 1f))
+        assertEquals(1, FormAnalyzer.analyze(frames.drop(10), "push_up", null, 1f, JumpAnalyzer.View.FRONT).summary.repetitionCount)
+    }
+
+    @Test
+    fun pushUpFinishesShortSetWithoutPlankViewEvidence() {
+        val frames = (0..19).map { index ->
+            val frame = geometry("push_up", 177.0, index * 50L)
+            val upright = geometry("biceps_curl", 174.0, frame.tMs)
+            frame.copy(worldLandmarks = upright.worldLandmarks)
+        }
+        val result = FormAnalyzer.analyze(frames, "push_up", null, 1f)
+        assertEquals(0, result.summary.repetitionCount)
+    }
+
+    @Test
     fun eachLimbCountsAlternatingArmsSeparatelyAndBothArmsTogetherOnce() {
         val (rest, full) = ranges.getValue("biceps_curl")
         fun frame(left: Double, right: Double, time: Long): Frame {

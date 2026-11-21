@@ -16,10 +16,12 @@ data class FormProgress(val complete: Int = 0, val partial: Int = 0, val unclear
 class FormStream(exercise: String, private val side: String?, private val aspect: Float,
     private val view: JumpAnalyzer.View = JumpAnalyzer.View.AUTO) {
     private val entry = FormExercises[exercise].also { it.validateSide(side) }
-    private var signal = entry.signal
+    private var signal = if (view == JumpAnalyzer.View.FRONT) entry.signalFront ?: entry.signal else entry.signal
     private val legacyFrames = mutableListOf<Frame>()
     private val reps = mutableListOf<FormRepetition>()
     private val orientation = mutableListOf<Frame>()
+    private val plankOrientation = mutableListOf<Frame>()
+    private val usePlankView = entry.id == "push_up"
     private val direction get() = if (signal.down > signal.up) 1 else -1
     private val isHold = entry.mode == "hold"
     private var sideView = if (view == JumpAnalyzer.View.AUTO) null else view == JumpAnalyzer.View.SIDE
@@ -61,7 +63,9 @@ class FormStream(exercise: String, private val side: String?, private val aspect
     companion object {
         /** Longest unobserved stretch between usable frames that a repetition or hold may bridge. */
         const val MAX_GAP_MS = 300L
-        fun cameraView(frames: List<Frame>, aspect: Float): JumpAnalyzer.View {
+        fun cameraView(frames: List<Frame>, aspect: Float): JumpAnalyzer.View = cameraView(frames, aspect, .5)
+
+        private fun cameraView(frames: List<Frame>, aspect: Float, shoulderCutoff: Double): JumpAnalyzer.View {
             val ratios = frames.mapNotNull { frame ->
                 val points = frame.landmarks
                 val (leftShoulder, rightShoulder, leftHip, rightHip) = listOf(11, 12, 23, 24).map(points::get)
@@ -76,8 +80,21 @@ class FormStream(exercise: String, private val side: String?, private val aspect
                 width(leftShoulder, rightShoulder) to width(leftHip, rightHip)
             }
             if (ratios.size < 5) return JumpAnalyzer.View.AUTO
-            return if (JumpAnalyzer.median(ratios.map { it.first }) < .5 && JumpAnalyzer.median(ratios.map { it.second }) < .35)
+            return if (JumpAnalyzer.median(ratios.map { it.first }) < shoulderCutoff && JumpAnalyzer.median(ratios.map { it.second }) < .35)
                 JumpAnalyzer.View.SIDE else JumpAnalyzer.View.FRONT
+        }
+
+        private fun plankPosture(frame: Frame): Boolean {
+            val world = frame.worldLandmarks
+            val torso = listOf(world[11], world[12], world[23], world[24])
+            if (torso.any { !it.visibility.isFinite() || it.visibility < .2f }) return false
+            val horizontal = hypot((world[11].x + world[12].x - world[23].x - world[24].x).toDouble(),
+                (world[11].z + world[12].z - world[23].z - world[24].z).toDouble())
+            val vertical = abs(world[11].y + world[12].y - world[23].y - world[24].y)
+            val image = frame.landmarks
+            return horizontal.isFinite() && horizontal > 1.7 * vertical && (0..1).any { side ->
+                image[15 + side].visibility >= .2f && image[15 + side].y > image[11 + side].y
+            }
         }
     }
 
@@ -96,14 +113,27 @@ class FormStream(exercise: String, private val side: String?, private val aspect
             return if (report) legacyUpdate(frame) else emptyList()
         }
         val events = mutableListOf<FormEvent>()
-        if (sideView == null && orientation.size < JumpAnalyzer.MIN_USABLE_FRAMES) {
+        if (sideView == null) {
             orientation += frame
+            if (usePlankView && plankPosture(frame)) plankOrientation += frame
             if (orientation.size < JumpAnalyzer.MIN_USABLE_FRAMES) return events
-            sideView = cameraView(orientation, aspect).let { it == JumpAnalyzer.View.SIDE || (it == JumpAnalyzer.View.AUTO && entry.view == "side") }
-            orientation.forEach { advance(it, events) }
-            orientation.clear()
+            val detected = if (usePlankView) {
+                val plankView = cameraView(plankOrientation, aspect, .25)
+                if (plankView == JumpAnalyzer.View.AUTO && last - first < 2000 && orientation.size < 60) return events
+                plankView
+            } else cameraView(orientation, aspect)
+            resolveView(detected, events)
         } else advance(frame, events)
         return events
+    }
+
+    private fun resolveView(detected: JumpAnalyzer.View, events: MutableList<FormEvent>) {
+        val resolved = if (detected == JumpAnalyzer.View.AUTO && usePlankView)
+            cameraView(orientation.take(JumpAnalyzer.MIN_USABLE_FRAMES), aspect) else detected
+        sideView = resolved == JumpAnalyzer.View.SIDE || (resolved == JumpAnalyzer.View.AUTO && entry.view == "side")
+        orientation.forEach { advance(it, events) }
+        orientation.clear()
+        plankOrientation.clear()
     }
 
     private fun legacyUpdate(frame: Frame): List<FormEvent> = buildList {
@@ -149,19 +179,20 @@ class FormStream(exercise: String, private val side: String?, private val aspect
         }
         val geometry = if (side != null || sideView == true) listOf(if (selected == 0) left else right) else listOf(left, right)
         val signalGeometry = if (side != null || sideView == true) listOf(signalSides[selected]) else signalSides
-        fun measure(metric: String, check: Boolean = false, from: List<FormGeometry> = geometry): Double? {
+        fun measure(metric: String, requireAll: Boolean = true, from: List<FormGeometry> = geometry): Double? {
             if (metric == "fppa" && sideView == true) return null
             val values = from.mapNotNull { it.measure(metric) }
-            if (values.isEmpty() || (!check && values.size < from.size)) return null
+            if (values.isEmpty() || (requireAll && values.size < from.size)) return null
             return if (metric == "fppa") values.maxOrNull() else values.average()
         }
         quality += geometry.map(::confidence).average()
-        val raws = if (eachLimb) signalGeometry.map { it.measure(signal.metric) } else listOf(measure(signal.metric, from = signalGeometry))
+        val raws = if (eachLimb) signalGeometry.map { it.measure(signal.metric) }
+            else listOf(measure(signal.metric, requireAll = !signal.metric.startsWith("rise:"), from = signalGeometry))
         val raw = raws.filterNotNull().takeIf { it.isNotEmpty() }?.average()
         // A dropped or low-visibility frame is skipped; only an unobserved stretch longer than MAX_GAP_MS
         // since the last usable frame interrupts the repetition or hold.
         if (raw == null) { previous = time; return }
-        val checks = entry.checks.associate { it.key to measure(it.band.metric, true) }
+        val checks = entry.checks.associate { it.key to measure(it.band.metric, requireAll = false) }
         fun offBand(values: Map<String, Double?>) = entry.checks.firstOrNull { check ->
             values[check.key]?.let { !check.band.contains(it) } == true
         }?.key
@@ -299,8 +330,9 @@ class FormStream(exercise: String, private val side: String?, private val aspect
             progress = progress.copy(complete = it.summary.repetitionCount, partial = it.summary.partialCount,
                 unclear = it.summary.unclearCount)
         }
-        require(usable >= JumpAnalyzer.MIN_USABLE_FRAMES) { "need at least ${JumpAnalyzer.MIN_USABLE_FRAMES} visible form frames" }
         val events = mutableListOf<FormEvent>()
+        if (usePlankView && sideView == null) resolveView(JumpAnalyzer.View.AUTO, events)
+        require(usable >= JumpAnalyzer.MIN_USABLE_FRAMES) { "need at least ${JumpAnalyzer.MIN_USABLE_FRAMES} visible form frames" }
         closeGap(last, events)
         limbs.forEachIndexed { index, limb -> limb.cycle?.let {
             if (counted(index, it.start, last)) unclear(it.start, last, if (it.open) "incomplete_start" else "incomplete_end", events) } }

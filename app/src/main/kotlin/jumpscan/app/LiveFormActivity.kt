@@ -362,7 +362,8 @@ class LiveFormActivity : ComponentActivity() {
                 calibration.clear()
                 observedView = JumpAnalyzer.View.AUTO
             }
-            val ready = calibration.size == 10 && (exercise.view == "either" || exercise.view.equals(observedView.name, true))
+            val ready = calibration.size == 10 && (exercise.signalFront != null || exercise.view == "either" ||
+                exercise.view.equals(observedView.name, true))
             action.isEnabled = replay || ready
             val status = when {
                 ready || replay -> R.string.form_frame_ready
