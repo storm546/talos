@@ -33,7 +33,7 @@ def clear_demo_rows(db, users, athletes, club_ids):
                   f"AND jumps.athlete_id IN ({athlete_marks})", (*athletes, *users, *athletes)).fetchone():
         raise ValueError("A non-demo comment references a demo jump; no demo data was reset.")
     db.execute(f"DELETE FROM comments WHERE athlete_id IN ({athlete_marks}) AND author_id IN ({user_marks})", (*athletes, *users))
-    for table in ("jumps", "form_sets", "checkins", "set_logs", "nutrition_day_complete",
+    for table in ("jumps", "form_sets", "checkins", "set_logs", "workouts", "nutrition_day_complete",
                   "food_logs", "weights", "nutrition_targets", "coaching_programs"):
         db.execute(f"DELETE FROM {table} WHERE athlete_id IN ({athlete_marks})", athletes)
     for table in ("tokens", "group_members", "assistant_proposals", "assistant_requests", "assistant_conversations"):
@@ -48,6 +48,7 @@ def clear_demo_rows(db, users, athletes, club_ids):
                "AND NOT EXISTS (SELECT 1 FROM group_members WHERE group_id = plans.group_id) "
                "AND NOT EXISTS (SELECT 1 FROM set_logs WHERE plan_id = plans.id)", (*club_ids, *users, *athletes))
     db.execute(f"DELETE FROM recipes WHERE owner_id IN ({user_marks})", users)
+    db.execute(f"DELETE FROM workout_templates WHERE owner_id IN ({user_marks})", users)
     db.execute(f"DELETE FROM foods WHERE owner_id IN ({user_marks}) "
                "AND NOT EXISTS (SELECT 1 FROM food_logs WHERE food_id = foods.id) "
                "AND NOT EXISTS (SELECT 1 FROM recipe_items WHERE food_id = foods.id) "
@@ -393,6 +394,9 @@ def seed_training_nutrition(db, user_ids, athlete_ids, groups, club_ids, today, 
                 if days_ago not in (4, 9):  # two days without a weigh-in
                     db.execute("INSERT INTO weights(athlete_id, day, kg) VALUES (?, ?, ?)",
                                (athlete_id, day.isoformat(), round(base + days_ago * .04 + rng.gauss(0, .3), 1)))
+    template_id = seed_workout_templates(db, user_ids, exercise_ids, demo_club_id)
+    if "athlete1" in new_athletes:
+        seed_workout(db, athlete_ids["athlete1"], template_id, today)
     for account, kcal in (("athlete1", 2200), ("athlete7", 2600)):
         if account not in new_athletes:
             continue
@@ -403,6 +407,41 @@ def seed_training_nutrition(db, user_ids, athlete_ids, groups, club_ids, today, 
              datetime.now(timezone.utc).isoformat()))
     if "athlete6" in new_athletes:
         seed_coaching(db, athlete_ids["athlete6"], user_ids["coach"], food_ids, today)
+
+
+# owner, shared with the demo club, title, items: exercise, sets, reps, load_kg, rest_s, superset
+TEMPLATES = (
+    ("coach", True, "Долна част: сила", (("Клякане със щанга", 3, 6, 60, 150, None), ("Румънска тяга", 3, 8, 50, 120, None),
+                                         ("Напади с дъмбели", 3, 10, 20, 60, 1), ("Планк", 3, 1, None, 60, 1))),
+    ("athlete1", False, "Моята бърза тренировка", (("Лежанка", 3, 8, 40, 120, None), ("Набирания", 3, 6, None, 120, None))),
+)
+
+
+def seed_workout_templates(db, user_ids, exercise_ids, club_id):
+    """Two templates (one shared by the coach, one private to athlete1), idempotent; returns the shared one's id."""
+    ids = []
+    for owner, shared, title, items in TEMPLATES:
+        row = db.execute("SELECT id FROM workout_templates WHERE owner_id = ? AND title = ?",
+                         (user_ids[owner], title)).fetchone()
+        if row is None:
+            row = db.execute("INSERT INTO workout_templates(owner_id, club_id, title, items) VALUES (?, ?, ?, ?) RETURNING id", (
+                user_ids[owner], club_id if shared else None, title, json.dumps([
+                    {"exercise_id": exercise_ids[name], "sets": sets, "reps": reps, "load_kg": load, "rest_s": rest,
+                     "superset": superset} for name, sets, reps, load, rest, superset in items]))).fetchone()
+        ids.append(row[0])
+    return ids[0]
+
+
+def seed_workout(db, athlete_id, template_id, today):
+    """One finished demo workout holding the athlete's most recent seeded sets."""
+    day = db.execute("SELECT MAX(day) FROM set_logs WHERE athlete_id = ? AND load_kg IS NOT NULL", (athlete_id,)).fetchone()[0]
+    start = datetime.fromisoformat(day + "T16:30:00+00:00")
+    workout_id = db.execute(
+        "INSERT INTO workouts(athlete_id, started_at, ended_at, title, template_id, notes, client_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (athlete_id, start.isoformat(), (start + timedelta(minutes=64)).isoformat(), "Демо тренировка",
+         template_id, "Синтетични данни", f"seed-workout-{athlete_id}")).fetchone()[0]
+    db.execute("UPDATE set_logs SET workout_id = ? WHERE athlete_id = ? AND day = ?", (workout_id, athlete_id, day))
 
 
 def seed_coaching(db, athlete_id, coach_id, food_ids, today):

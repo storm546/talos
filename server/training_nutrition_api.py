@@ -80,6 +80,25 @@ SCHEMA = """
     );
     CREATE INDEX IF NOT EXISTS set_logs_athlete ON set_logs(athlete_id, day);
     CREATE UNIQUE INDEX IF NOT EXISTS set_logs_client ON set_logs(athlete_id, client_id) WHERE client_id IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS workout_templates (
+        id INTEGER PRIMARY KEY,
+        owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        club_id INTEGER REFERENCES clubs(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        items TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS workouts (
+        id INTEGER PRIMARY KEY,
+        athlete_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        title TEXT NOT NULL,
+        template_id INTEGER REFERENCES workout_templates(id) ON DELETE SET NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        client_id TEXT
+    );
+    CREATE INDEX IF NOT EXISTS workouts_athlete ON workouts(athlete_id, started_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS workouts_client ON workouts(athlete_id, client_id) WHERE client_id IS NOT NULL;
     CREATE TABLE IF NOT EXISTS foods (
         id INTEGER PRIMARY KEY,
         fdc_id INTEGER,
@@ -167,6 +186,7 @@ FOOD_LOG_INDEXES = """CREATE INDEX IF NOT EXISTS food_logs_athlete ON food_logs(
 SCHEMA = SCHEMA.format(food_logs=FOOD_LOGS.format(name="food_logs"), food_log_indexes=FOOD_LOG_INDEXES)
 OLD_LOG_COLUMNS = "id, athlete_id, day, meal, food_id, grams, client_id, created_at"
 NEW_COLUMNS = {
+    "set_logs": {"workout_id": "INTEGER REFERENCES workouts(id) ON DELETE SET NULL"},
     "foods": {"servings": "TEXT", "brand": "TEXT NOT NULL DEFAULT ''", "barcode": "TEXT",
               "source_url": "TEXT NOT NULL DEFAULT ''", "catalog_id": "TEXT", "nutrients": "TEXT"},
     "coaching_programs": {"target_weight_kg": "REAL", "end_date": "TEXT"},
@@ -189,6 +209,7 @@ def init_schema(db):
         db.executescript(f"""BEGIN; {FOOD_LOGS.format(name="food_logs_v2")}
             INSERT INTO food_logs_v2({OLD_LOG_COLUMNS}) SELECT {OLD_LOG_COLUMNS} FROM food_logs;
             DROP TABLE food_logs; ALTER TABLE food_logs_v2 RENAME TO food_logs; {FOOD_LOG_INDEXES} COMMIT;""")
+    db.execute("CREATE INDEX IF NOT EXISTS set_logs_workout ON set_logs(workout_id) WHERE workout_id IS NOT NULL")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS foods_catalog ON foods(catalog_id) WHERE catalog_id IS NOT NULL")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS foods_barcode ON foods(IFNULL(club_id, 0), IFNULL(owner_id, 0), barcode) "
                "WHERE barcode IS NOT NULL")
@@ -283,7 +304,64 @@ class SetLog(StrictModel):
     rpe: float | None = Field(default=None, ge=0, le=10)
     plan_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
     client_id: str | None = Field(default=None, min_length=1, max_length=128)
+    # A queued set names its workout by the workout's client_id: the server id is unknown while offline.
+    workout_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
+    workout_client_id: str | None = Field(default=None, min_length=1, max_length=128)
     _day = field_validator("day")(iso_day)
+
+    @model_validator(mode="after")
+    def one_workout_reference(self):
+        if self.workout_id is not None and self.workout_client_id is not None:
+            raise ValueError("Send workout_id or workout_client_id, not both")
+        return self
+
+
+def utc_timestamp(value):
+    """ISO 8601 with a timezone and a year from 2000 to 2100, normalised to UTC."""
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError("Timestamps must be ISO 8601") from None
+    if parsed.utcoffset() is None or not 2000 <= parsed.year <= 2100:
+        raise ValueError("Timestamps need a timezone and a year from 2000 to 2100")
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+class WorkoutBody(StrictModel):
+    started_at: str = Field(max_length=40)
+    ended_at: str | None = Field(default=None, max_length=40)
+    title: str = Field(min_length=1, max_length=100)
+    template_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
+    notes: str = Field(default="", max_length=1000)
+    client_id: str | None = Field(default=None, min_length=1, max_length=128)
+    _title = field_validator("title")(stripped)
+    _times = field_validator("started_at", "ended_at")(utc_timestamp)
+
+    @model_validator(mode="after")
+    def time_order(self):
+        if self.ended_at is not None and not timedelta(0) <= (
+                datetime.fromisoformat(self.ended_at) - datetime.fromisoformat(self.started_at)) <= timedelta(hours=24):
+            raise ValueError("ended_at must be after started_at and at most 24 hours later")
+        return self
+
+
+class TemplateItem(StrictModel):
+    exercise_id: int = Field(gt=0, le=SQLITE_MAX)
+    sets: int = Field(ge=1, le=20)
+    reps: int = Field(ge=1, le=200)
+    load_kg: float | None = Field(default=None, ge=0, le=1000)
+    rest_s: int | None = Field(default=None, ge=0, le=900)
+    # Consecutive items with the same number form a superset.
+    superset: int | None = Field(default=None, ge=1, le=20)
+
+
+class TemplateBody(StrictModel):
+    title: str = Field(min_length=1, max_length=100)
+    items: list[TemplateItem] = Field(min_length=1, max_length=30)
+    club_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
+    _title = field_validator("title")(stripped)
 
 
 class CustomFood(StrictModel):
@@ -684,7 +762,7 @@ def install(app, h):
 
     def set_row(row):
         return {key: row[key] for key in ("id", "athlete_id", "day", "exercise_id", "set_no", "reps", "load_kg",
-                                          "rpe", "plan_id", "client_id", "created_at")}
+                                          "rpe", "plan_id", "workout_id", "client_id", "created_at")}
 
     @app.post("/api/set-logs", status_code=201, dependencies=[Depends(current_user)])
     def add_set_log(body: SetLog, request: Request, db=Depends(get_db)):
@@ -705,14 +783,21 @@ def install(app, h):
             plan = db.execute("SELECT * FROM plans WHERE id = ?", (body.plan_id,)).fetchone()
             if plan is None or not plan_visible(db, user, plan):
                 raise HTTPException(422, "Plan not found")
+        workout_id = None
+        if body.workout_id is not None or body.workout_client_id is not None:
+            column, key = ("id", body.workout_id) if body.workout_id is not None else ("client_id", body.workout_client_id)
+            workout = db.execute(f"SELECT id FROM workouts WHERE athlete_id = ? AND {column} = ?", (user["id"], key)).fetchone()
+            if workout is None:
+                raise HTTPException(422, "Workout not found")
+            workout_id = workout["id"]
         if emit is None:
             return
         created_at = h.now_iso()
         cursor = db.execute(
             "INSERT INTO set_logs(athlete_id, day, exercise_id, set_no, reps, load_kg, rpe, plan_id, "
-            "client_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "client_id, created_at, workout_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (user["id"], body.day, body.exercise_id, body.set_no, body.reps, body.load_kg, body.rpe,
-             body.plan_id, body.client_id, created_at))
+             body.plan_id, body.client_id, created_at, workout_id))
         audit(db, user["id"], "set_logged", cursor.lastrowid)
         publish(db, user, "set", cursor.lastrowid, created_at, emit)
         return JSONResponse(status_code=201, content=set_row(
@@ -737,6 +822,152 @@ def install(app, h):
         if db.execute("DELETE FROM set_logs WHERE id = ? AND athlete_id = ?", (log_id, user["id"])).rowcount == 0:
             raise HTTPException(404, "Set not found")
         audit(db, user["id"], "set_deleted", log_id)
+        db.commit()
+
+    # --- workout templates and workouts (SPEC 9, wave 1) ---
+
+    def template_sql(user):
+        """Athletes see their own and their club's shared templates; staff see shared ones only."""
+        if user["role"] == "admin":
+            return "club_id IS NOT NULL", ()
+        if user["role"] == "coach":
+            return "club_id = ?", (user["club_id"],)
+        return "owner_id = ? OR club_id = ?", (user["id"], user["club_id"])
+
+    def template_json(db, row):
+        items = json.loads(row["items"])
+        names = {r["id"]: r["name"] for r in db.execute(
+            f"SELECT id, name FROM exercises WHERE id IN ({','.join('?' * len(items))})",
+            [item["exercise_id"] for item in items])}
+        return {**dict(row), "items": [{**item, "exercise": names.get(item["exercise_id"])} for item in items]}
+
+    def scoped_template(db, user, template_id, write=False):
+        clause, params = template_sql(user)
+        row = db.execute(f"SELECT * FROM workout_templates WHERE id = ? AND ({clause})",
+                         (template_id, *params)).fetchone()
+        if row is None or (write and user["role"] == "athlete" and row["club_id"] is not None):
+            raise HTTPException(404, "Template not found")
+        return row
+
+    def template_values(db, user, body, club_id=None):
+        """Athlete templates stay private (club_id NULL); staff templates are shared with one club."""
+        if user["role"] == "athlete":
+            need_consent(user, "workout templates")
+            if body.club_id is not None:
+                raise HTTPException(422, "club_id applies to staff only")
+            exercise_club = user["club_id"]
+        else:
+            if club_id is not None and body.club_id not in (None, club_id):
+                raise HTTPException(422, "A template cannot move to another club")
+            club_id = exercise_club = club_id or staff_club(db, user, body.club_id)
+        for item in body.items:
+            exercise_in_club(db, exercise_club, item.exercise_id)
+        return club_id, json.dumps([item.model_dump() for item in body.items])
+
+    @app.get("/api/workout-templates")
+    def list_templates(user=Depends(current_user), db=Depends(get_db)):
+        clause, params = template_sql(user)
+        return [template_json(db, r) for r in db.execute(
+            f"SELECT * FROM workout_templates WHERE {clause} ORDER BY title, id", params)]
+
+    @app.post("/api/workout-templates", status_code=201, dependencies=[Depends(current_user)])
+    def add_template(body: TemplateBody, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
+            club_id, items = template_values(db, user, body)
+            cursor = db.execute("INSERT INTO workout_templates(owner_id, club_id, title, items) VALUES (?, ?, ?, ?)",
+                                (user["id"], club_id, body.title, items))
+            audit(db, user["id"], "workout_template_created", cursor.lastrowid)
+            return template_json(db, db.execute("SELECT * FROM workout_templates WHERE id = ?",
+                                                (cursor.lastrowid,)).fetchone())
+
+    @app.put("/api/workout-templates/{template_id}", dependencies=[Depends(current_user)])
+    def replace_template(template_id: SqlitePath, body: TemplateBody, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
+            row = scoped_template(db, user, template_id, write=True)
+            _, items = template_values(db, user, body, row["club_id"])
+            db.execute("UPDATE workout_templates SET title = ?, items = ? WHERE id = ?", (body.title, items, template_id))
+            audit(db, user["id"], "workout_template_changed", template_id)
+            return template_json(db, db.execute("SELECT * FROM workout_templates WHERE id = ?", (template_id,)).fetchone())
+
+    @app.delete("/api/workout-templates/{template_id}", status_code=204)
+    def delete_template(template_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
+        scoped_template(db, user, template_id, write=True)
+        db.execute("DELETE FROM workout_templates WHERE id = ?", (template_id,))
+        audit(db, user["id"], "workout_template_deleted", template_id)
+        db.commit()
+
+    WORKOUTS = ("SELECT workouts.*, COUNT(set_logs.id) AS sets, COUNT(DISTINCT set_logs.exercise_id) AS exercises, "
+                "ROUND(COALESCE(SUM(set_logs.reps * set_logs.load_kg), 0), 1) AS volume_kg "
+                "FROM workouts LEFT JOIN set_logs ON set_logs.workout_id = workouts.id ")
+
+    def workout_row(row):
+        workout = dict(row)
+        workout["duration_s"] = None if row["ended_at"] is None else round(
+            (datetime.fromisoformat(row["ended_at"]) - datetime.fromisoformat(row["started_at"])).total_seconds())
+        return workout
+
+    def stored_workout(db, workout_id):
+        return workout_row(db.execute(WORKOUTS + "WHERE workouts.id = ? GROUP BY workouts.id", (workout_id,)).fetchone())
+
+    @app.post("/api/workouts", status_code=201, dependencies=[Depends(current_user)])
+    def add_workout(body: WorkoutBody, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
+            require_role(user, "athlete")
+            need_consent(user, "training")
+            if body.client_id is not None:
+                previous = db.execute("SELECT id FROM workouts WHERE athlete_id = ? AND client_id = ?",
+                                      (user["id"], body.client_id)).fetchone()
+                if previous is not None:
+                    return JSONResponse(status_code=200, content=stored_workout(db, previous["id"]))
+            check_log_day(body.started_at[:10])
+            if body.template_id is not None and db.execute(
+                    f"SELECT 1 FROM workout_templates WHERE id = ? AND ({template_sql(user)[0]})",
+                    (body.template_id, *template_sql(user)[1])).fetchone() is None:
+                raise HTTPException(422, "Template not found")
+            cursor = db.execute(
+                "INSERT INTO workouts(athlete_id, started_at, ended_at, title, template_id, notes, client_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)", (user["id"], body.started_at, body.ended_at, body.title,
+                                                 body.template_id, body.notes, body.client_id))
+            audit(db, user["id"], "workout_logged", cursor.lastrowid)
+            publish(db, user, "workout", cursor.lastrowid, h.now_iso(), emit)
+            return JSONResponse(status_code=201, content=stored_workout(db, cursor.lastrowid))
+
+    @app.get("/api/workouts")
+    def list_workouts(athlete_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
+                      from_: Annotated[str | None, Query(alias="from")] = None,
+                      to: Annotated[str | None, Query()] = None,
+                      limit: Annotated[int, Query(ge=1, le=500)] = 100,
+                      offset: Offset = 0,
+                      user=Depends(current_user), db=Depends(get_db)):
+        athlete = target_athlete(db, user, athlete_id)
+        return [workout_row(r) for r in db.execute(
+            WORKOUTS + "WHERE workouts.athlete_id = ? AND (? IS NULL OR substr(started_at, 1, 10) >= ?) "
+            "AND (? IS NULL OR substr(started_at, 1, 10) <= ?) GROUP BY workouts.id "
+            "ORDER BY started_at DESC, workouts.id DESC LIMIT ? OFFSET ?",
+            (athlete["id"], from_, from_, to, to, limit, offset))]
+
+    def scoped_workout(db, user, workout_id):
+        row = db.execute("SELECT athlete_id FROM workouts WHERE id = ?", (workout_id,)).fetchone()
+        if row is None or (user["role"] == "athlete" and row["athlete_id"] != user["id"]):
+            raise HTTPException(404, "Workout not found")
+        h.athlete_access(db, user, row["athlete_id"])
+        return row
+
+    @app.get("/api/workouts/{workout_id}")
+    def get_workout(workout_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
+        scoped_workout(db, user, workout_id)
+        sets = [{**set_row(r), "exercise": r["name"]} for r in db.execute(
+            "SELECT set_logs.*, exercises.name FROM set_logs JOIN exercises ON exercises.id = set_logs.exercise_id "
+            "WHERE workout_id = ? ORDER BY set_logs.id", (workout_id,))]
+        return {**stored_workout(db, workout_id), "set_logs": sets}
+
+    @app.delete("/api/workouts/{workout_id}", status_code=204)
+    def delete_workout(workout_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
+        """The workout goes; its logged sets stay as training history without a workout."""
+        require_role(user, "athlete")
+        scoped_workout(db, user, workout_id)
+        db.execute("DELETE FROM workouts WHERE id = ?", (workout_id,))
+        audit(db, user["id"], "workout_deleted", workout_id)
         db.commit()
 
     # --- training summary: weekly volume and progression suggestions ---
@@ -1777,8 +2008,13 @@ def install(app, h):
 def export_data(db, athlete_id):
     """The athlete's training and nutrition data for the JSON export."""
     sets = (dict(r) for r in db.execute(
-        "SELECT id, day, exercise_id, set_no, reps, load_kg, rpe, plan_id, client_id, created_at FROM set_logs "
+        "SELECT id, day, exercise_id, set_no, reps, load_kg, rpe, plan_id, workout_id, client_id, created_at FROM set_logs "
         "WHERE athlete_id = ? ORDER BY day, set_no, id", (athlete_id,)))
+    workouts = (dict(r) for r in db.execute(
+        "SELECT id, started_at, ended_at, title, template_id, notes, client_id FROM workouts WHERE athlete_id = ? "
+        "ORDER BY started_at, id", (athlete_id,)))
+    templates = ({**dict(r), "items": json.loads(r["items"])} for r in db.execute(
+        "SELECT id, title, items FROM workout_templates WHERE owner_id = ? ORDER BY id", (athlete_id,)).fetchall())
     foods = (dict(r) for r in db.execute(
         "SELECT id, name_bg, name_en, kcal, protein_g, carbs_g, fat_g, fibre_g FROM foods "
         "WHERE owner_id = ? ORDER BY id", (athlete_id,)))
@@ -1803,12 +2039,14 @@ def export_data(db, athlete_id):
     return {"set_logs": sets, "custom_foods": foods, "food_logs": meals, "weights": weights,
             "nutrition_target": None if target is None else dict(target),
             "coaching_program": None if program is None else {**dict(program), "applied": bool(program["applied"])},
-            "complete_diary_days": complete_days, "recipes": recipes}
+            "complete_diary_days": complete_days, "recipes": recipes, "workouts": workouts,
+            "workout_templates": templates}
 
 
 def delete_data(db, athlete_id):
     db.execute("DELETE FROM recipes WHERE owner_id = ?", (athlete_id,))
-    for table in ("set_logs", "food_logs", "weights", "nutrition_targets", "coaching_programs",
+    db.execute("DELETE FROM workout_templates WHERE owner_id = ?", (athlete_id,))
+    for table in ("set_logs", "workouts", "food_logs", "weights", "nutrition_targets", "coaching_programs",
                   "nutrition_day_complete"):
         db.execute(f"DELETE FROM {table} WHERE athlete_id = ?", (athlete_id,))
     db.execute("DELETE FROM foods WHERE owner_id = ?", (athlete_id,))
