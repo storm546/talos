@@ -20,7 +20,7 @@ not as a medical measurement.
 | Concrete problem, originality (General) | Clubs cannot afford lab screening; phone-only, privacy-first, with published validation |
 | Client and server technology, security, confidentiality, interoperability (category focus) | Android client with on-device ML, REST API with roles, token auth, rate limits, audit log, consent records, data export, OpenAPI description |
 | Architecture, UI separated from logic (Design) | Three parts with written contracts: `core` (pure maths, tested), `app`, `server`; the same analyzer runs on the phone and in the batch validator |
-| Code quality, tests, version control, error handling, attack protection (Implementation) | 453 server tests, 65 core tests including real-video fixtures, CI on every push, security review with fixes recorded |
+| Code quality, tests, version control, error handling, attack protection (Implementation) | As of 21 November 2026: server 506 passed, 1 skipped; core 71 passed, 1 skipped (20 November build-kit report). CI on every push; security review with fixes recorded. |
 | Evidence of testing (Presentation) | Accuracy table against the University of Twente lab dataset (91 jumps, 9 subjects), detection rates on 1000 public clips, own filmed jumps |
 | Language norms, UI (Implementation) | Bulgarian and English interface in app and dashboard |
 
@@ -73,10 +73,10 @@ Status key: done, running, staged (built but not reviewed or not deployed), todo
 - done (2026-11-18): deployed at https://jumpscan.stormlabs.cloud (systemd behind NPM, Let's Encrypt, demo accounts only); the rules require the project online from registration to the end of the tournament, with test accounts for every role
 
 ### F. Documents (Bulgarian)
-- done (drafts with placeholders for names): documentation (five A4 pages with figures), A4 flyer, eleven-slide deck, talk plan, user guide, formula explainer, test-account sheet, submission checklist; `node docs/build.cjs` prints them
+- done (drafts with placeholders for names): documentation (five A4 pages with figures), one-page A4 flyer, twelve-slide deck, demo script, user guide, formula explainer, test-account sheet, submission checklist; `node docs/build.cjs` prints them
 - done: platform round — documentation rewritten around the club platform, coach/athlete sections in the user guide, demo-data and jury checks for the new modules, platform slide and live-demo script
-- done: training/nutrition/form/assistant round — docs describe the full feature set within the tournament limits (documentation still five A4 pages, flyer one page, twelve slides), with test counts refreshed to 453 server / 65 core
-- needs the owner: names, school, supervisor, screenshots from the final build
+- done: final screenshots, screen labels, test totals and exercise validation for the merged beta 5
+- needs the owner: names, school, supervisor, real-phone and club pilot results
 
 ### G. Things only the owner can do
 - Decide the entry (the earlier advice was Kant in autumn; that decision and the co-author question are open)

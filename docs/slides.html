@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>JumpScan — презентация</title>
 <!-- Defence deck, 12 slides at 16:9; `node docs/build.cjs slides.html` prints one slide per PDF page.
-     Talk plan and timings: prezentacia.md. Replace the bracketed fields before the defence. -->
+     Talk plan and timings: scenarii-demo.md. Replace the bracketed fields before the defence. -->
 <style>
 @page { size: 297mm 167.06mm; margin: 0; }
 * { box-sizing: border-box; }
@@ -77,9 +77,9 @@ td.r, th.r { text-align: right; }
   <p class="kicker">Решението</p>
   <h1>Телефонът смята, сървърът помни, треньорът вижда промяната</h1>
   <div class="cols3" style="margin-top:2mm">
-    <div class="card"><b>1 · Заснеми</b><p>Клип от 10 секунди, телефонът на височината на коленете.</p></div>
-    <div class="card"><b>2 · Анализирай</b><p>Позата, ъглите, времето на полет и височината се смятат на самия телефон.</p></div>
-    <div class="card"><b>3 · Изпрати</b><p>Само 14 числа отиват в клубния сървър; треньорът вижда историята и графиките.</p></div>
+    <div class="card"><b>1 · Заснемете</b><p>Клип от 10 секунди, телефонът на височината на коленете.</p></div>
+    <div class="card"><b>2 · Анализирайте</b><p>Позата, ъглите, времето на полет и височината се смятат на самия телефон.</p></div>
+    <div class="card"><b>3 · Изпратете</b><p>Към сървъра отиват измерванията, не видеото. Треньорът вижда историята и графиките.</p></div>
   </div>
   <p class="note"><b style="color:#176148">Видеото никога не напуска телефона.</b> Няма поле за видео, снимка или точки от позата.</p>
   <span class="num">3</span>
@@ -89,26 +89,26 @@ td.r, th.r { text-align: right; }
   <p class="kicker">Клубна платформа</p>
   <h1>Анализът е ядрото на една клубна платформа</h1>
   <div class="cols3" style="margin-top:2mm">
-    <div class="card"><b>Сесии и групи</b><p>Планирани тестови сесии за група или целия клуб, с календар (.ics) и доклад на трите опита.</p></div>
+    <div class="card"><b>„Сесии“ и „Групи“</b><p>Тестове с 1–5 опита за група или клуб, „Календар (.ics)“ и „Доклад“.</p></div>
     <div class="card"><b>Самочувствие</b><p>Ежедневно отбелязване с пет оценки и натоварване; треньорът вижда отбора за деня.</p></div>
     <div class="card"><b>Бележки от треньора</b><p>Бележки от треньора за всеки спортист — за скок или сесия — с отговор в приложението.</p></div>
   </div>
-  <img class="shot" src="img/dash-wellbeing.png" alt="Самочувствие на отбора в треньорския панел" style="max-height:44mm; margin-top:4mm">
+  <img class="shot" src="img/dash-wellbeing.png" alt="Самочувствие на отбора в треньорския панел" style="max-height:44mm; margin-top:4mm; align-self:center; object-fit:contain">
   <p class="note"><b style="color:#176148">Всичко се обновява на живо</b> в панела — нов скок, отбелязване или бележка опресняват отворения изглед без презареждане.</p>
   <span class="num">4</span>
 </section>
 
 <section class="slide">
   <p class="kicker">Клубни модули</p>
-  <h1>Хранене, тренировки, форма и AI помощник</h1>
+  <h1>Хранене, тренировки, техника и AI помощник</h1>
   <div class="cols" style="grid-template-columns: 1.08fr 1fr; margin-top:2mm">
     <ul>
       <li><b>Тренировки</b> — планове, дневник на сериите и предложение за прогресия (не се прилага само).</li>
       <li><b>Хранене</b> — дневник, тегло с тренд и адаптивен разход; седмична програма с дневни цели.</li>
-      <li><b>Техника</b> — техника на клека по видео: дълбочина, ъгъл в челната равнина, асиметрия; само числа.</li>
+      <li><b>Техника</b> — на живо или от запис. Валидирани са броят на клековете и общото време в планк; 18 упражнения са в „Експериментални“.</li>
       <li><b>AI помощник</b> — предлага, не предписва.</li>
     </ul>
-    <img class="shot" src="img/slide-nutrition.png" alt="Хранене: тегло, адаптивен разход и програма" style="max-height:88mm; align-self:start">
+    <img class="shot" src="img/slide-nutrition.png" alt="Хранене: дневни цели и хранителен дневник" style="max-height:88mm; align-self:start">
   </div>
   <p class="note">Числата за хранене са за обсъждане с треньора, не са предписание. <b style="color:#176148">AI помощникът</b> работи на собствен модел на клуба, действа с правата на потребителя и всяка промяна се потвърждава.</p>
   <span class="num">5</span>
@@ -192,7 +192,7 @@ td.r, th.r { text-align: right; }
       <li>Видеото не се качва; JSON с 14 полета, проверени по тип и граници</li>
       <li>Непознато поле или стойност извън обхват → отказ 422</li>
       <li>Пароли със scrypt и сол; токени за 30 дни, пазени хеширани</li>
-      <li>5 грешни входа за 15 минути → 429</li>
+      <li>След 5 грешни входа за 15 минути за двойка имейл и адрес → 429; общ лимит: 30 за адрес</li>
     </ul>
     <ul>
       <li>Правата се проверяват при всяко четене: чужд клуб → 404</li>
@@ -208,8 +208,8 @@ td.r, th.r { text-align: right; }
   <p class="kicker">Тестове и качество</p>
   <h1>Една и съща математика навсякъде</h1>
   <div class="cols3">
-    <div class="card"><span class="big">453</span><p>автоматични теста на сървъра: права, граници, атаки, експорт и модулите</p></div>
-    <div class="card"><span class="big">65</span><p>теста на ядрото, включително истински клипове и лабораторния набор</p></div>
+    <div class="card"><span class="big">506</span><p>преминали сървърни теста (1 пропуснат) · 21.11.2026 г.</p></div>
+    <div class="card"><span class="big">71</span><p>преминали теста на ядрото (1 пропуснат) · отчет от 20.11.2026 г.</p></div>
     <div class="card"><span class="big">CI</span><p>двата набора се пускат при всяко качване в Git</p></div>
   </div>
   <p class="note">Числата във валидацията са получени от същия анализатор, който работи на телефона.</p>

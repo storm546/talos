@@ -69,14 +69,16 @@ The dashboard is at `http://127.0.0.1:8000/`. The database path comes from `JUMP
 Synthetic demo accounts (club "Демо клуб", password `demo1234` for all): `admin@demo.test`,
 `coach@demo.test` and six athletes `athlete1@demo.test`, `athlete2@demo.test`, `athlete4@demo.test` to
 `athlete7@demo.test`, plus a second club with `coach2@demo.test` and `athlete3@demo.test`. Ten generated
-jumps per athlete, four days apart, plus two groups, five sessions, two weeks of check-ins and a
+jumps per athlete across about a month, plus two groups, five sessions, two weeks of check-ins and a
 feedback thread.
 
 ```sh
 server/.venv/bin/python -m server.seed
 ```
 
-The seed is idempotent: it creates the accounts once and does nothing on later runs.
+Use `python -m server.seed --reset-demo` with the same environment and database to restore the fixed
+demo accounts and regenerate sample records. It signs out demo sessions and preserves non-demo accounts.
+For an optional nightly schedule, see `deploy/README.md`.
 
 Docker (server only, published on loopback):
 
@@ -89,9 +91,13 @@ docker compose up -d --build      # http://127.0.0.1:8171/
 ## Tests
 
 ```sh
-server/.venv/bin/python -m pytest server -q      # 453 server tests
-./gradlew --no-daemon :core:test                 # 65 core tests, JDK 17
+server/.venv/bin/python -m pytest server -q
+./gradlew --no-daemon :core:test                 # JDK 17
 ```
+
+Validation snapshot for 21 November 2026: server **506 passed, 1 skipped** on the final tree;
+Android core **71 passed, 1 skipped** (72 total, build-kit report of 20 November 2026;
+the merged tree has the same core test sources). See [`docs/validacia.md`](docs/validacia.md).
 
 GitHub Actions runs three jobs on every push and pull request (`.github/workflows/ci.yml`): server
 tests, core tests and a debug build of the Android app (GitHub's Ubuntu runners include the Android SDK).
@@ -153,7 +159,7 @@ it, the same roles, consent rules, audit log and pagination carry the club's wor
 | Wellbeing check-in | Daily five-item 1–5 check-in plus optional training minutes and RPE; team table with a wellbeing sum (5–25), load and a neutral "below usual" mark | `PUT /api/me/checkins/{day}`, `GET /api/checkins`, `GET /api/checkins/team` |
 | Feedback | Coach comments per athlete, optionally about a jump or session; unread badge for athletes | `POST /api/comments`, `GET /api/comments`, `GET /api/me/unread`, `POST /api/me/read` |
 | Live events | Server-Sent Events of new jumps, check-ins, comments and sessions in scope, via `fetch` so the token never appears in a URL | `GET /api/events` |
-| Form check | On-device squat form analysis (depth, frontal-plane angle, per-rep asymmetry); server stores numbers only | `POST /api/form`, `GET /api/form`, `GET /api/athletes/{id}/form.csv` |
+| Form check | On-device live or recorded analysis; only squat rep counts and plank hold time meet the validation threshold. The 18 other exercises are experimental. The server stores numbers only. | `POST /api/form`, `GET /api/form`, `GET /api/athletes/{id}/form.csv` |
 | Training | Coach plans per group or athlete, set logs, weekly volume and a double-progression suggestion (shown, never auto-applied) | `GET/POST /api/exercises`, `GET/POST/PUT/DELETE /api/plans`, `POST/GET/DELETE /api/set-logs`, `GET /api/athletes/{id}/training[.csv]` |
 | Nutrition | Food and weight logs, own weight-trend model, adaptive expenditure estimate and a weekly target program; numbers for discussion, not prescriptions | `GET/POST/DELETE /api/foods`, `POST/GET/DELETE /api/food-logs`, `PUT/DELETE /api/me/weights/{day}`, `GET/PUT /api/athletes/{id}/nutrition/target`, `PUT /api/athletes/{id}/nutrition/program`, `GET /api/athletes/{id}/nutrition/{estimate,summary,expenditure,program}` |
 | Assistant | On-prem LLM helper that proposes actions as the logged-in user and runs on the club's own model; no write happens until an explicit confirm | `POST /api/assistant`, `POST /api/assistant/confirm`, `GET /api/assistant/conversations[/{id}]` |
