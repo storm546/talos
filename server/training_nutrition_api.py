@@ -11,6 +11,7 @@ import hashlib
 from itertools import groupby
 import json
 from pathlib import Path
+import re
 import sqlite3
 from typing import Annotated, Literal
 
@@ -19,6 +20,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from . import coaching as co
+from . import food_sources as fs
 from . import training_nutrition as tn
 from .weight_trend import daily_trend
 from .input_bounds import Offset, SQLITE_MAX, SqlitePath
@@ -27,6 +29,8 @@ FOODS_CSV = Path(__file__).with_name("data") / "foods.csv"
 MEALS = ("breakfast", "lunch", "dinner", "snack")
 KINDS = ("strength", "plyometric", "mobility", "conditioning")
 LOG_DAYS_BACK = 30
+# kcal of one diary row: a food entry from its food, a quick add as typed (food_logs LEFT JOIN foods).
+LOG_KCAL = "COALESCE(food_logs.grams * foods.kcal / 100, food_logs.kcal)"
 
 SCHEMA = """
     CREATE TABLE IF NOT EXISTS exercises (
@@ -85,21 +89,13 @@ SCHEMA = """
         name_en TEXT NOT NULL DEFAULT '',
         kcal REAL NOT NULL, protein_g REAL NOT NULL, carbs_g REAL NOT NULL,
         fat_g REAL NOT NULL, fibre_g REAL NOT NULL DEFAULT 0,
-        source TEXT NOT NULL DEFAULT 'custom'
+        source TEXT NOT NULL DEFAULT 'custom',
+        servings TEXT, brand TEXT NOT NULL DEFAULT '', barcode TEXT, source_url TEXT NOT NULL DEFAULT '',
+        catalog_id TEXT, nutrients TEXT
     );
     CREATE UNIQUE INDEX IF NOT EXISTS foods_fdc ON foods(fdc_id) WHERE fdc_id IS NOT NULL;
-    CREATE TABLE IF NOT EXISTS food_logs (
-        id INTEGER PRIMARY KEY,
-        athlete_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        day TEXT NOT NULL,
-        meal TEXT NOT NULL CHECK(meal IN ('breakfast', 'lunch', 'dinner', 'snack')),
-        food_id INTEGER NOT NULL REFERENCES foods(id),
-        grams REAL NOT NULL CHECK(grams > 0 AND grams <= 5000),
-        client_id TEXT,
-        created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS food_logs_athlete ON food_logs(athlete_id, day);
-    CREATE UNIQUE INDEX IF NOT EXISTS food_logs_client ON food_logs(athlete_id, client_id) WHERE client_id IS NOT NULL;
+    {food_logs}
+    {food_log_indexes}
     CREATE TABLE IF NOT EXISTS weights (
         id INTEGER PRIMARY KEY,
         athlete_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -133,7 +129,48 @@ SCHEMA = """
         set_by INTEGER REFERENCES users(id),
         updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS recipes (
+        id INTEGER PRIMARY KEY,
+        owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        servings_count INTEGER NOT NULL CHECK(servings_count BETWEEN 1 AND 100),
+        food_id INTEGER NOT NULL REFERENCES foods(id)
+    );
+    CREATE TABLE IF NOT EXISTS recipe_items (
+        recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        food_id INTEGER NOT NULL REFERENCES foods(id),
+        grams REAL NOT NULL CHECK(grams > 0 AND grams <= 5000),
+        PRIMARY KEY (recipe_id, position)
+    );
 """
+# Version 2 (SPEC 7.1): food_id is null for a quick add, which carries its own label, kcal and macros instead;
+# grams stays the stored truth for food entries, serving_label and quantity record how it was entered.
+FOOD_LOGS = """CREATE TABLE IF NOT EXISTS {name} (
+        id INTEGER PRIMARY KEY,
+        athlete_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        day TEXT NOT NULL,
+        meal TEXT NOT NULL CHECK(meal IN ('breakfast', 'lunch', 'dinner', 'snack')),
+        food_id INTEGER REFERENCES foods(id),
+        grams REAL CHECK(grams > 0 AND grams <= 5000),
+        client_id TEXT,
+        created_at TEXT NOT NULL,
+        serving_label TEXT,
+        quantity REAL,
+        label TEXT,
+        kcal REAL, protein_g REAL, carbs_g REAL, fat_g REAL,
+        CHECK((food_id IS NOT NULL AND grams IS NOT NULL) OR (food_id IS NULL AND label IS NOT NULL AND kcal IS NOT NULL))
+    );"""
+FOOD_LOG_INDEXES = """CREATE INDEX IF NOT EXISTS food_logs_athlete ON food_logs(athlete_id, day);
+    CREATE UNIQUE INDEX IF NOT EXISTS food_logs_client ON food_logs(athlete_id, client_id) WHERE client_id IS NOT NULL;"""
+SCHEMA = SCHEMA.format(food_logs=FOOD_LOGS.format(name="food_logs"), food_log_indexes=FOOD_LOG_INDEXES)
+OLD_LOG_COLUMNS = "id, athlete_id, day, meal, food_id, grams, client_id, created_at"
+NEW_COLUMNS = {
+    "foods": {"servings": "TEXT", "brand": "TEXT NOT NULL DEFAULT ''", "barcode": "TEXT",
+              "source_url": "TEXT NOT NULL DEFAULT ''", "catalog_id": "TEXT", "nutrients": "TEXT"},
+    "coaching_programs": {"target_weight_kg": "REAL", "end_date": "TEXT"},
+}
 
 
 def init_schema(db):
@@ -142,6 +179,19 @@ def init_schema(db):
     columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
     if "under_18" not in columns:
         db.execute("ALTER TABLE users ADD COLUMN under_18 INTEGER NOT NULL DEFAULT 0 CHECK(under_18 IN (0, 1))")
+    for table, additions in NEW_COLUMNS.items():
+        columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}
+        for name, declaration in additions.items():
+            if name not in columns:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
+    if "label" not in {row["name"] for row in db.execute("PRAGMA table_info(food_logs)")}:
+        # SQLite cannot drop NOT NULL in place: rebuild food_logs once, keeping every row and id.
+        db.executescript(f"""BEGIN; {FOOD_LOGS.format(name="food_logs_v2")}
+            INSERT INTO food_logs_v2({OLD_LOG_COLUMNS}) SELECT {OLD_LOG_COLUMNS} FROM food_logs;
+            DROP TABLE food_logs; ALTER TABLE food_logs_v2 RENAME TO food_logs; {FOOD_LOG_INDEXES} COMMIT;""")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS foods_catalog ON foods(catalog_id) WHERE catalog_id IS NOT NULL")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS foods_barcode ON foods(IFNULL(club_id, 0), IFNULL(owner_id, 0), barcode) "
+               "WHERE barcode IS NOT NULL")
     load_foods(db)
 
 
@@ -156,6 +206,13 @@ def load_foods(db):
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [(int(r["fdc_id"]), r["name_bg"], r["name_en"], float(r["kcal"]), float(r["protein_g"]),
           float(r["carbs_g"]), float(r["fat_g"]), float(r["fibre_g"]), r["source"]) for r in read_foods_csv()])
+    # USDA portions and micronutrients for the bundled foods come from the catalogue, matched by FDC id, once.
+    missing = [row[0] for row in db.execute("SELECT fdc_id FROM foods WHERE fdc_id IS NOT NULL AND servings IS NULL")]
+    if missing:
+        db.executemany("UPDATE foods SET servings = ?, nutrients = ? WHERE fdc_id = ?", [
+            (json.dumps(food["servings"]), json.dumps(food["nutrients"]), fdc_id)
+            for fdc_id, food in fs.catalog_by_fdc(missing).items()])
+        db.execute("UPDATE foods SET servings = '[]' WHERE fdc_id IS NOT NULL AND servings IS NULL")
 
 
 class StrictModel(BaseModel):
@@ -248,6 +305,135 @@ class FoodLog(StrictModel):
     grams: float = Field(gt=0, le=5000)
     client_id: str | None = Field(default=None, min_length=1, max_length=128)
     _day = field_validator("day")(iso_day)
+
+
+CatalogId = Annotated[str, Field(max_length=40, pattern=fs.CATALOG_ID.pattern)]
+Barcode = Annotated[str, Field(pattern=r"^[0-9]{8,14}$")]
+
+
+class Serving(StrictModel):
+    label: str = Field(min_length=1, max_length=60)
+    grams: float = Field(gt=0, le=5000)
+    _label = field_validator("label")(stripped)
+
+
+class FoodFields(StrictModel):
+    brand: str = Field(default="", max_length=100)
+    barcode: Barcode | None = None
+    servings: list[Serving] = Field(default=[], max_length=30)
+
+
+class FoodV2(CustomFood, FoodFields):
+    pass
+
+
+class FoodPatch(FoodFields):
+    """Correct a food (a scanned one, say): only the fields sent change."""
+    name_bg: str | None = Field(default=None, min_length=1, max_length=100)
+    name_en: str | None = Field(default=None, max_length=200)
+    kcal: float | None = Field(default=None, ge=0, le=1000)
+    protein_g: float | None = Field(default=None, ge=0, le=100)
+    carbs_g: float | None = Field(default=None, ge=0, le=100)
+    fat_g: float | None = Field(default=None, ge=0, le=100)
+    fibre_g: float | None = Field(default=None, ge=0, le=100)
+    brand: str | None = Field(default=None, max_length=100)
+    servings: list[Serving] | None = Field(default=None, max_length=30)
+    _name = field_validator("name_bg")(lambda value: value if value is None else stripped(value))
+
+
+class QuickValues(StrictModel):
+    label: str | None = Field(default=None, min_length=1, max_length=100)
+    kcal: float | None = Field(default=None, ge=0, le=10000)
+    protein_g: float | None = Field(default=None, ge=0, le=1000)
+    carbs_g: float | None = Field(default=None, ge=0, le=1000)
+    fat_g: float | None = Field(default=None, ge=0, le=1000)
+    serving_label: str | None = Field(default=None, min_length=1, max_length=60)
+    quantity: float | None = Field(default=None, gt=0, le=100)
+
+
+class FoodEntry(FoodLog, QuickValues):
+    """A diary entry (SPEC 7.1): a food by id, a catalogue food (materialised once), or a quick add with no food."""
+    food_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
+    catalog_id: CatalogId | None = None
+    grams: float | None = Field(default=None, gt=0, le=5000)
+
+    @model_validator(mode="after")
+    def one_source(self):
+        quick = self.label is not None or self.kcal is not None or any(
+            v is not None for v in (self.protein_g, self.carbs_g, self.fat_g))
+        if quick:
+            if self.label is None or self.kcal is None or self.food_id is not None or self.catalog_id is not None \
+                    or self.grams is not None or self.serving_label is not None or self.quantity is not None:
+                raise ValueError("A quick add needs label and kcal (macros optional) and no food, grams or serving")
+        elif (self.food_id is None) == (self.catalog_id is None):
+            raise ValueError("Give food_id or catalog_id, or a quick add with label and kcal")
+        elif self.grams is None and self.serving_label is None:
+            raise ValueError("Give grams or a serving_label (with quantity)")
+        return self
+
+
+class FoodLogPatch(QuickValues):
+    day: str | None = Field(default=None, min_length=10, max_length=10)
+    meal: Literal["breakfast", "lunch", "dinner", "snack"] | None = None
+    grams: float | None = Field(default=None, gt=0, le=5000)
+    _day = field_validator("day")(lambda value: value if value is None else iso_day(value))
+
+
+class FoodLogCopy(StrictModel):
+    from_day: str = Field(min_length=10, max_length=10)
+    to_day: str = Field(min_length=10, max_length=10)
+    from_meal: Literal["breakfast", "lunch", "dinner", "snack"] | None = None
+    to_meal: Literal["breakfast", "lunch", "dinner", "snack"] | None = None
+    client_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,100}$")
+    _days = field_validator("from_day", "to_day")(iso_day)
+
+
+class FoodLogBatch(StrictModel):
+    entries: list[FoodEntry] = Field(min_length=1, max_length=50)
+
+
+class RecipeItem(StrictModel):
+    food_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
+    catalog_id: CatalogId | None = None
+    grams: float = Field(gt=0, le=5000)
+
+    @model_validator(mode="after")
+    def one_food(self):
+        if (self.food_id is None) == (self.catalog_id is None):
+            raise ValueError("Give food_id or catalog_id")
+        return self
+
+
+class RecipeBody(StrictModel):
+    name: str = Field(min_length=1, max_length=100)
+    servings_count: int = Field(ge=1, le=100)
+    items: list[RecipeItem] = Field(min_length=1, max_length=50)
+    club_id: int | None = Field(default=None, gt=0, le=SQLITE_MAX)
+    _name = field_validator("name")(stripped)
+
+
+class GoalBody(StrictModel):
+    phase: Literal["maintain", "lose", "gain"]
+    target_weight_kg: float | None = Field(default=None, ge=20, le=400)
+    end_date: str | None = Field(default=None, min_length=10, max_length=10)
+    protein_g: float = Field(ge=0, le=500)
+    fat_g: float = Field(ge=0, le=500)
+    _end = field_validator("end_date")(lambda value: value if value is None else iso_day(value))
+
+    @model_validator(mode="after")
+    def target_matches_phase(self):
+        if (self.phase == "maintain") != (self.target_weight_kg is None and self.end_date is None) or \
+                (self.target_weight_kg is None) != (self.end_date is None):
+            raise ValueError("Lose and gain need target_weight_kg and end_date; maintain takes neither")
+        return self
+
+
+class AiParse(StrictModel):
+    text: str = Field(min_length=1, max_length=1000)
+    day: str | None = Field(default=None, min_length=10, max_length=10)
+    meal: Literal["breakfast", "lunch", "dinner", "snack"] = "snack"
+    _text = field_validator("text")(stripped)
+    _day = field_validator("day")(lambda value: value if value is None else iso_day(value))
 
 
 class Weight(StrictModel):
@@ -598,6 +784,7 @@ def install(app, h):
     # --- foods ---
 
     def visible_food_sql(user):
+        """Foods (and recipes: same owner/club columns) a user may see and use."""
         if user["role"] == "admin":
             return "owner_id IS NULL", ()
         if user["role"] == "coach":
@@ -605,26 +792,147 @@ def install(app, h):
         return "(club_id IS NULL AND owner_id IS NULL) OR (club_id = ? AND owner_id IS NULL) OR owner_id = ?", (
             user["club_id"], user["id"])
 
+    def writable(row, user):
+        """Own foods and recipes for athletes; club ones for their coach or any admin; never system foods."""
+        return row is not None and row["club_id"] is not None and (
+            row["owner_id"] == user["id"] if user["role"] == "athlete"
+            else row["owner_id"] is None and (user["role"] == "admin" or row["club_id"] == user["club_id"]))
+
+    def servings_of(food):
+        """"100 g" first, then the stored portions (USDA, label serving size or recipe portions)."""
+        stored = food["servings"]
+        stored = json.loads(stored or "[]") if not isinstance(stored, list) else stored
+        return [{"label": "100 g", "grams": 100.0}, *(s for s in stored if s["label"] != "100 g")]
+
     def food_row(row):
-        return {**dict(row)}
+        food = dict(row)
+        if "servings" in food:
+            food["servings"] = servings_of(food)
+            food["nutrients"] = json.loads(food["nutrients"] or "{}")
+        return food
+
+    def scoped_food(db, user, food_id):
+        row = db.execute("SELECT * FROM foods WHERE id = ?", (food_id,)).fetchone()
+        if not writable(row, user):
+            raise HTTPException(404, "Food not found")
+        return row
+
+    def insert_food(db, club_id, owner_id, food):
+        try:
+            cursor = db.execute(
+                "INSERT INTO foods(club_id, owner_id, name_bg, name_en, kcal, protein_g, carbs_g, fat_g, fibre_g, "
+                "brand, barcode, servings, nutrients, source, source_url, catalog_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (club_id, owner_id, food["name_bg"], food.get("name_en", ""), food["kcal"], food["protein_g"],
+                 food["carbs_g"], food["fat_g"], food.get("fibre_g", 0), food.get("brand", ""), food.get("barcode"),
+                 json.dumps(food.get("servings", [])), json.dumps(food.get("nutrients", {})),
+                 food.get("source", "custom"), food.get("source_url", ""), food.get("catalog_id")))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "A food with this barcode already exists here") from None
+        return cursor.lastrowid
+
+    def resolve_food(db, user, food_id, catalog_id, write):
+        """A visible food for an entry or recipe item. A catalogue food is materialised once as a system food
+        (idempotent by catalog_id) when writing; a validation-only pass returns the catalogue record."""
+        if catalog_id is not None:
+            row = db.execute("SELECT * FROM foods WHERE catalog_id = ?", (catalog_id,)).fetchone()
+            if row is not None:
+                return row
+            food = fs.catalog_get(catalog_id)
+            if food is None:
+                raise HTTPException(422, "Unknown catalogue food")
+            if not write:
+                return food
+            return db.execute("SELECT * FROM foods WHERE id = ?", (insert_food(db, None, None, food),)).fetchone()
+        clause, params = visible_food_sql(user)
+        row = db.execute(f"SELECT * FROM foods WHERE id = ? AND ({clause})", (food_id, *params)).fetchone()
+        if row is None:
+            raise HTTPException(422, "Unknown food")
+        return row
 
     @app.get("/api/foods")
     def list_foods(q: Annotated[str | None, Query(max_length=100)] = None,
                    limit: Annotated[int, Query(ge=1, le=500)] = 50,
                    offset: Offset = 0,
                    user=Depends(current_user), db=Depends(get_db)):
+        """Existing foods first, then (for a search with room left on the page) catalogue foods not yet here."""
         clause, params = visible_food_sql(user)
         like = None
         if q:
             escaped = q.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             like = f"%{escaped}%"
-        return [food_row(r) for r in db.execute(
+        found = [food_row(r) for r in db.execute(
             f"SELECT * FROM foods WHERE ({clause}) AND (? IS NULL OR casefold(name_bg) LIKE ? ESCAPE '\\' "
             "OR casefold(name_en) LIKE ? ESCAPE '\\') ORDER BY name_bg, id LIMIT ? OFFSET ?",
             (*params, like, like, like, limit, offset))]
+        if q and len(found) < limit:
+            hits = fs.catalog_search(q, limit - len(found))
+            here = {r[0] for r in db.execute(
+                f"SELECT catalog_id FROM foods WHERE catalog_id IN ({','.join('?' * len(hits))})",
+                [h["catalog_id"] for h in hits])} | {r[0] for r in db.execute(
+                f"SELECT 'fdc:' || fdc_id FROM foods WHERE fdc_id IN ({','.join('?' * len(hits))})",
+                [h["fdc_id"] for h in hits])}
+            found += [{**h, "servings": servings_of(h)} for h in hits
+                      if h["catalog_id"] not in here and f'fdc:{h["fdc_id"]}' not in here]
+        return found
+
+    @app.get("/api/foods/recent")
+    def recent_foods(meal: Literal["breakfast", "lunch", "dinner", "snack"] | None = None,
+                     athlete_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
+                     user=Depends(current_user), db=Depends(get_db)):
+        """Up to 20 foods for one-tap logging: the 10 most recent, then the most frequent (last 90 days)."""
+        athlete = target_athlete(db, user, athlete_id)
+        since = (utc_today() - timedelta(days=90)).isoformat()
+        usage = ("SELECT foods.*, COUNT(*) AS uses, MAX(food_logs.day || food_logs.created_at) AS last_used "
+                 "FROM food_logs JOIN foods ON foods.id = food_logs.food_id WHERE food_logs.athlete_id = ? "
+                 "AND food_logs.day >= ? AND (? IS NULL OR food_logs.meal = ?) GROUP BY foods.id ")
+        args = (athlete["id"], since, meal, meal)
+        rows = {r["id"]: r for r in db.execute(usage + "ORDER BY last_used DESC, foods.id DESC LIMIT 10", args)}
+        for r in db.execute(usage + "ORDER BY uses DESC, last_used DESC, foods.id DESC LIMIT 20", args):
+            if len(rows) < 20:
+                rows.setdefault(r["id"], r)
+        result = []
+        for r in rows.values():
+            last = db.execute("SELECT grams, serving_label, quantity FROM food_logs WHERE athlete_id = ? AND food_id = ? "
+                              "ORDER BY day DESC, id DESC LIMIT 1", (athlete["id"], r["id"])).fetchone()
+            food = food_row(r)
+            del food["last_used"]
+            result.append({**food, "last_grams": last["grams"], "last_serving_label": last["serving_label"],
+                           "last_quantity": last["quantity"]})
+        return result
+
+    @app.get("/api/foods/barcode/{code}")
+    def barcode_food(code: str, request: Request, user=Depends(current_user), db=Depends(get_db)):
+        """A local food with this barcode first; else Open Food Facts, saved as a club food (data under the ODbL)."""
+        if not re.fullmatch(r"[0-9]{8,14}", code):
+            raise HTTPException(422, "A barcode has 8 to 14 digits")
+        clause, params = visible_food_sql(user)
+        local = f"SELECT * FROM foods WHERE barcode = ? AND ({clause}) ORDER BY owner_id IS NULL, club_id IS NULL, id"
+        if (row := db.execute(local, (code, *params)).fetchone()) is not None:
+            return food_row(row)
+        if user["role"] == "athlete":
+            need_consent(user, "foods")
+        try:
+            food = fs.open_food_facts(code)  # outside the write transaction: no lock held during the network call
+        except fs.Unavailable:
+            raise HTTPException(503, "The product database cannot be reached; nothing was saved. "
+                                     "Try again or enter the food manually.") from None
+        if food is None:
+            raise HTTPException(404, "Barcode not found. Create the food with this barcode.")
+        with h.authorized_write(db, request) as (user, _):
+            if (row := db.execute(local, (code, *params)).fetchone()) is not None:
+                return food_row(row)
+            food_id = insert_food(db, user["club_id"], None, food)
+            audit(db, user["id"], "food_scanned", food_id)
+            return JSONResponse(status_code=201, content=food_row(
+                db.execute("SELECT * FROM foods WHERE id = ?", (food_id,)).fetchone()))
+
+    @app.get("/api/nutrient-definitions")
+    def nutrient_definitions(user=Depends(current_user)):
+        return fs.DEFINITIONS
 
     @app.post("/api/foods", status_code=201, dependencies=[Depends(current_user)])
-    def add_food(body: CustomFood, request: Request, db=Depends(get_db)):
+    def add_food(body: FoodV2, request: Request, db=Depends(get_db)):
         with h.authorized_write(db, request) as (user, _):
             if user["role"] == "athlete":
                 need_consent(user, "foods")
@@ -633,26 +941,39 @@ def install(app, h):
                     raise HTTPException(422, "club_id applies to staff only")
             else:
                 club_id, owner_id = staff_club(db, user, body.club_id), None
-            cursor = db.execute(
-                "INSERT INTO foods(club_id, owner_id, name_bg, name_en, kcal, protein_g, carbs_g, fat_g, fibre_g) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (club_id, owner_id, body.name_bg, body.name_en, body.kcal, body.protein_g, body.carbs_g,
-                 body.fat_g, body.fibre_g))
-            audit(db, user["id"], "food_created", cursor.lastrowid)
-            return food_row(db.execute("SELECT * FROM foods WHERE id = ?", (cursor.lastrowid,)).fetchone())
+            food_id = insert_food(db, club_id, owner_id, body.model_dump())
+            audit(db, user["id"], "food_created", food_id)
+            return food_row(db.execute("SELECT * FROM foods WHERE id = ?", (food_id,)).fetchone())
+
+    @app.patch("/api/foods/{food_id}", dependencies=[Depends(current_user)])
+    def update_food(food_id: SqlitePath, body: FoodPatch, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, _):
+            row = scoped_food(db, user, food_id)
+            if user["role"] == "athlete":
+                need_consent(user, "foods")
+            if row["source"] == "recipe":
+                raise HTTPException(422, "Edit the recipe instead")
+            changes = body.model_dump(include=body.model_fields_set)
+            if any(value is None for key, value in changes.items() if key not in ("barcode", "servings")):
+                raise HTTPException(422, "Only barcode and servings can be cleared")
+            if "servings" in changes:
+                changes["servings"] = json.dumps(changes["servings"] or [])
+            if changes:
+                try:
+                    db.execute(f"UPDATE foods SET {', '.join(f'{k} = ?' for k in changes)} WHERE id = ?",
+                               (*changes.values(), food_id))
+                except sqlite3.IntegrityError:
+                    raise HTTPException(409, "A food with this barcode already exists here") from None
+            audit(db, user["id"], "food_updated", food_id, {"fields": sorted(changes)})
+            return food_row(db.execute("SELECT * FROM foods WHERE id = ?", (food_id,)).fetchone())
 
     @app.delete("/api/foods/{food_id}", status_code=204)
     def delete_food(food_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
-        row = db.execute("SELECT * FROM foods WHERE id = ?", (food_id,)).fetchone()
-        mine = row is not None and row["club_id"] is not None and (
-            row["owner_id"] == user["id"] if user["role"] == "athlete"
-            else row["owner_id"] is None and (user["role"] == "admin" or row["club_id"] == user["club_id"]))
-        if not mine:
-            raise HTTPException(404, "Food not found")
+        scoped_food(db, user, food_id)
         try:
             db.execute("DELETE FROM foods WHERE id = ?", (food_id,))
         except sqlite3.IntegrityError:
-            raise HTTPException(409, "The food is used in logged meals") from None
+            raise HTTPException(409, "The food is used in logged meals or recipes") from None
         audit(db, user["id"], "food_deleted", food_id)
         db.commit()
 
@@ -663,48 +984,116 @@ def install(app, h):
         rows = db.execute(
             "SELECT food_logs.*, foods.name_bg, foods.name_en, foods.kcal AS f_kcal, foods.protein_g AS f_protein_g, "
             "foods.carbs_g AS f_carbs_g, foods.fat_g AS f_fat_g, foods.fibre_g AS f_fibre_g "
-            "FROM food_logs JOIN foods ON foods.id = food_logs.food_id WHERE food_logs.athlete_id = ? "
+            "FROM food_logs LEFT JOIN foods ON foods.id = food_logs.food_id WHERE food_logs.athlete_id = ? "
             + where + order + tail, (athlete_id, *params, *tail_params))
         for r in rows:
-            per100 = {"kcal": r["f_kcal"], "protein_g": r["f_protein_g"], "carbs_g": r["f_carbs_g"],
-                      "fat_g": r["f_fat_g"], "fibre_g": r["f_fibre_g"]}
+            if r["food_id"] is None:  # quick add: the values typed, never derived
+                macros = {"kcal": r["kcal"], "protein_g": r["protein_g"], "carbs_g": r["carbs_g"],
+                          "fat_g": r["fat_g"], "fibre_g": 0.0}
+            else:
+                macros = food_macros({"kcal": r["f_kcal"], "protein_g": r["f_protein_g"], "carbs_g": r["f_carbs_g"],
+                                      "fat_g": r["f_fat_g"], "fibre_g": r["f_fibre_g"]}, r["grams"])
             yield {"id": r["id"], "athlete_id": r["athlete_id"], "day": r["day"], "meal": r["meal"],
-                   "food_id": r["food_id"], "name_bg": r["name_bg"], "name_en": r["name_en"],
-                   "grams": r["grams"], "client_id": r["client_id"], "created_at": r["created_at"],
-                   **food_macros(per100, r["grams"])}
+                   "food_id": r["food_id"], "name_bg": r["name_bg"] if r["food_id"] else r["label"],
+                   "name_en": r["name_en"] or "", "grams": r["grams"], "client_id": r["client_id"],
+                   "created_at": r["created_at"], "serving_label": r["serving_label"], "quantity": r["quantity"],
+                   "label": r["label"], **macros}
 
     def food_log_rows(*args, **kwargs):
         return list(iter_food_logs(*args, **kwargs))
 
+    def log_row(db, athlete_id, log_id):
+        return food_log_rows(db, athlete_id, "AND food_logs.id = ?", (log_id,))[0]
+
+    def serving_grams(food, serving_label, quantity, grams):
+        """grams stays the stored truth: sent grams win, else the serving's grams times the quantity."""
+        if serving_label is None:
+            return grams
+        serving = next((s for s in servings_of(food) if s["label"] == serving_label), None)
+        if serving is None:
+            raise HTTPException(422, "Unknown serving for this food")
+        grams = grams if grams is not None else round(serving["grams"] * (quantity or 1), 1)
+        if not 0 < grams <= 5000:
+            raise HTTPException(422, "grams must be above 0 and at most 5000")
+        return grams
+
     @app.post("/api/food-logs", status_code=201, dependencies=[Depends(current_user)])
-    def add_food_log(body: FoodLog, request: Request, db=Depends(get_db)):
+    def add_food_log(body: FoodEntry, request: Request, db=Depends(get_db)):
         with h.authorized_write(db, request) as (user, emit):
             return log_food(body, user, db, emit)
 
     def log_food(body: FoodLog, user, db, emit):
+        result = save_food_log(body, user, db, emit)
+        return None if result is None else JSONResponse(status_code=result[0], content=result[1])
+
+    def save_food_log(body, user, db, emit):
+        """Validate (emit None) or write one entry; (status, row) with 200 for a client_id replay."""
         require_role(user, "athlete")
         need_consent(user, "meals")
-        if emit is not None and body.client_id is not None:
+        entry = body if isinstance(body, FoodEntry) else FoodEntry.model_validate(body.model_dump())
+        if emit is not None and entry.client_id is not None:
             previous = db.execute("SELECT id FROM food_logs WHERE athlete_id = ? AND client_id = ?",
-                                  (user["id"], body.client_id)).fetchone()
+                                  (user["id"], entry.client_id)).fetchone()
             if previous is not None:
-                return JSONResponse(status_code=200, content=food_log_rows(
-                    db, user["id"], "AND food_logs.id = ?", (previous["id"],))[0])
-        check_log_day(body.day)
-        clause, params = visible_food_sql(user)
-        if db.execute(f"SELECT 1 FROM foods WHERE id = ? AND ({clause})", (body.food_id, *params)).fetchone() is None:
-            raise HTTPException(422, "Unknown food")
+                return 200, log_row(db, user["id"], previous["id"])
+        check_log_day(entry.day)
+        quick = entry.food_id is None and entry.catalog_id is None
+        food = None if quick else resolve_food(db, user, entry.food_id, entry.catalog_id, emit is not None)
+        grams = None if quick else serving_grams(food, entry.serving_label, entry.quantity, entry.grams)
         if emit is None:
-            return
+            return None
         created_at = h.now_iso()
         cursor = db.execute(
-            "INSERT INTO food_logs(athlete_id, day, meal, food_id, grams, client_id, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user["id"], body.day, body.meal, body.food_id, body.grams, body.client_id, created_at))
+            "INSERT INTO food_logs(athlete_id, day, meal, food_id, grams, client_id, created_at, serving_label, quantity, "
+            "label, kcal, protein_g, carbs_g, fat_g) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (user["id"], entry.day, entry.meal, None if quick else food["id"], grams, entry.client_id, created_at,
+             entry.serving_label, None if entry.serving_label is None else (entry.quantity or 1),
+             entry.label, entry.kcal, *(None if not quick else (v or 0) for v in (entry.protein_g, entry.carbs_g, entry.fat_g))))
         audit(db, user["id"], "food_logged", cursor.lastrowid)
         publish(db, user, "food", cursor.lastrowid, created_at, emit)
-        return JSONResponse(status_code=201, content=food_log_rows(
-            db, user["id"], "AND food_logs.id = ?", (cursor.lastrowid,))[0])
+        return 201, log_row(db, user["id"], cursor.lastrowid)
+
+    @app.post("/api/food-logs/batch", status_code=201, dependencies=[Depends(current_user)])
+    def batch_food_logs(body: FoodLogBatch, request: Request, db=Depends(get_db)):
+        """Up to 50 entries in one transaction: all are logged or, if any fails, none."""
+        with h.authorized_write(db, request) as (user, emit):
+            rows = []
+            for number, entry in enumerate(body.entries, 1):
+                try:
+                    rows.append(save_food_log(entry, user, db, emit)[1])
+                except HTTPException as error:
+                    raise HTTPException(error.status_code, f"Entry {number}: {error.detail}") from None
+            audit(db, user["id"], "food_logs_batch", user["id"], {"count": len(rows)})
+            return rows
+
+    @app.post("/api/food-logs/copy", status_code=201, dependencies=[Depends(current_user)])
+    def copy_food_logs(body: FoodLogCopy, request: Request, db=Depends(get_db)):
+        """Copy a day (or one meal) to another day (or meal); a repeated client_id returns the first copy."""
+        with h.authorized_write(db, request) as (user, emit):
+            require_role(user, "athlete")
+            need_consent(user, "meals")
+            if body.client_id is not None:
+                done = [r["id"] for r in db.execute(
+                    "SELECT id FROM food_logs WHERE athlete_id = ? AND client_id >= ? AND client_id < ? ORDER BY id",
+                    (user["id"], body.client_id + ":", body.client_id + ";"))]
+                if done:
+                    return JSONResponse(status_code=200, content=[log_row(db, user["id"], i) for i in done])
+            check_log_day(body.to_day)
+            sources = [r["id"] for r in db.execute(
+                "SELECT id FROM food_logs WHERE athlete_id = ? AND day = ? AND (? IS NULL OR meal = ?) ORDER BY id",
+                (user["id"], body.from_day, body.from_meal, body.from_meal))]
+            if not sources:
+                raise HTTPException(422, "Nothing to copy")
+            created_at = h.now_iso()
+            copied = [db.execute(
+                "INSERT INTO food_logs(athlete_id, day, meal, food_id, grams, client_id, created_at, serving_label, "
+                "quantity, label, kcal, protein_g, carbs_g, fat_g) SELECT athlete_id, ?, COALESCE(?, meal), food_id, "
+                "grams, ?, ?, serving_label, quantity, label, kcal, protein_g, carbs_g, fat_g FROM food_logs WHERE id = ?",
+                (body.to_day, body.to_meal, None if body.client_id is None else f"{body.client_id}:{n}", created_at,
+                 source)).lastrowid for n, source in enumerate(sources)]
+            audit(db, user["id"], "food_logs_copied", user["id"], {"count": len(copied)})
+            publish(db, user, "food", copied[0], created_at, emit)
+            return [log_row(db, user["id"], i) for i in copied]
 
     @app.get("/api/food-logs")
     def list_food_logs(athlete_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
@@ -717,12 +1106,156 @@ def install(app, h):
         return food_log_rows(db, athlete["id"], "AND (? IS NULL OR food_logs.day >= ?) AND (? IS NULL OR food_logs.day <= ?)",
                              (from_, from_, to, to), " LIMIT ? OFFSET ?", (limit, offset))
 
+    @app.patch("/api/food-logs/{log_id}", dependencies=[Depends(current_user)])
+    def update_food_log(log_id: SqlitePath, body: FoodLogPatch, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
+            require_role(user, "athlete")
+            row = db.execute("SELECT * FROM food_logs WHERE id = ? AND athlete_id = ?", (log_id, user["id"])).fetchone()
+            if row is None:
+                raise HTTPException(404, "Meal entry not found")
+            sent = body.model_fields_set
+            changes = {key: getattr(body, key) for key in sent & {"day", "meal"}}
+            if None in changes.values():
+                raise HTTPException(422, "day and meal cannot be cleared")
+            if "day" in changes:
+                check_log_day(changes["day"])
+            if row["food_id"] is None:
+                if sent & {"grams", "serving_label", "quantity"}:
+                    raise HTTPException(422, "A quick add has no grams or serving; edit its label, kcal or macros")
+                changes |= {key: getattr(body, key) for key in sent & {"label", "kcal", "protein_g", "carbs_g", "fat_g"}}
+                if any(changes.get(key, 0) is None for key in ("label", "kcal", "protein_g", "carbs_g", "fat_g")):
+                    raise HTTPException(422, "Quick add values cannot be cleared")
+            else:
+                if sent & {"label", "kcal", "protein_g", "carbs_g", "fat_g"}:
+                    raise HTTPException(422, "Food entries take grams or a serving, not typed values")
+                food = db.execute("SELECT * FROM foods WHERE id = ?", (row["food_id"],)).fetchone()
+                if sent & {"serving_label", "quantity"}:
+                    label = body.serving_label if "serving_label" in sent else row["serving_label"]
+                    if label is None:
+                        raise HTTPException(422, "Choose a serving_label")
+                    quantity = (body.quantity if "quantity" in sent else row["quantity"]) or 1
+                    changes |= {"serving_label": label, "quantity": quantity,
+                                "grams": serving_grams(food, label, quantity, body.grams)}
+                elif "grams" in sent:
+                    if body.grams is None:
+                        raise HTTPException(422, "grams cannot be cleared")
+                    changes |= {"grams": body.grams, "serving_label": None, "quantity": None}
+            if changes:
+                db.execute(f"UPDATE food_logs SET {', '.join(f'{k} = ?' for k in changes)} WHERE id = ?",
+                           (*changes.values(), log_id))
+            audit(db, user["id"], "food_logged", log_id, {"updated": sorted(changes)})
+            publish(db, user, "food", log_id, h.now_iso(), emit)
+            return log_row(db, user["id"], log_id)
+
     @app.delete("/api/food-logs/{log_id}", status_code=204)
     def delete_food_log(log_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
         require_role(user, "athlete")
         if db.execute("DELETE FROM food_logs WHERE id = ? AND athlete_id = ?", (log_id, user["id"])).rowcount == 0:
             raise HTTPException(404, "Meal entry not found")
         audit(db, user["id"], "food_deleted_log", log_id)
+        db.commit()
+
+    # --- recipes: a recipe is backed by a food (source "recipe") so it is logged like any food ---
+
+    def recipe_values(db, user, body, write, own_food=None):
+        """Per-100 g values of the backing food from the items; a nutrient is known only if every item knows it."""
+        items = [(resolve_food(db, user, item.food_id, item.catalog_id, write), item.grams) for item in body.items]
+        if own_food is not None and any(food["id"] == own_food for food, _ in items):
+            raise HTTPException(422, "A recipe cannot contain itself")
+        total = sum(grams for _, grams in items)
+        if total > 50000:
+            raise HTTPException(422, "A recipe can weigh at most 50 kg")
+        per100 = {key: round(sum(food[key] * grams for food, grams in items) / total, 3)
+                  for key in ("kcal", "protein_g", "carbs_g", "fat_g", "fibre_g")}
+        micro = [json.loads(food["nutrients"] or "{}") for food, _ in items]
+        known = set.intersection(*(set(m) for m in micro))
+        nutrients = {key: sum(m[key] * grams for m, (_, grams) in zip(micro, items)) / total for key in sorted(known)}
+        servings = [{"label": "1 порция", "grams": round(total / body.servings_count, 1)},
+                    {"label": "цялата рецепта", "grams": round(total, 1)}]
+        return {"name_bg": body.name, **per100, "nutrients": nutrients, "servings": servings, "source": "recipe"}, [
+            (food["id"], grams) for food, grams in items]
+
+    def write_recipe_items(db, recipe_id, items):
+        db.execute("DELETE FROM recipe_items WHERE recipe_id = ?", (recipe_id,))
+        db.executemany("INSERT INTO recipe_items(recipe_id, position, food_id, grams) VALUES (?, ?, ?, ?)",
+                       [(recipe_id, n, food_id, grams) for n, (food_id, grams) in enumerate(items)])
+
+    def recipe_json(db, recipe):
+        food = food_row(db.execute("SELECT * FROM foods WHERE id = ?", (recipe["food_id"],)).fetchone())
+        items = [{"food_id": r["food_id"], "name_bg": r["name_bg"], "grams": r["grams"],
+                  **food_macros(r, r["grams"])} for r in db.execute(
+            "SELECT recipe_items.food_id, recipe_items.grams, foods.name_bg, foods.kcal, foods.protein_g, "
+            "foods.carbs_g, foods.fat_g, foods.fibre_g FROM recipe_items JOIN foods ON foods.id = recipe_items.food_id "
+            "WHERE recipe_id = ? ORDER BY position", (recipe["id"],))]
+        serving = food["servings"][1]["grams"]
+        return {**dict(recipe), "total_grams": food["servings"][2]["grams"], "serving_grams": serving,
+                "per_serving": food_macros(food, serving), "per_100g": food_macros(food, 100),
+                "nutrients_per_100g": food["nutrients"], "items": items}
+
+    def scoped_recipe(db, user, recipe_id, write=False):
+        row = db.execute("SELECT * FROM recipes WHERE id = ?", (recipe_id,)).fetchone()
+        clause, params = visible_food_sql(user)
+        visible = row is not None and db.execute(f"SELECT 1 FROM recipes WHERE id = ? AND ({clause})",
+                                                 (recipe_id, *params)).fetchone()
+        if not visible or (write and not writable(row, user)):
+            raise HTTPException(404, "Recipe not found")
+        return row
+
+    @app.get("/api/recipes")
+    def list_recipes(user=Depends(current_user), db=Depends(get_db)):
+        clause, params = visible_food_sql(user)
+        return [recipe_json(db, r) for r in db.execute(
+            f"SELECT * FROM recipes WHERE {clause} ORDER BY name, id", params)]
+
+    @app.get("/api/recipes/{recipe_id}")
+    def get_recipe(recipe_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
+        return recipe_json(db, scoped_recipe(db, user, recipe_id))
+
+    @app.post("/api/recipes", status_code=201, dependencies=[Depends(current_user)])
+    def add_recipe(body: RecipeBody, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
+            if user["role"] == "athlete":
+                need_consent(user, "recipes")
+                if body.club_id is not None:
+                    raise HTTPException(422, "club_id applies to staff only")
+                club_id, owner_id = user["club_id"], user["id"]
+            else:
+                club_id, owner_id = staff_club(db, user, body.club_id), None
+            food, items = recipe_values(db, user, body, True)
+            food_id = insert_food(db, club_id, owner_id, food)
+            cursor = db.execute("INSERT INTO recipes(owner_id, club_id, name, servings_count, food_id) VALUES (?, ?, ?, ?, ?)",
+                                (owner_id, club_id, body.name, body.servings_count, food_id))
+            write_recipe_items(db, cursor.lastrowid, items)
+            audit(db, user["id"], "recipe_created", cursor.lastrowid)
+            return recipe_json(db, db.execute("SELECT * FROM recipes WHERE id = ?", (cursor.lastrowid,)).fetchone())
+
+    @app.put("/api/recipes/{recipe_id}", dependencies=[Depends(current_user)])
+    def replace_recipe(recipe_id: SqlitePath, body: RecipeBody, request: Request, db=Depends(get_db)):
+        with h.authorized_write(db, request) as (user, emit):
+            recipe = scoped_recipe(db, user, recipe_id, write=True)
+            if user["role"] == "athlete":
+                need_consent(user, "recipes")
+            if body.club_id is not None and body.club_id != recipe["club_id"]:
+                raise HTTPException(422, "A recipe cannot move to another club")
+            food, items = recipe_values(db, user, body, True, recipe["food_id"])
+            db.execute("UPDATE foods SET name_bg = ?, kcal = ?, protein_g = ?, carbs_g = ?, fat_g = ?, fibre_g = ?, "
+                       "nutrients = ?, servings = ? WHERE id = ?",
+                       (food["name_bg"], food["kcal"], food["protein_g"], food["carbs_g"], food["fat_g"],
+                        food["fibre_g"], json.dumps(food["nutrients"]), json.dumps(food["servings"]), recipe["food_id"]))
+            db.execute("UPDATE recipes SET name = ?, servings_count = ? WHERE id = ?",
+                       (body.name, body.servings_count, recipe_id))
+            write_recipe_items(db, recipe_id, items)
+            audit(db, user["id"], "recipe_updated", recipe_id)
+            return recipe_json(db, db.execute("SELECT * FROM recipes WHERE id = ?", (recipe_id,)).fetchone())
+
+    @app.delete("/api/recipes/{recipe_id}", status_code=204)
+    def delete_recipe(recipe_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
+        """The recipe goes; its food stays only if logged meals or other recipes still use it."""
+        recipe = scoped_recipe(db, user, recipe_id, write=True)
+        db.execute("DELETE FROM recipes WHERE id = ?", (recipe_id,))
+        db.execute("DELETE FROM foods WHERE id = ? AND NOT EXISTS (SELECT 1 FROM food_logs WHERE food_id = foods.id) "
+                   "AND NOT EXISTS (SELECT 1 FROM recipe_items WHERE food_id = foods.id)", (recipe["food_id"],))
+        audit(db, user["id"], "recipe_deleted", recipe_id)
         db.commit()
 
     # --- weights and the trend ---
@@ -784,8 +1317,8 @@ def install(app, h):
         since = (end - timedelta(days=tn.WINDOW_DAYS - 1)).isoformat()
         food = {}
         for r in db.execute(
-                "SELECT food_logs.day, SUM(food_logs.grams * foods.kcal / 100) AS kcal FROM food_logs "
-                "JOIN foods ON foods.id = food_logs.food_id WHERE food_logs.athlete_id = ? AND food_logs.day >= ? "
+                f"SELECT food_logs.day, SUM({LOG_KCAL}) AS kcal FROM food_logs "
+                "LEFT JOIN foods ON foods.id = food_logs.food_id WHERE food_logs.athlete_id = ? AND food_logs.day >= ? "
                 "AND food_logs.day <= ? GROUP BY food_logs.day", (athlete_id, since, end.isoformat())):
             food[r["day"]] = r["kcal"]
         rows, trend = weight_series(db, athlete_id, end.isoformat())
@@ -871,6 +1404,15 @@ def install(app, h):
         target = db.execute("SELECT kcal, protein_g, carbs_g, fat_g FROM nutrition_targets WHERE athlete_id = ?",
                             (athlete_id,)).fetchone()
         days = len(weekly)
+        # Micronutrients of the day: only entries whose food knows a nutrient count; unknown is null, never zero.
+        known = [(r["grams"], json.loads(r["nutrients"] or "{}")) for r in db.execute(
+            "SELECT food_logs.grams, foods.nutrients FROM food_logs LEFT JOIN foods ON foods.id = food_logs.food_id "
+            "WHERE food_logs.athlete_id = ? AND food_logs.day = ?", (athlete_id, day))]
+        nutrients = []
+        for definition in fs.DEFINITIONS:
+            amounts = [values[definition["key"]] * grams / 100 for grams, values in known if definition["key"] in values]
+            nutrients.append({**definition, "amount": round(sum(amounts), 3) if amounts else None,
+                              "known_entries": len(amounts), "total_entries": len(known)})
         return {"athlete_id": athlete_id, "day": day,
                 "totals": {key: round(value, 1) for key, value in totals.items()},
                 "by_meal_kcal": {meal: round(value, 1) for meal, value in by_meal.items()},
@@ -879,31 +1421,34 @@ def install(app, h):
                     key: None if target[key] is None else round(target[key] - totals[key], 1)
                     for key in ("kcal", "protein_g", "carbs_g", "fat_g")},
                 "weekly_average": {"days_logged": days, "window": [first, day], **{
-                    key: round(sum(w[key] for w in weekly.values()) / days, 1) if days else None for key in keys}}}
+                    key: round(sum(w[key] for w in weekly.values()) / days, 1) if days else None for key in keys}},
+                "nutrients": nutrients}
 
     # --- adaptive expenditure and the weekly coaching program (SPEC 6.3) ---
 
     def diary_fingerprint(db, athlete_id, day):
         """Stable hash of a day's diary, so a day confirmed complete is noticed when it is later edited."""
         return fingerprint_rows(db.execute(
-            "SELECT id, meal, food_id, grams FROM food_logs WHERE athlete_id = ? AND day = ? ORDER BY id",
+            "SELECT id, meal, food_id, grams, kcal AS quick_kcal FROM food_logs WHERE athlete_id = ? AND day = ? ORDER BY id",
             (athlete_id, day)))
 
     def fingerprint_rows(rows):
-        values = [[r["id"], r["meal"], r["food_id"], r["grams"]] for r in rows if r["id"] is not None]
+        # A quick add (no food) adds its kcal, so editing it is noticed; food entries hash as before version 2.
+        values = [[r["id"], r["meal"], r["food_id"], r["grams"]] + ([] if r["food_id"] else [r["quick_kcal"]])
+                  for r in rows if r["id"] is not None]
         return hashlib.blake2b(json.dumps(values, separators=(",", ":")).encode("utf-8")).hexdigest()
 
     def day_calories(db, athlete_id, day):
         return db.execute(
-            "SELECT COALESCE(SUM(food_logs.grams * foods.kcal / 100), 0.0) AS kcal FROM food_logs "
-            "JOIN foods ON foods.id = food_logs.food_id WHERE food_logs.athlete_id = ? AND food_logs.day = ?",
+            f"SELECT COALESCE(SUM({LOG_KCAL}), 0.0) AS kcal FROM food_logs "
+            "LEFT JOIN foods ON foods.id = food_logs.food_id WHERE food_logs.athlete_id = ? AND food_logs.day = ?",
             (athlete_id, day)).fetchone()["kcal"]
 
     def coaching_snaps(db, athlete_id):
         """Explicitly confirmed diary days: complete unless edited since confirmation (then not counted)."""
         rows = db.execute(
             "SELECT complete.day, complete.diary_fingerprint, food_logs.id, food_logs.meal, food_logs.food_id, "
-            "food_logs.grams, SUM(food_logs.grams * foods.kcal / 100) OVER (PARTITION BY complete.day "
+            f"food_logs.grams, food_logs.kcal AS quick_kcal, SUM({LOG_KCAL}) OVER (PARTITION BY complete.day "
             "ORDER BY food_logs.id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS calories "
             "FROM nutrition_day_complete AS complete LEFT JOIN food_logs "
             "ON food_logs.athlete_id = complete.athlete_id AND food_logs.day = complete.day "
@@ -1056,6 +1601,137 @@ def install(app, h):
         audit(db, user["id"], "nutrition_day_uncompleted", day)
         db.commit()
 
+    # --- goals and phases, analytics, AI meal entry (SPEC 7.1) ---
+
+    def current_trend(db, athlete_id):
+        weights, trend = weight_series(db, athlete_id)
+        return trend, (trend[-1]["trend_kg"] if trend else (weights[-1][1] if weights else None))
+
+    def goal_view(db, athlete):
+        program = program_row(db, athlete["id"])
+        if program is None:
+            return {"athlete_id": athlete["id"], "goal": None, "reason": "No goal yet. Set a phase to start."}
+        trend, current = current_trend(db, athlete["id"])
+        target, end = program["target_weight_kg"], program["end_date"]
+        remaining = None if target is None or current is None else round(target - current, 2)
+        # Projected date from the trend's own movement over the last 14 days, only when it heads to the target.
+        recent = trend[-15:]
+        per_day = (recent[-1]["trend_kg"] - recent[0]["trend_kg"]) / (len(recent) - 1) if len(recent) >= 8 else None
+        projected = None
+        if remaining and per_day and remaining * per_day > 0:
+            projected = (utc_today() + timedelta(days=min(3650, round(remaining / per_day)))).isoformat()
+        return {"athlete_id": athlete["id"],
+                "goal": {"phase": program["goal"], "target_weight_kg": target, "end_date": end,
+                         "rate_kg_week": program["rate_kg_week"], "applied": bool(program["applied"])},
+                "current_trend_kg": None if current is None else round(current, 2), "remaining_kg": remaining,
+                "trend_kg_week": None if per_day is None else round(per_day * 7, 2), "projected_date": projected,
+                "on_track": None if projected is None or end is None else projected <= end,
+                "note": "Progress from the weight trend. Numbers to discuss with your coach."}
+
+    @app.get("/api/athletes/{athlete_id}/nutrition/goal")
+    def get_goal(athlete_id: SqlitePath, user=Depends(current_user), db=Depends(get_db)):
+        return goal_view(db, h.athlete_access(db, user, athlete_id))
+
+    @app.put("/api/athletes/{athlete_id}/nutrition/goal", dependencies=[Depends(current_user)])
+    def set_goal(athlete_id: SqlitePath, body: GoalBody, request: Request, db=Depends(get_db)):
+        """A phase with a target weight and end date gives the weekly rate; the program and its guardrails do the rest."""
+        with h.authorized_write(db, request) as (user, emit):
+            athlete = h.athlete_access(db, user, athlete_id)
+            need_consent(athlete, "a nutrition goal")
+            rate = 0.0
+            if body.phase != "maintain":
+                _, current = current_trend(db, athlete_id)
+                if current is None:
+                    raise HTTPException(422, "Log a weigh-in first: the rate comes from the weight trend")
+                weeks = (date.fromisoformat(body.end_date) - utc_today()).days / 7
+                change = body.target_weight_kg - current
+                if weeks < 1:
+                    raise HTTPException(422, "The end date must be at least a week ahead")
+                if (change < 0) != (body.phase == "lose") or change == 0:
+                    raise HTTPException(422, f"For {body.phase} the target weight must be "
+                                             f"{'below' if body.phase == 'lose' else 'above'} the current trend")
+                rate = max(0.01, round(abs(change) / weeks, 2))
+                if rate > 2:
+                    raise HTTPException(422, "That is more than 2 kg a week: choose a later end date")
+            save_program(athlete_id, Program(goal=body.phase, rate_kg_week=rate, protein_g=body.protein_g,
+                                             fat_g=body.fat_g), user, db, emit)
+            db.execute("UPDATE coaching_programs SET target_weight_kg = ?, end_date = ? WHERE athlete_id = ?",
+                       (body.target_weight_kg, body.end_date, athlete_id))
+            audit(db, user["id"], "goal_set", athlete_id, {"phase": body.phase, "rate_kg_week": rate})
+            return goal_view(db, athlete)
+
+    @app.get("/api/athletes/{athlete_id}/nutrition/analytics")
+    def nutrition_analytics(athlete_id: SqlitePath, days: Annotated[int, Query()] = 30,
+                            user=Depends(current_user), db=Depends(get_db)):
+        athlete = h.athlete_access(db, user, athlete_id)
+        if days not in (7, 30, 90):
+            raise HTTPException(422, "days must be 7, 30 or 90")
+        end = utc_today()
+        start = (end - timedelta(days=days - 1)).isoformat()
+        logged = {r["day"]: r for r in db.execute(
+            f"SELECT food_logs.day, COUNT(*) AS entries, SUM({LOG_KCAL}) AS kcal, " + ", ".join(
+                f"SUM(COALESCE(food_logs.grams * foods.{k} / 100, food_logs.{k})) AS {k}"
+                for k in ("protein_g", "carbs_g", "fat_g")) +
+            " FROM food_logs LEFT JOIN foods ON foods.id = food_logs.food_id WHERE food_logs.athlete_id = ? "
+            "AND food_logs.day >= ? AND food_logs.day <= ? GROUP BY food_logs.day", (athlete_id, start, end.isoformat()))}
+        keys = ("kcal", "protein_g", "carbs_g", "fat_g")
+        daily = []
+        for n in range(days):
+            day = (end - timedelta(days=days - 1 - n)).isoformat()
+            row = logged.get(day)  # a day with nothing logged is missing, not zero
+            daily.append({"day": day, "entries": row["entries"] if row else 0,
+                          **{k: round(row[k], 1) if row else None for k in keys}})
+        target = db.execute("SELECT kcal FROM nutrition_targets WHERE athlete_id = ?", (athlete_id,)).fetchone()
+        within = sum(1 for r in logged.values() if target and abs(r["kcal"] - target["kcal"]) <= target["kcal"] * 0.1)
+        weights, trend = weight_series(db, athlete_id)
+        program = program_row(db, athlete_id)
+        history = expenditure_series(db, athlete, program)["history"] if program else []
+        return {"athlete_id": athlete_id, "days": days, "start": start, "end": end.isoformat(), "daily": daily,
+                "averages": {"logged_days": len(logged), **{
+                    k: round(sum(r[k] for r in logged.values()) / len(logged), 1) if logged else None for k in keys}},
+                "target_kcal": target["kcal"] if target else None,
+                "adherence": None if target is None else {
+                    "band_pct": 10, "days_within": within, "logged_days": len(logged),
+                    "pct": round(100 * within / len(logged)) if logged else None},
+                "weights": [{"day": d, "kg": kg} for d, kg in weights if d >= start],
+                "trend": [{"day": t["day"], "trend_kg": round(t["trend_kg"], 2)} for t in trend if t["day"] >= start],
+                "expenditure": [{"day": e["date"], "kcal": round(e["value_kcal"]), "status": e["status"]}
+                                for e in history if e["date"] >= start and e["value_kcal"] is not None]}
+
+    @app.post("/api/me/nutrition/ai-parse", dependencies=[Depends(current_user)])
+    def ai_parse(body: AiParse, user=Depends(current_user), db=Depends(get_db)):
+        """Free text to a proposal of entries for /api/food-logs/batch; nothing is logged here."""
+        require_role(user, "athlete")
+        url, model, headers = h.assistant_api.model_client()  # 503 when the local model is not configured
+        if not app.state.heavy_slots.acquire(blocking=False):
+            raise HTTPException(503, h.BUSY_DETAIL, headers=h.BUSY_HEADERS)
+        try:
+            parsed = fs.ask_model(url, model, headers, body.text)
+        except fs.Unavailable:
+            raise HTTPException(503, "The meal model is unavailable. Enter the food manually.") from None
+        finally:
+            app.state.heavy_slots.release()
+        clause, params = visible_food_sql(user)
+        day, items = body.day or utc_today().isoformat(), []
+        for food in parsed:
+            like = "%" + food["name"].casefold().replace("\\", "").replace("%", "").replace("_", "") + "%"
+            local = db.execute(f"SELECT * FROM foods WHERE ({clause}) AND (casefold(name_en) LIKE ? OR casefold(name_bg) "
+                               "LIKE ?) ORDER BY length(name_en), id LIMIT 1", (*params, like, like)).fetchone()
+            match = food_row(local) if local else next(iter(fs.catalog_search(food["name"], 1)), None)
+            grams = round(food["grams"], 1)
+            if match is None:  # no food matched: a quick add with the model's estimate
+                entry = {"label": food["name"], **{k: round(food["per100g"][src] * grams / 100, 1) for k, src in (
+                    ("kcal", "calories"), ("protein_g", "protein"), ("carbs_g", "carbs"), ("fat_g", "fat"))}}
+            else:
+                entry = {"food_id": match["id"]} if match["id"] else {"catalog_id": match["catalog_id"]}
+                entry["grams"] = grams
+            items.append({"text": food["name"], "grams": grams, "estimate_per100g": food["per100g"],
+                          "match": None if match is None else {k: match[k] for k in (
+                              "id", "catalog_id", "name_bg", "name_en", "kcal", "protein_g", "carbs_g", "fat_g")},
+                          "entry": {"day": day, "meal": body.meal, **entry}})
+        return {"items": items, "entries": [item["entry"] for item in items], "estimated": True,
+                "note": "Estimates to review. Nothing is logged until you send the entries to /api/food-logs/batch."}
+
     # --- CSV exports for staff ---
 
     def csv_response(db, user, athlete, kind, fields, rows):
@@ -1107,9 +1783,14 @@ def export_data(db, athlete_id):
         "SELECT id, name_bg, name_en, kcal, protein_g, carbs_g, fat_g, fibre_g FROM foods "
         "WHERE owner_id = ? ORDER BY id", (athlete_id,)))
     meals = (dict(r) for r in db.execute(
-        "SELECT food_logs.id, day, meal, food_id, foods.name_bg, foods.name_en, grams, client_id, food_logs.created_at "
-        "FROM food_logs JOIN foods ON foods.id = food_logs.food_id WHERE athlete_id = ? "
+        "SELECT food_logs.id, day, meal, food_id, foods.name_bg, foods.name_en, grams, client_id, food_logs.created_at, "
+        "serving_label, quantity, label, food_logs.kcal, food_logs.protein_g, food_logs.carbs_g, food_logs.fat_g "
+        "FROM food_logs LEFT JOIN foods ON foods.id = food_logs.food_id WHERE athlete_id = ? "
         "ORDER BY day, food_logs.id", (athlete_id,)))
+    recipes = ({**dict(r), "items": [dict(i) for i in db.execute(
+        "SELECT food_id, grams FROM recipe_items WHERE recipe_id = ? ORDER BY position", (r["id"],))]}
+        for r in db.execute("SELECT id, name, servings_count, food_id FROM recipes WHERE owner_id = ? ORDER BY id",
+                            (athlete_id,)).fetchall())
     weights = (dict(r) for r in db.execute("SELECT day, kg FROM weights WHERE athlete_id = ? ORDER BY day", (athlete_id,)))
     target = db.execute("SELECT kcal, protein_g, carbs_g, fat_g, set_by, updated_at FROM nutrition_targets "
                         "WHERE athlete_id = ?", (athlete_id,)).fetchone()
@@ -1122,10 +1803,11 @@ def export_data(db, athlete_id):
     return {"set_logs": sets, "custom_foods": foods, "food_logs": meals, "weights": weights,
             "nutrition_target": None if target is None else dict(target),
             "coaching_program": None if program is None else {**dict(program), "applied": bool(program["applied"])},
-            "complete_diary_days": complete_days}
+            "complete_diary_days": complete_days, "recipes": recipes}
 
 
 def delete_data(db, athlete_id):
+    db.execute("DELETE FROM recipes WHERE owner_id = ?", (athlete_id,))
     for table in ("set_logs", "food_logs", "weights", "nutrition_targets", "coaching_programs",
                   "nutrition_day_complete"):
         db.execute(f"DELETE FROM {table} WHERE athlete_id = ?", (athlete_id,))

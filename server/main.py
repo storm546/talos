@@ -905,9 +905,9 @@ class ExpensiveRequests:
     reads = re.compile(
         r"/api/(?:checkins(?:/team)?|me/(?:export|calendar\.ics)|sessions/[^/]+/report|"
         r"athletes/[^/]+/(?:export\.csv|form\.csv|training(?:\.csv)?|weights(?:\.csv)?|nutrition\.csv|"
-        r"nutrition/(?:estimate|summary|expenditure|program|target)))"
+        r"nutrition/(?:estimate|summary|expenditure|program|target|goal|analytics)))"
     )
-    writes = re.compile(r"/api/athletes/[^/]+/nutrition/(?:program|target)")
+    writes = re.compile(r"/api/athletes/[^/]+/nutrition/(?:program|target|goal)")
 
     def __init__(self, app, slots):
         self.app = app

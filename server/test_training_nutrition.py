@@ -238,7 +238,8 @@ def test_no_third_party_product_names_in_shipped_trend_code():
 
 def test_no_third_party_product_names_in_shipped_coaching_code():
     base = Path(main.__file__).parent
-    shipped = [base / "coaching.py", base / "training_nutrition_api.py", base / "seed.py"]
+    shipped = [base / "coaching.py", base / "training_nutrition_api.py", base / "seed.py", base / "food_sources.py",
+               base / "static" / "dashboard.js"]
     text = "\n".join(p.read_text() for p in shipped).lower()
     for word in ("macrofactor", "libapp", "sha256", "personal-nutrition", "apk", "microfactor"):
         assert word not in text
