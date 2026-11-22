@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" font-family="Liberation Sans, Arial, sans-serif" font-size="13" fill="#1d2b25">
-  <!-- Figure 1 of the documentation: the three parts, the platform modules and the data flow. Only numbers cross the network. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 330" font-family="Liberation Sans, Arial, sans-serif" font-size="13" fill="#1d2b25">
+  <!-- Figure 1 of the documentation: the distributed parts of JumpScan and what crosses the network. -->
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M0 0 L10 5 L0 10 z" fill="#176148"/>
@@ -7,58 +7,72 @@
     <marker id="live" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M0 0 L10 5 L0 10 z" fill="#c46a1b"/>
     </marker>
+    <marker id="ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4b5b53"/>
+    </marker>
   </defs>
 
   <!-- Phone -->
-  <rect x="10" y="14" width="230" height="200" rx="10" fill="#eef4f0" stroke="#176148" stroke-width="1.5"/>
-  <text x="125" y="38" text-anchor="middle" font-weight="700" font-size="15">Телефон (app)</text>
-  <rect x="26" y="50" width="198" height="30" rx="5" fill="#fff" stroke="#9fb5a9"/>
-  <text x="125" y="70" text-anchor="middle">Видео от камерата</text>
-  <rect x="26" y="90" width="198" height="30" rx="5" fill="#fff" stroke="#9fb5a9"/>
-  <text x="125" y="110" text-anchor="middle">MediaPipe: 33 точки на кадър</text>
-  <rect x="26" y="130" width="198" height="30" rx="5" fill="#fff" stroke="#176148" stroke-width="1.5"/>
-  <text x="125" y="150" text-anchor="middle" font-weight="700">core: ъгли, полет, височина</text>
-  <line x1="125" y1="80" x2="125" y2="89" stroke="#176148" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <line x1="125" y1="120" x2="125" y2="129" stroke="#176148" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="125" y="182" text-anchor="middle" font-size="12" fill="#4b5b53">сесии · самочувствие · бележки</text>
-  <text x="125" y="202" text-anchor="middle" font-size="12" fill="#176148" font-weight="700">видеото остава тук</text>
+  <rect x="10" y="10" width="236" height="218" rx="10" fill="#eef4f0" stroke="#176148" stroke-width="1.5"/>
+  <text x="128" y="32" text-anchor="middle" font-weight="700" font-size="15">Телефон: Android приложение</text>
+  <rect x="24" y="42" width="208" height="26" rx="5" fill="#fff" stroke="#9fb5a9"/>
+  <text x="128" y="60" text-anchor="middle">видео от камерата (остава тук)</text>
+  <rect x="24" y="76" width="208" height="26" rx="5" fill="#fff" stroke="#9fb5a9"/>
+  <text x="128" y="94" text-anchor="middle">MediaPipe: 33 точки на кадър</text>
+  <rect x="24" y="110" width="208" height="26" rx="5" fill="#fff" stroke="#176148" stroke-width="1.5"/>
+  <text x="128" y="128" text-anchor="middle" font-weight="700">core (Kotlin): скок, техника</text>
+  <line x1="128" y1="68" x2="128" y2="75" stroke="#176148" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="128" y1="102" x2="128" y2="109" stroke="#176148" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="128" y="156" text-anchor="middle" font-size="12" fill="#4b5b53">таймери · калкулатори · тренировка</text>
+  <text x="128" y="172" text-anchor="middle" font-size="12" fill="#4b5b53">хранене · баркод (ML Kit) · готовност</text>
+  <rect x="24" y="184" width="208" height="26" rx="5" fill="#fff" stroke="#9fb5a9"/>
+  <text x="128" y="202" text-anchor="middle">опашка за офлайн изпращане</text>
 
   <!-- phone to server -->
-  <line x1="240" y1="105" x2="326" y2="105" stroke="#176148" stroke-width="2" marker-end="url(#arrow)"/>
-  <text x="283" y="92" text-anchor="middle" font-size="12">JSON с числа</text>
-  <text x="283" y="124" text-anchor="middle" font-size="12">HTTPS + токен</text>
+  <line x1="246" y1="112" x2="300" y2="112" stroke="#176148" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="273" y="98" text-anchor="middle" font-size="11.5">JSON</text>
+  <text x="273" y="130" text-anchor="middle" font-size="11.5">HTTPS</text>
+  <line x1="300" y1="150" x2="250" y2="150" stroke="#c46a1b" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#live)"/>
 
   <!-- Server -->
-  <rect x="330" y="14" width="190" height="200" rx="10" fill="#fff" stroke="#176148" stroke-width="1.5"/>
-  <text x="425" y="38" text-anchor="middle" font-weight="700" font-size="15">Сървър</text>
-  <text x="425" y="60" text-anchor="middle">REST API (FastAPI)</text>
-  <text x="425" y="78" text-anchor="middle">роли, проверка на полетата</text>
-  <text x="425" y="96" text-anchor="middle">дневник на действията</text>
-  <text x="425" y="120" text-anchor="middle" font-size="12" fill="#4b5b53">групи · сесии · календар</text>
-  <text x="425" y="136" text-anchor="middle" font-size="12" fill="#4b5b53">самочувствие · бележки</text>
-  <rect x="370" y="160" width="110" height="30" rx="5" fill="#eef4f0" stroke="#9fb5a9"/>
-  <text x="425" y="180" text-anchor="middle">SQLite: числа</text>
+  <rect x="304" y="10" width="200" height="218" rx="10" fill="#fff" stroke="#176148" stroke-width="1.5"/>
+  <text x="404" y="32" text-anchor="middle" font-weight="700" font-size="15">Клубен сървър</text>
+  <text x="404" y="54" text-anchor="middle">REST API (FastAPI, Python)</text>
+  <text x="404" y="72" text-anchor="middle">3 роли · клуб · съгласие</text>
+  <text x="404" y="90" text-anchor="middle">проверка на полетата · дневник</text>
+  <text x="404" y="112" text-anchor="middle" font-size="12" fill="#4b5b53">готовност · натоварване · рекорди</text>
+  <text x="404" y="128" text-anchor="middle" font-size="12" fill="#4b5b53">хранене · планове · AI помощник</text>
+  <text x="404" y="152" text-anchor="middle" font-size="12" fill="#c46a1b" font-weight="700">поток от събития (SSE)</text>
+  <rect x="349" y="170" width="110" height="28" rx="5" fill="#eef4f0" stroke="#9fb5a9"/>
+  <text x="404" y="189" text-anchor="middle">SQLite: числа</text>
 
-  <!-- server to browser: requests and live events -->
-  <line x1="520" y1="85" x2="556" y2="85" stroke="#176148" stroke-width="2" marker-end="url(#arrow)"/>
-  <line x1="520" y1="150" x2="556" y2="150" stroke="#c46a1b" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#live)"/>
+  <!-- server to browser -->
+  <line x1="504" y1="85" x2="556" y2="85" stroke="#176148" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="504" y1="150" x2="556" y2="150" stroke="#c46a1b" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#live)"/>
 
   <!-- Browser -->
-  <rect x="560" y="14" width="190" height="200" rx="10" fill="#eef4f0" stroke="#176148" stroke-width="1.5"/>
-  <text x="655" y="38" text-anchor="middle" font-weight="700" font-size="15">Браузър</text>
-  <text x="655" y="60" text-anchor="middle">треньорски панел</text>
-  <text x="655" y="78" text-anchor="middle">отбор, графики, CSV</text>
-  <text x="655" y="102" text-anchor="middle" font-size="12" fill="#4b5b53">групи · сесии · доклад</text>
-  <text x="655" y="118" text-anchor="middle" font-size="12" fill="#4b5b53">самочувствие · бележки</text>
-  <text x="655" y="154" text-anchor="middle" font-size="12" fill="#c46a1b" font-weight="700">„на живо“</text>
-  <text x="655" y="198" text-anchor="middle" font-size="12" fill="#4b5b53">треньор · админ · спортист</text>
+  <rect x="560" y="10" width="190" height="218" rx="10" fill="#eef4f0" stroke="#176148" stroke-width="1.5"/>
+  <text x="655" y="32" text-anchor="middle" font-weight="700" font-size="15">Браузър: уеб панел</text>
+  <text x="655" y="56" text-anchor="middle">треньор · админ · спортист</text>
+  <text x="655" y="78" text-anchor="middle" font-size="12" fill="#4b5b53">отбор · история · графики</text>
+  <text x="655" y="94" text-anchor="middle" font-size="12" fill="#4b5b53">табло „Готовност“ · напомняне</text>
+  <text x="655" y="110" text-anchor="middle" font-size="12" fill="#4b5b53">сесии · групи · бележки</text>
+  <text x="655" y="126" text-anchor="middle" font-size="12" fill="#4b5b53">хранене · класация · CSV</text>
+  <text x="655" y="154" text-anchor="middle" font-size="12" fill="#c46a1b" font-weight="700">„на живо“ без презареждане</text>
 
-  <!-- legend under the arrows -->
-  <line x1="330" y1="234" x2="360" y2="234" stroke="#c46a1b" stroke-width="2" stroke-dasharray="5 3"/>
-  <text x="368" y="238" font-size="12" fill="#4b5b53">събития на живо (Server-Sent Events): само вид и номер, без числа</text>
+  <!-- External services under the server -->
+  <rect x="190" y="262" width="250" height="56" rx="8" fill="#fff" stroke="#4b5b53" stroke-dasharray="4 3"/>
+  <text x="315" y="282" text-anchor="middle" font-weight="700">Отделна машина с GPU</text>
+  <text x="315" y="300" text-anchor="middle" font-size="12" fill="#4b5b53">локален езиков модел (по избор)</text>
+  <rect x="470" y="262" width="230" height="56" rx="8" fill="#fff" stroke="#4b5b53" stroke-dasharray="4 3"/>
+  <text x="585" y="282" text-anchor="middle" font-weight="700">Open Food Facts</text>
+  <text x="585" y="300" text-anchor="middle" font-size="12" fill="#4b5b53">външен: данни по баркод</text>
+  <line x1="380" y1="228" x2="340" y2="260" stroke="#4b5b53" stroke-width="1.5" marker-end="url(#ext)"/>
+  <line x1="440" y1="228" x2="530" y2="260" stroke="#4b5b53" stroke-width="1.5" marker-end="url(#ext)"/>
 
-  <!-- Platform banner -->
-  <rect x="10" y="250" width="740" height="44" rx="8" fill="#176148"/>
-  <text x="380" y="268" text-anchor="middle" font-size="12.5" fill="#fff" font-weight="700">Клубна платформа около анализа на скока</text>
-  <text x="380" y="285" text-anchor="middle" font-size="12" fill="#fff">групи · тестови сесии с календар (.ics) · доклад на опитите · самочувствие и натоварване · бележки от треньора</text>
+  <!-- legend -->
+  <line x1="12" y1="252" x2="40" y2="252" stroke="#c46a1b" stroke-width="2" stroke-dasharray="5 3"/>
+  <text x="12" y="270" font-size="11.5" fill="#4b5b53">събития: само вид</text>
+  <text x="12" y="285" font-size="11.5" fill="#4b5b53">и номер, без числа</text>
+  <text x="12" y="305" font-size="11.5" fill="#4b5b53">видео не се изпраща</text>
 </svg>
