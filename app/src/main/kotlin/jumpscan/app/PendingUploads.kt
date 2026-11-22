@@ -20,6 +20,7 @@ internal enum class FeatureWrite(val method: String, val keys: Set<String>, val 
     COPY("POST", setOf("from_day", "to_day"), setOf("from_meal", "to_meal")),
     WEIGHT("PUT", setOf("kg")),
     SET("POST", setOf("day", "exercise_id", "set_no", "reps", "load_kg", "rpe", "plan_id")),
+    SESSION("POST", setOf("day", "kind", "minutes", "rpe")),
     COMPLETE("PUT", emptySet());
 
     fun path(day: String): String = when (this) {
@@ -27,6 +28,7 @@ internal enum class FeatureWrite(val method: String, val keys: Set<String>, val 
         FOOD -> "/api/food-logs"
         COPY -> "/api/food-logs/copy"
         SET -> "/api/set-logs"
+        SESSION -> "/api/training-sessions"
         WEIGHT -> "/api/me/weights/${LocalDate.parse(day)}"
         COMPLETE -> "/api/me/nutrition/days/${LocalDate.parse(day)}/complete"
     }
@@ -68,10 +70,12 @@ internal class PendingUploads(root: File, server: String, owner: Long) {
         } catch (e: Exception) { atomic.failWrite(output); throw e }
     }
 
-    fun enqueue(metrics: JumpMetrics, clientId: String = UUID.randomUUID().toString(), sessionId: Long? = null): String {
+    fun enqueue(metrics: JumpMetrics, clientId: String = UUID.randomUUID().toString(), sessionId: Long? = null,
+                readiness: Boolean = false): String {
         UUID.fromString(clientId)
         val file = File(directory, "$clientId.json")
         val body = JSONObject(metrics.toJson()).put("client_id", clientId)
+        if (readiness) body.put("test", "readiness") // a morning countermovement jump check (SPEC 9)
         if (sessionId != null) body.put("session_id", sessionId)
         write(file, body)
         return file.name
@@ -196,10 +200,13 @@ internal class PendingUploads(root: File, server: String, owner: Long) {
     }
 
     private fun validateCheckin(body: JSONObject) {
-        require(body.keys().asSequence().toSet() == checkinKeys)
+        // Check-ins queued before the readiness fields existed carry only the base keys.
+        val keys = body.keys().asSequence().toSet()
+        require(keys.containsAll(checkinBaseKeys) && checkinKeys.containsAll(keys))
+        fun optional(key: String) = if (!body.has(key) || body.isNull(key)) "" else body.getString(key)
         checkinBody(listOf("sleep", "fatigue", "soreness", "stress", "mood").map { body.getInt(it) },
-            if (body.isNull("training_minutes")) "" else body.getString("training_minutes"),
-            if (body.isNull("rpe")) "" else body.getString("rpe"))
+            optional("training_minutes"), optional("rpe"), optional("resting_hr"), optional("hrv_rmssd"),
+            optional("bedtime"), optional("wake_time"))
     }
 
     private companion object {

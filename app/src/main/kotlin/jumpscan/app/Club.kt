@@ -46,17 +46,34 @@ internal fun parseSessions(value: String): List<ClubSession> {
     }.sortedBy { instant(it.startsAt) }
 }
 
-internal val checkinKeys = setOf("sleep", "fatigue", "soreness", "stress", "mood", "training_minutes", "rpe")
+internal val checkinBaseKeys = setOf("sleep", "fatigue", "soreness", "stress", "mood", "training_minutes", "rpe")
+// Optional readiness fields (SPEC 9): resting heart rate, HRV as RMSSD in ms, bedtime and wake time.
+internal val checkinKeys = checkinBaseKeys + setOf("resting_hr", "hrv_rmssd", "bedtime", "wake_time")
 
-internal fun checkinBody(scores: List<Int>, minutes: String, rpe: String): JSONObject {
+/** "7:05" or "07:05" as "07:05"; null when the text is not a 24-hour clock time. */
+internal fun clockTime(value: String): String? = Regex("""^([01]?\d|2[0-3]):([0-5]\d)$""").matchEntire(value.trim())
+    ?.let { "%02d:%s".format(it.groupValues[1].toInt(), it.groupValues[2]) }
+
+internal fun checkinBody(scores: List<Int>, minutes: String, rpe: String, restingHr: String = "", hrv: String = "",
+                         bedtime: String = "", wakeTime: String = ""): JSONObject {
     if (scores.size != 5 || scores.any { it !in 1..5 }) throw AppError(R.string.checkin_invalid)
     val m = minutes.trim(); val r = rpe.trim()
     if (m.isBlank() != r.isBlank() || (m.isNotBlank() &&
         (m.toIntOrNull() !in 0..600 || r.toIntOrNull() !in 0..10))) throw AppError(R.string.checkin_invalid)
+    val hr = restingHr.trim(); val rmssd = hrv.trim().replace(',', '.')
+    val bed = bedtime.trim(); val wake = wakeTime.trim()
+    if ((hr.isNotBlank() && hr.toIntOrNull() !in 25..150) ||
+        (rmssd.isNotBlank() && rmssd.toDoubleOrNull()?.takeIf { it > 0 && it <= 300 } == null) ||
+        bed.isBlank() != wake.isBlank() || (bed.isNotBlank() && (clockTime(bed) == null || clockTime(wake) == null)))
+        throw AppError(R.string.rd_checkin_invalid)
     return JSONObject().apply {
         listOf("sleep", "fatigue", "soreness", "stress", "mood").zip(scores).forEach { (key, value) -> put(key, value) }
         put("training_minutes", if (m.isBlank()) JSONObject.NULL else m.toInt())
         put("rpe", if (r.isBlank()) JSONObject.NULL else r.toInt())
+        put("resting_hr", if (hr.isBlank()) JSONObject.NULL else hr.toInt())
+        put("hrv_rmssd", if (rmssd.isBlank()) JSONObject.NULL else rmssd.toDouble())
+        put("bedtime", if (bed.isBlank()) JSONObject.NULL else clockTime(bed))
+        put("wake_time", if (wake.isBlank()) JSONObject.NULL else clockTime(wake))
     }
 }
 

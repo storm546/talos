@@ -51,6 +51,8 @@ class MainActivity : Activity() {
     private var guiding = false
     internal var assistantChat = AssistantChat()
     private var test = "cmj"
+    private var readinessRun = false // the current result is a morning readiness check (SPEC 9)
+    private var nudges: NudgeStream? = null
     internal lateinit var page: LinearLayout
         private set
     private var previousTab = -1
@@ -95,7 +97,25 @@ class MainActivity : Activity() {
             if (token().isEmpty()) login() else home()
         }
         sendPending(automatic = true)
+        scheduleReminder(this)
+        openNotification(intent)
     }
+
+    override fun onResume() {
+        super.onResume()
+        if (token().isNotEmpty() && nudges == null) nudges = NudgeStream(applicationContext, base(), token())
+    }
+
+    override fun onPause() {
+        nudges?.close(); nudges = null
+        super.onPause()
+    }
+
+    private fun openNotification(intent: Intent) {
+        if (intent.getStringExtra("open") == "checkin" && token().isNotEmpty()) { intent.removeExtra("open"); checkin() }
+    }
+
+    internal fun startReadinessJump() { test = "readiness"; selectedSession = null; recordJump(whenReady = true) }
 
     private data class RetainedResult(val analysis: Analysis?, val uploadedId: Long?, val test: String, val queuedId: String?, val edits: FrameEdits?, val clientId: String?, val selectedSession: ClubSession?, val resultSession: ClubSession?, val form: FormResult?, val chat: AssistantChat, val screen: String)
 
@@ -117,6 +137,7 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         openVideo(intent)
+        openNotification(intent)
     }
 
     @Suppress("DEPRECATION")
@@ -374,6 +395,7 @@ class MainActivity : Activity() {
         if (analysis != null) button(getString(R.string.last_result), look = ActionTone.TEXT) { result() }
         if (signedIn) toolRow(UiTile(R.string.history, "history") { history() }, UiTile(R.string.ui_club, "club") { clubHome() },
             UiTile(R.string.checkin_title, "checkin") { checkin() }, UiTile(R.string.ui_more, "more") { more() })
+        if (signedIn) readinessCard()
         if (signedIn) pendingControls()
         if (!signedIn) text(getString(R.string.coach_note), 13).setPadding(0, dp(18), 0, 0)
     }
@@ -539,7 +561,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun checkin() {
+    internal fun checkin() {
         val day = todayLocal()
         val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
         work(getString(R.string.checkin_title), {
@@ -576,6 +598,15 @@ class MainActivity : Activity() {
         val minutes = field(getString(R.string.checkin_minutes), optional("training_minutes"), InputType.TYPE_CLASS_NUMBER)
         val rpe = field(getString(R.string.checkin_rpe), optional("rpe"), InputType.TYPE_CLASS_NUMBER)
         text(getString(R.string.checkin_optional), 14)
+        section(R.string.rd_morning).setPadding(0, dp(18), 0, 0)
+        val restingHr = field(getString(R.string.rd_resting_hr_field), optional("resting_hr"), InputType.TYPE_CLASS_NUMBER)
+        val hrv = decimalField(R.string.rd_hrv_field, optional("hrv_rmssd"))
+        val clock = InputType.TYPE_CLASS_DATETIME or InputType.TYPE_DATETIME_VARIATION_TIME
+        val sleepTimes = row(page)
+        val bedtime = field(getString(R.string.rd_bedtime_field), optional("bedtime"), clock, LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; sleepTimes.addView(this, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(8) }) })
+        val wakeTime = field(getString(R.string.rd_wake_field), optional("wake_time"), clock, LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; sleepTimes.addView(this, LinearLayout.LayoutParams(0, -2, 1f)) })
         button(getString(R.string.checkin_save), primary = true) {
             val body = try { checkinBody(
                 groups.map { group ->
@@ -584,7 +615,8 @@ class MainActivity : Activity() {
                     if (id == -1) throw AppError(R.string.checkin_invalid)
                     group.findViewById<RadioButton>(id).tag as Int
                 },
-                minutes.text.toString(), rpe.text.toString()) } catch (e: AppError) {
+                minutes.text.toString(), rpe.text.toString(), restingHr.text.toString(), hrv.text.toString(),
+                bedtime.text.toString(), wakeTime.text.toString()) } catch (e: AppError) {
                 snack(errorMessage(e)); return@button
             }
             val queue = pending(); val savedToken = token(); val savedBase = base()
@@ -603,6 +635,7 @@ class MainActivity : Activity() {
                 snack(getString(R.string.checkin_saved))
             }, { checkinForm(day, body, getString(R.string.checkin_queued) + "\n" + it) })
         }
+        reminderControl()
     }
 
     private fun feedback(offset: Int = 0) {
@@ -758,7 +791,9 @@ class MainActivity : Activity() {
         clientId = null
         resultSession = if (trial == null) selectedSession else null
         val expectedGeneration = generation + 1
-        val jumpTest = if (trial == null) test else "cmj"
+        readinessRun = trial == null && test == "readiness"
+        if (readinessRun) test = prefs.getString("jump_test", "cmj") ?: "cmj" // analysed as a countermovement jump
+        val jumpTest = if (trial == null && !readinessRun) test else "cmj"
         val scan = LiveFormPreview(this)
         work(getString(R.string.analysing), { analyzeVideo(this, uri, jumpTest, mode, trial, captureFps, scanFeed(scan, expectedGeneration)) { value ->
             runOnUiThread {
@@ -811,7 +846,7 @@ class MainActivity : Activity() {
         text(getString(R.string.result), 13).apply { setPadding(0, dp(12), 0, 0); if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true }
         val metrics = JSONObject(current.metrics.toJson())
         val hasFlight = hasFlight(metrics)
-        val kind = getString(if (current.metrics.test == "cmj") R.string.cmj else R.string.drop_jump)
+        val kind = getString(if (readinessRun) R.string.rd_test else testLabel(current.metrics.test))
         val side = "single_leg_view" in current.metrics.warnings
         val band = 9.81 / 4 * metrics.optDouble("flight_time_ms", 0.0) / 1000 * (if (side) .0879 else .0321) * 100
         val stage = if (!hasFlight) null else FlightStrip.from(current)?.let {
@@ -824,7 +859,7 @@ class MainActivity : Activity() {
                 button(getString(R.string.check_frames), primary = true) { editFrames(current) }
             }
             button(getString(R.string.film_again)) {
-                test = current.metrics.test
+                test = if (readinessRun) "readiness" else current.metrics.test
                 selectedSession = resultSession
                 recordJump()
             }
@@ -875,7 +910,7 @@ class MainActivity : Activity() {
                 work(getString(R.string.uploading), {
                     synchronized(uploadLock) {
                         if (Thread.currentThread().isInterrupted) throw InterruptedException()
-                        val name = try { queue.enqueue(current.metrics, uuid, sessionId) }
+                        val name = try { queue.enqueue(current.metrics, uuid, sessionId, readinessRun) }
                             catch (_: Exception) { throw AppError(R.string.pending_save_failed) }
                         queuedId = name // Shown as "saved" even if the send below fails.
                         queue.sendJump(name) { body ->
@@ -889,6 +924,7 @@ class MainActivity : Activity() {
         if (uploadedId != null) text(getString(R.string.uploaded, uploadedId), 16, green)
         if (queuedId != null) text(getString(R.string.saved_pending), 16, green)
         if (uploadedId != null || queuedId != null) text(getString(R.string.uploaded_readonly), 14)
+        if (readinessRun && (uploadedId != null || queuedId != null)) button(getString(R.string.rd_back_check), primary = true) { readinessCheck() }
         if (hasFlight) {
             metricRows(metrics)
             text(getString(R.string.depth_note), 14)
@@ -1331,7 +1367,7 @@ class MainActivity : Activity() {
                 heightTrace(rows.objects().asReversed().mapNotNull { item ->
                     val metrics = item.optJSONObject("metrics") ?: item
                     metrics.optDouble("jump_height_cm").takeIf { metrics.getString("test") == kind && hasFlight(metrics) && it.isFinite() }?.let { item.getLong("id") to it }
-                }, getString(if (kind == "cmj") R.string.cmj else R.string.drop_jump), startingHeights[0]?.takeIf { (rows.getJSONObject(0).optJSONObject("metrics") ?: rows.getJSONObject(0)).getString("test") == kind })
+                }, getString(testLabel(kind)), startingHeights[0]?.takeIf { (rows.getJSONObject(0).optJSONObject("metrics") ?: rows.getJSONObject(0)).getString("test") == kind })
             }
             button(getString(R.string.ui_form_history), look = ActionTone.TEXT) { techniqueHistory() }.apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
             for (i in 0 until rows.length()) {
@@ -1342,7 +1378,7 @@ class MainActivity : Activity() {
                 val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(14), 0, dp(14)) }; page.addView(panel)
                 val hasFlight = hasFlight(metrics)
                 text(getString(R.string.history_item, item.getLong("id"), localDateTime(item.getString("created_at"), locale)) + "  ·  " +
-                    getString(if (metrics.getString("test") == "cmj") R.string.cmj else R.string.drop_jump), 13, parent = panel)
+                    getString(testLabel(metrics.getString("test"))), 13, parent = panel)
                 if (!hasFlight) text(getString(R.string.no_flight_detected), 16, parent = panel)
                 else if (!metrics.isNull("jump_height_cm")) {
                     panel.addView(HeightRule(this, metrics, priorHeights[i]).apply { baseline(startingHeights[i]) }, LinearLayout.LayoutParams(-1, dp(138)))
@@ -1458,4 +1494,10 @@ internal fun metricNumber(value: Double, key: String, locale: Locale): String {
     val format = "%.${digits}f"
     val result = String.format(locale, format, value)
     return if (result == String.format(locale, format, -0.0)) String.format(locale, format, 0.0) else result
+}
+
+internal fun testLabel(test: String) = when (test) {
+    "cmj" -> R.string.cmj
+    "readiness" -> R.string.rd_test
+    else -> R.string.drop_jump
 }
