@@ -19,7 +19,8 @@ internal enum class FeatureWrite(val method: String, val keys: Set<String>, val 
         "label", "kcal", "protein_g", "carbs_g", "fat_g")),
     COPY("POST", setOf("from_day", "to_day"), setOf("from_meal", "to_meal")),
     WEIGHT("PUT", setOf("kg")),
-    SET("POST", setOf("day", "exercise_id", "set_no", "reps", "load_kg", "rpe", "plan_id")),
+    SET("POST", setOf("day", "exercise_id", "set_no", "reps", "load_kg", "rpe", "plan_id"), setOf("workout_client_id")),
+    WORKOUT("POST", setOf("started_at", "ended_at", "title", "template_id", "notes")),
     COMPLETE("PUT", emptySet());
 
     fun path(day: String): String = when (this) {
@@ -27,6 +28,7 @@ internal enum class FeatureWrite(val method: String, val keys: Set<String>, val 
         FOOD -> "/api/food-logs"
         COPY -> "/api/food-logs/copy"
         SET -> "/api/set-logs"
+        WORKOUT -> "/api/workouts"
         WEIGHT -> "/api/me/weights/${LocalDate.parse(day)}"
         COMPLETE -> "/api/me/nutrition/days/${LocalDate.parse(day)}/complete"
     }

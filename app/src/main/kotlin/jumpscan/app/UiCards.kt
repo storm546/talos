@@ -418,5 +418,8 @@ internal fun Context.lineIcon(name: String, tint: Int) = getDrawable(when (name)
     "insights" -> R.drawable.ic_insights
     "torch" -> R.drawable.ic_torch
     "copy" -> R.drawable.ic_copy
+    "check" -> R.drawable.ic_check
+    "timer" -> R.drawable.ic_timer
+    "plates" -> R.drawable.ic_plates
     else -> R.drawable.ic_history
 })!!.mutate().apply { setTint(tint) }

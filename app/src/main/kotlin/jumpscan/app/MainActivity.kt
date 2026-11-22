@@ -166,8 +166,8 @@ class MainActivity : Activity() {
             addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         }
         val tabs = listOf(UiTile(R.string.ui_today, "home") { home() }, UiTile(R.string.ui_technique, "form") { formHome() },
-            UiTile(R.string.ui_profile, "profile") { profile() })
-        val selected = listOf("home", "form", "profile").indexOf(name)
+            UiTile(R.string.tools_title, "more") { toolsHub() }, UiTile(R.string.ui_profile, "profile") { profile() })
+        val selected = listOf("home", "form", "tools", "profile").indexOf(name)
         if (selected >= 0) {
             shell.addView(navigation(tabs, selected, previousTab))
             previousTab = selected
@@ -186,7 +186,7 @@ class MainActivity : Activity() {
         setContentView(shell)
         page.arrive()
         shell.requestApplyInsets()
-        val backable = name !in listOf("home", "form", "profile", "login", "busy", "guide", "frames")
+        val backable = name !in listOf("home", "form", "tools", "profile", "login", "busy", "guide", "frames")
         if (backable) {
             val header = row(center = true).apply { setPadding(0, 0, 0, dp(4)) }
             header.addView(android.widget.ImageView(this).apply {
@@ -373,17 +373,9 @@ class MainActivity : Activity() {
         }
         if (analysis != null) button(getString(R.string.last_result), look = ActionTone.TEXT) { result() }
         if (signedIn) toolRow(UiTile(R.string.history, "history") { history() }, UiTile(R.string.ui_club, "club") { clubHome() },
-            UiTile(R.string.checkin_title, "checkin") { checkin() }, UiTile(R.string.ui_more, "more") { more() })
+            UiTile(R.string.checkin_title, "checkin") { checkin() }, UiTile(R.string.tools_title, "more") { toolsHub() })
         if (signedIn) pendingControls()
         if (!signedIn) text(getString(R.string.coach_note), 13).setPadding(0, dp(18), 0, 0)
-    }
-
-    private fun more() {
-        layout(getString(R.string.ui_more), "more")
-        text(getString(R.string.ui_extras))
-        tiles(UiTile(R.string.training_title, "training") { trainingHome() },
-            UiTile(R.string.nutrition_title, "food") { nutritionHome() },
-            UiTile(R.string.assistant_title, "assistant") { assistantScreen() })
     }
 
     internal fun profile() {
@@ -464,7 +456,7 @@ class MainActivity : Activity() {
         if (session.cancelled) append(" · " + getString(R.string.session_cancelled))
     }
 
-    private fun clubHome() {
+    internal fun clubHome() {
         layout(getString(R.string.ui_club), "club")
         val host = page
         val day = todayLocal()
@@ -538,7 +530,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun checkin() {
+    /** [addMinutes] adds a finished timer to today's training minutes (SPEC 9); the athlete still saves. */
+    internal fun checkin(addMinutes: Int = 0) {
         val day = todayLocal()
         val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
         work(getString(R.string.checkin_title), {
@@ -546,7 +539,8 @@ class MainActivity : Activity() {
                 val rows = JSONArray(api(savedBase, "/api/checkins?athlete_id=$owner&from=$day&to=$day", token = savedToken))
                 if (rows.length() == 0) null else rows.getJSONObject(0)
             } catch (e: IOException) { if (e is ApiError) throw e else null }
-        }, { checkinForm(day, it) }, { home(it) })
+        }, { saved -> checkinForm(day, if (addMinutes <= 0) saved else JSONObject(saved?.toString() ?: "{}").put("training_minutes",
+            (saved?.optInt("training_minutes", 0) ?: 0) + addMinutes)) }, { home(it) })
     }
 
     private fun checkinForm(day: String, saved: JSONObject?, message: String? = null) {
@@ -604,7 +598,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun feedback(offset: Int = 0) {
+    internal fun feedback(offset: Int = 0) {
         val savedToken = token(); val savedBase = base(); val owner = prefs.getLong("user_id", 0)
         work(getString(R.string.feedback_title), {
             parseComments(api(savedBase, "/api/comments?athlete_id=$owner&limit=50&offset=$offset", token = savedToken))
@@ -1069,8 +1063,10 @@ class MainActivity : Activity() {
         }
     }
 
+    /** [more] is queued right after [body] and sent in order (a workout, then its sets). */
     internal fun saveFeature(kind: FeatureWrite, body: JSONObject, day: String = "",
-        clientId: String = UUID.randomUUID().toString(), done: (Int?, String) -> Unit) {
+        clientId: String = UUID.randomUUID().toString(), more: List<Pair<FeatureWrite, JSONObject>> = emptyList(),
+        done: (Int?, String) -> Unit) {
         if (token().isEmpty()) return login()
         val queue = pending()
         val savedBase = base()
@@ -1078,14 +1074,15 @@ class MainActivity : Activity() {
         work(getString(R.string.feature_saving), {
             synchronized(uploadLock) {
                 if (Thread.currentThread().isInterrupted) throw InterruptedException()
-                val name = queue.enqueueFeature(kind, day, body, clientId)
+                val names = listOf(queue.enqueueFeature(kind, day, body, clientId)) +
+                    more.map { (extra, values) -> queue.enqueueFeature(extra, day, values, UUID.randomUUID().toString()) }
                 val sent = linkedMapOf<String, Long>()
                 try { flush(queue, sent, savedBase, savedToken) }
                 catch (error: ApiError) { if (error.status == 401) throw error }
                 catch (error: IOException) { if (error is AppError) throw error }
                 val status = when {
-                    sent.containsKey(name) -> R.string.feature_saved
-                    queue.featurePending(name) -> R.string.saved_pending
+                    names.all { sent.containsKey(it) } -> R.string.feature_saved
+                    names.any { queue.featurePending(it) } -> R.string.saved_pending
                     else -> R.string.feature_rejected
                 }
                 status to sent
@@ -1304,7 +1301,7 @@ class MainActivity : Activity() {
     internal fun number(json: JSONObject, key: String): String = if (json.isNull(key)) getString(R.string.not_available)
         else metricNumber(json.getDouble(key), key, resources.configuration.locales[0])
 
-    private fun history() {
+    internal fun history() {
         if (token().isEmpty()) return login()
         val savedToken = token()
         val savedBase = base()
@@ -1428,6 +1425,9 @@ class MainActivity : Activity() {
             "technique_detail" -> techniqueHistory()
             "form_video", "form_detail", "form_result" -> formHome()
             "nutrition" -> home()
+            "tools" -> home()
+            "workout_pick" -> workoutActive()
+            "workout", "workout_start", "workout_summary", "calculators", "interval_timer" -> toolsHub()
             "food_log" -> foods()
             "recipe_edit" -> recipes()
             "food_search", "quick_add", "food_form", "barcode_manual", "recipes", "ai_entry", "insights" -> nutritionBack()
