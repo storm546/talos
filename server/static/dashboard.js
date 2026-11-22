@@ -372,6 +372,7 @@ function relevant(event, view) {
   if (view === 'wellbeing') return event.type === 'checkin';
   if (view === 'sessions' || view === 'sessionsMine') return event.type === 'session' || event.type === 'jump';
   if (view === 'leaderboard') return ['record','jump'].includes(event.type);
+  if (view === 'board') return ['checkin','jump','training_session'].includes(event.type);
   if (view === 'training' || view === 'nutrition' || view === 'form' || view === 'records') {
     const target = athleteTarget(); if (!target) return false;
     const map = {training:['set','workout','jump','checkin'], nutrition:['food','weight','coaching','nutrition_day','checkin'], form:['form'],
@@ -484,6 +485,7 @@ async function load(view=state.view) {
     data = {formSets, formCatalogue};
   }
   if (view === 'records' || view === 'leaderboard') data = await recordsData(view);
+  if (view === 'board') data = await boardData();
   if (version !== loadVersion || !state.user) return;
   Object.assign(state, data, {view}); message(''); render('h1');
 }
@@ -1809,7 +1811,7 @@ function render(focusSelector=null) {
   const nav=node('nav', null, 'main-nav');nav.setAttribute('aria-label',t('overview'));
   const own = state.user.role === 'athlete';
   const views=own?[['today','overview','index'],['sessionsMine','mySessions','club'],['checkins','myCheckins','checkin'],['leaderboard','recBoard','history']]:[
-    ['team','team','index'],['plans','plans','training'],['groups','groups','home'],['sessions','sessions','club'],['wellbeing','wellbeingView','checkin'],['leaderboard','recBoard','history'],
+    ['team','team','index'],['board','rdBoard','checkin'],['plans','plans','training'],['groups','groups','home'],['sessions','sessions','club'],['wellbeing','wellbeingView','checkin'],['leaderboard','recBoard','history'],
     ['users','users','profile'],...(state.user.role==='admin'?[['clubs','clubs','club'],['audit','audit','more']]:[])];
   const athleteTab = ['history','training','nutrition','form','records'].includes(state.view);
   for (const [view,key,icon] of views) {
@@ -1824,7 +1826,7 @@ function render(focusSelector=null) {
   if (content.dataset.previousView !== state.view) view.classList.add('enter');
   content.dataset.previousView = state.view;
   content.append(view);
-  ({today,team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans,records,leaderboard})[state.view](view);
+  ({today,team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans,records,leaderboard,board})[state.view](view);
   setLive(state.live);
   renderAssistant();
   if(focusSelector)content.querySelector(focusSelector)?.focus();

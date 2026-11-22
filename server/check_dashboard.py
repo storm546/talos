@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 
 def check():
@@ -81,8 +81,9 @@ def check():
         page.locator('svg').nth(3).wait_for()
         assert page.evaluate('document.activeElement.tagName') == 'H1'
         assert page.locator('svg').count() == 6
-        assert page.locator('svg rect').count() == 17
-        assert page.locator('table').last.locator('tbody tr').count() == 10
+        # 28 days of check-ins and 56 morning readiness jumps from the wave 2 seed (SPEC 9).
+        assert page.locator('svg rect').count() == 27
+        assert page.locator('table').last.locator('tbody tr').count() == 66
         page.screenshot(path=str(output / 'athlete-desktop.png'), full_page=True)
         page.locator('#language').select_option('en')
         page.get_by_role('button', name='Download CSV', exact=True).wait_for()
@@ -269,6 +270,41 @@ def check():
                     screenshot(f'coach-records-{language}-{width}-{theme}', full_page=True)
         page.locator('#language').select_option('bg')
         page.set_viewport_size({'width': 1280, 'height': 960})
+        page.get_by_role('button', name='Изход', exact=True).click()
+        page.locator('#login-form').wait_for()
+
+        # SPEC 9 wave 2: coach readiness board, morning digest and nudges (the seed has every state).
+        login('coach')
+        page.locator('.main-nav').get_by_role('button', name='Готовност', exact=True).click()
+        page.locator('.rd-table').wait_for()
+        assert page.locator('.rd-table tbody tr').count() == 6
+        statuses = set(page.locator('.rd-table .rd-status').all_text_contents())
+        assert {'Добре', 'Нормално', 'Внимание', 'Още се учи'} <= statuses, statuses
+        assert page.locator('.rd-digest').get_by_text('Няма отчет: Мартин Колев', exact=True).is_visible()
+        assert page.locator('.rd-digest').get_by_text('Под обичайното: Борис Петров', exact=True).is_visible()
+        page.locator('#digest-phrase').click()
+        page.locator('.rd-digest').get_by_text('Локалният модел не е наличен; показан е списъкът с факти.').wait_for()
+        page.locator('#rd-group').select_option(label='Състезатели')
+        expect(page.locator('.rd-table tbody tr')).to_have_count(3)
+        page.locator('#rd-group').select_option(label='Целият клуб')
+        expect(page.locator('.rd-table tbody tr')).to_have_count(6)
+        page.locator('#rd-sort').select_option('name')
+        assert page.evaluate('document.activeElement.id') == 'rd-sort'
+        for theme in ['dark', 'light']:
+            page.evaluate(f'document.documentElement.dataset.theme = "{theme}"')
+            for language in ['bg', 'en']:
+                page.locator('#language').select_option(language)
+                for width in [1280, 390]:
+                    page.set_viewport_size({'width': width, 'height': 960})
+                    screenshot(f'coach-board-{language}-{width}-{theme}', full_page=True)
+        page.locator('#language').select_option('bg')
+        page.set_viewport_size({'width': 1280, 'height': 960})
+        page.locator('#nudge-all').click()
+        page.get_by_text('Напомнянето е изпратено.', exact=True).wait_for()
+        assert page.locator('#nudge-all').is_disabled()
+        assert page.locator('.rd-table').get_by_text('Напомнено днес', exact=True).count() == 1
+        page.locator('#nudge-all').wait_for()
+        screenshot('coach-board-nudged-bg-1280-light', full_page=True)
         page.get_by_role('button', name='Изход', exact=True).click()
         page.locator('#login-form').wait_for()
 

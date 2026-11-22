@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from . import assistant_api, records_api, training_nutrition_api
+from . import assistant_api, readiness_api, records_api, training_nutrition_api
 from .input_bounds import Offset, SQLITE_MAX, SqliteInt, SqlitePath
 from .response_data import complete_json, spooled_response
 
@@ -193,6 +193,7 @@ def init_db(path):
         training_nutrition_api.init_schema(db)  # training and nutrition tables (SPEC 6.2, 6.3)
         assistant_api.init_schema(db)
         records_api.init_schema(db)  # leaderboard opt-in columns (SPEC 8)
+        readiness_api.init_schema(db)  # check-in readiness fields and training sessions (SPEC 9 wave 2)
 
 
 def password_hash(password, salt):
@@ -326,11 +327,17 @@ class Checkin(StrictModel):
     mood: int = Field(ge=1, le=5)
     training_minutes: int | None = Field(default=None, ge=0, le=600)
     rpe: int | None = Field(default=None, ge=0, le=10)
+    resting_hr: int | None = Field(default=None, ge=25, le=150)
+    hrv_rmssd: float | None = Field(default=None, gt=0, le=300)
+    bedtime: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    wake_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
     @model_validator(mode="after")
     def load_pairs(self):
         if (self.training_minutes is None) != (self.rpe is None):
             raise ValueError("training_minutes and rpe must be set together")
+        if (self.bedtime is None) != (self.wake_time is None):
+            raise ValueError("bedtime and wake_time must be set together")
         return self
 
 
@@ -353,7 +360,7 @@ FrontalAngle = Annotated[float | None, Field(ge=-90, le=90)]
 
 
 class Jump(StrictModel):
-    test: Literal["drop_jump", "cmj"]
+    test: Literal["drop_jump", "cmj", "readiness"]  # readiness: a morning countermovement jump check (SPEC 9)
     fps: float = Field(ge=10, le=480)
     flight_time_ms: float | None = Field(ge=0, le=1500)
     jump_height_cm: float | None = Field(ge=0, le=150)
@@ -913,7 +920,8 @@ class ExpensiveRequests:
     reads = re.compile(
         r"/api/(?:checkins(?:/team)?|me/(?:export|calendar\.ics)|sessions/[^/]+/report|"
         r"athletes/[^/]+/(?:export\.csv|form\.csv|training(?:\.csv)?|weights(?:\.csv)?|nutrition\.csv|"
-        r"nutrition/(?:estimate|summary|expenditure|program|target|goal|analytics)))"
+        r"nutrition/(?:estimate|summary|expenditure|program|target|goal|analytics))|"
+        r"athletes/[^/]+/(?:readiness|load)|team/(?:board|digest))"
     )
     writes = re.compile(r"/api/athletes/[^/]+/nutrition/(?:program|target|goal)")
 
@@ -956,6 +964,7 @@ def create_app(db_path=None):
     app.state.events = EventBus()
     training_tools = training_nutrition_api.install(app, sys.modules[__name__])
     records_api.install(app, sys.modules[__name__])
+    readiness_api.install(app, sys.modules[__name__])
     app.mount("/static", StaticFiles(directory=Path(__file__).with_name("static")), name="static")
 
     csp = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -1270,6 +1279,7 @@ def create_app(db_path=None):
         db.execute("DELETE FROM comments WHERE athlete_id = ?", (user["id"],))
         db.execute("DELETE FROM checkins WHERE athlete_id = ?", (user["id"],))
         training_nutrition_api.delete_data(db, user["id"])
+        readiness_api.delete_data(db, user["id"])
         assistant_api.delete_data(db, user["id"])
         db.execute("DELETE FROM jumps WHERE athlete_id = ?", (user["id"],))
         db.execute("DELETE FROM form_sets WHERE athlete_id = ?", (user["id"],))
@@ -1305,8 +1315,8 @@ def create_app(db_path=None):
         db.execute("BEGIN")
         profile = {**public_user(user), "email": user["email"], "active": bool(user["active"]), **consent_fields(user)}
         checkins = (dict(row) for row in db.execute(
-            "SELECT day, sleep, fatigue, soreness, stress, mood, training_minutes, rpe, "
-            "created_at, updated_at FROM checkins WHERE athlete_id = ? ORDER BY day", (user["id"],)))
+            "SELECT day, sleep, fatigue, soreness, stress, mood, training_minutes, rpe, resting_hr, hrv_rmssd, "
+            "bedtime, wake_time, created_at, updated_at FROM checkins WHERE athlete_id = ? ORDER BY day", (user["id"],)))
         comments = (dict(row) for row in db.execute(
             "SELECT id, author_id, jump_id, session_id, body, created_at, read_at FROM comments "
             "WHERE athlete_id = ? ORDER BY created_at, id", (user["id"],)))
@@ -1315,6 +1325,7 @@ def create_app(db_path=None):
                   "comments": comments, "form_sets": athlete_form_sets(db, user["id"]),
                   "records": records_api.compute_records(db, user["id"], FORM_EXERCISES)["records"],
                   **training_nutrition_api.export_data(db, user["id"]),
+                  **readiness_api.export_data(db, user["id"]),
                   "exported_at": now_iso()}
         def record_export():
             db.rollback()
@@ -1667,12 +1678,16 @@ def create_app(db_path=None):
                               (user["id"], day)).fetchone()
         db.execute(
             "INSERT INTO checkins(athlete_id, day, sleep, fatigue, soreness, stress, mood, "
-            "training_minutes, rpe, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "training_minutes, rpe, resting_hr, hrv_rmssd, bedtime, wake_time, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(athlete_id, day) DO UPDATE SET sleep = excluded.sleep, fatigue = excluded.fatigue, "
             "soreness = excluded.soreness, stress = excluded.stress, mood = excluded.mood, "
-            "training_minutes = excluded.training_minutes, rpe = excluded.rpe, updated_at = excluded.updated_at",
+            "training_minutes = excluded.training_minutes, rpe = excluded.rpe, resting_hr = excluded.resting_hr, "
+            "hrv_rmssd = excluded.hrv_rmssd, bedtime = excluded.bedtime, wake_time = excluded.wake_time, "
+            "updated_at = excluded.updated_at",
             (user["id"], day, body.sleep, body.fatigue, body.soreness, body.stress, body.mood,
-             body.training_minutes, body.rpe, now, now))
+             body.training_minutes, body.rpe, body.resting_hr, body.hrv_rmssd, body.bedtime, body.wake_time, now, now))
+        readiness_api.mirror_checkin(db, user["id"], day, body.training_minutes, body.rpe, now)
         status = 201 if existing is None else 200
         emit(athlete_viewers(db, user), {"type": "checkin", "id": user["id"], "athlete_id": user["id"],
                                         "club_id": user["club_id"], "at": now})

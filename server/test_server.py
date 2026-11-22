@@ -40,7 +40,7 @@ def temporary_directory():
 def template():
     with temporary_directory() as directory:
         path = directory / "template.db"
-        seed(path)
+        seed(path, readiness=False)  # wave 2 readiness data is covered in test_readiness
         yield path
 
 
@@ -730,7 +730,8 @@ def test_seed_command_is_idempotent_and_environment_selects_database(monkeypatch
         with main.database(path) as db:
             assert db.execute("SELECT COUNT(*) FROM clubs").fetchone()[0] == 2
             assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 10
-            assert db.execute("SELECT COUNT(*) FROM jumps").fetchone()[0] == 70
+            assert db.execute("SELECT COUNT(*) FROM jumps WHERE json_extract(metrics, '$.test') != 'readiness'").fetchone()[0] == 70
+            assert db.execute("SELECT COUNT(*) FROM jumps WHERE json_extract(metrics, '$.test') = 'readiness'").fetchone()[0] == 341
             for row in db.execute("SELECT metrics FROM jumps"):
                 main.Jump.model_validate_json(row[0])
         with TestClient(main.create_app()) as client:
@@ -776,7 +777,7 @@ def test_reset_demo_rebuilds_only_demo_data(api, auth, monkeypatch):
     assert login.status_code == 200 and login.json()["user"]["id"] == demo_id
     assert client.post("/api/auth/login", json={"email": "personal@demo.test", "password": "personal-password"}).status_code == 200
     headers = {"Authorization": "Bearer " + login.json()["token"]}
-    jumps = client.get("/api/jumps", headers=headers).json()
+    jumps = [jump for jump in client.get("/api/jumps", headers=headers).json() if jump["test"] != "readiness"]
     assert len(jumps) == 10 and datetime.fromisoformat(jumps[0]["created_at"]).date() >= today - timedelta(days=2)
     form = client.get("/api/form", headers=headers).json()
     assert len(form) == 3 and all(datetime.fromisoformat(row["created_at"]).date() >= today - timedelta(days=14) for row in form)

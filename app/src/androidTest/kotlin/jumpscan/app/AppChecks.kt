@@ -58,6 +58,9 @@ class AppChecks : Instrumentation() {
             } else if (only == "records") {
                 targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
                 RecordsStudio(this).screens(requireNotNull(fixtureServer))
+            } else if (only == "readiness") {
+                targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
+                ReadinessStudio(this).screens(requireNotNull(fixtureServer))
             } else if (only == "capture-parity") output.putString("parity", capture.parity())
             else if (only == "capture-visual") capture.visual()
             else if (only == "cutoff") videoCutoffCheck()
@@ -73,6 +76,7 @@ class AppChecks : Instrumentation() {
                 videoCutoffCheck()
                 numberChecks()
                 recordChecks()
+                readinessChecks()
                 capture.policies()
                 diagnosticChecks()
             }
@@ -189,6 +193,7 @@ class AppChecks : Instrumentation() {
                     FeatureWrite.SET -> check(json.getInt("reps") == 6 && json.has("client_id"))
                     FeatureWrite.COMPLETE -> check(json.length() == 0)
                     FeatureWrite.WORKOUT -> error("No workout was queued here")
+                    FeatureWrite.SESSION -> error("No session is queued in this check")
                 }
                 17L
             }) { error("Not a jump") }

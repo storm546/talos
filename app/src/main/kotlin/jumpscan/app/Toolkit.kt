@@ -9,6 +9,7 @@ internal class Tool(val key: String, val label: Int, val note: Int, val icon: St
 internal fun toolGroups(): List<Pair<Int, List<Tool>>> = listOf(
     R.string.tools_measure to listOf(
         Tool("jump", R.string.tool_jump, R.string.tool_jump_note, "legs", local = true) { home() },
+        Tool("readiness", R.string.rd_title, R.string.rd_check, "legs") { readinessCheck() },
         Tool("jump_history", R.string.tool_jump_history, R.string.tool_jump_history_note, "history") { history() },
         Tool("form", R.string.ui_technique, R.string.tool_form_note, "form", local = true) { formHome() },
         Tool("form_history", R.string.tool_form_history, R.string.tool_form_history_note, "history") { techniqueHistory() },
@@ -24,7 +25,8 @@ internal fun toolGroups(): List<Pair<Int, List<Tool>>> = listOf(
         Tool("recipes", R.string.recipes_title, R.string.tool_recipes_note, "recipe") { recipes() }),
     R.string.tools_body to listOf(
         Tool("weight", R.string.tool_weight, R.string.tool_weight_note, "insights") { insights(days = 30) },
-        Tool("checkin", R.string.checkin_title, R.string.tool_checkin_note, "checkin") { checkin() }),
+        Tool("checkin", R.string.checkin_title, R.string.tool_checkin_note, "checkin") { checkin() },
+        Tool("load", R.string.rd_sessions_title, R.string.rd_load_chart, "training") { sessionsScreen() }),
     R.string.tools_club to listOf(
         Tool("sessions", R.string.tool_sessions, R.string.tool_sessions_note, "club") { clubHome() },
         Tool("feedback", R.string.feedback_title, R.string.tool_feedback_note, "assistant") { feedback() },

@@ -10,6 +10,7 @@ import secrets
 from statistics import median
 
 from .main import FormSet, Jump, database, database_path, init_db, password_hash
+from .readiness_api import copy_checkin_load
 from .training_nutrition_api import recipe_servings
 
 SOFIA = ZoneInfo("Europe/Sofia")
@@ -35,7 +36,7 @@ def clear_demo_rows(db, users, athletes, club_ids):
                   f"AND jumps.athlete_id IN ({athlete_marks})", (*athletes, *users, *athletes)).fetchone():
         raise ValueError("A non-demo comment references a demo jump; no demo data was reset.")
     db.execute(f"DELETE FROM comments WHERE athlete_id IN ({athlete_marks}) AND author_id IN ({user_marks})", (*athletes, *users))
-    for table in ("jumps", "form_sets", "checkins", "set_logs", "workouts", "nutrition_day_complete",
+    for table in ("jumps", "form_sets", "checkins", "training_sessions", "set_logs", "workouts", "nutrition_day_complete",
                   "food_logs", "weights", "nutrition_targets", "coaching_programs"):
         db.execute(f"DELETE FROM {table} WHERE athlete_id IN ({athlete_marks})", athletes)
     for table in ("tokens", "group_members", "assistant_proposals", "assistant_requests", "assistant_conversations"):
@@ -57,7 +58,7 @@ def clear_demo_rows(db, users, athletes, club_ids):
                "AND NOT EXISTS (SELECT 1 FROM recipes WHERE food_id = foods.id)", users)
 
 
-def seed(path=None, *, reset=False):
+def seed(path=None, *, reset=False, readiness=True):
     path = database_path() if path is None else path
     init_db(path)
     now = datetime.now(timezone.utc)
@@ -229,7 +230,92 @@ def seed(path=None, *, reset=False):
 
         if new_athletes:
             seed_training_nutrition(db, user_ids, athlete_ids, groups, club_ids, today, new_athletes)
+            if readiness:
+                seed_readiness(db, athlete_ids, today, now, new_athletes)
+        copy_checkin_load(db)
         db.commit()
+
+
+# Readiness profiles for the team board (SPEC 9 wave 2): today's state and personal baselines.
+# account: (state today, resting HR, RMSSD ms, readiness jump cm, bedtime offset min, under-slept today)
+READINESS_PROFILES = {
+    "athlete1": ("good", 50, 92, 36.0, 0),
+    "athlete2": ("take_care", 56, 70, 31.0, 20),
+    "athlete4": ("normal", 53, 78, 33.0, -15),
+    "athlete5": ("load", 48, 101, 40.0, 10),
+    "athlete6": ("learning", 58, 64, 29.0, 30),
+    "athlete7": ("missing", 54, 75, 30.0, 5),
+    "athlete3": ("normal", 55, 72, 32.0, 0),
+}
+
+
+def seed_readiness(db, athlete_ids, today, now, new_athletes):
+    """28 days of synthetic morning data so the board shows every state: good, normal, take care, a load
+    spike, one new athlete who is still learning and one who has not checked in today."""
+    rng = random.Random(20261122)
+    for account, (profile, hr, rmssd, height, bed_shift) in READINESS_PROFILES.items():
+        if account not in new_athletes:
+            continue
+        athlete_id = athlete_ids[account]
+        variant = int(account[-1])
+        level = 4 if variant % 2 == 0 else 3
+        history = 4 if profile == "learning" else 28
+        db.execute("DELETE FROM checkins WHERE athlete_id = ? AND day < ?",
+                   (athlete_id, (today - timedelta(days=history - 1)).isoformat()))
+        if profile == "missing":
+            db.execute("DELETE FROM checkins WHERE athlete_id = ? AND day = ?", (athlete_id, today.isoformat()))
+        for days_ago in range(history):
+            day = today - timedelta(days=days_ago)
+            if profile == "missing" and days_ago == 0:
+                continue
+            items = [max(1, min(5, level + rng.randint(-1, 1))) for _ in range(5)]
+            minutes, rpe = (rng.randint(45, 110), rng.randint(4, 8)) if days_ago % 7 not in (2, 5) else (None, None)
+            db.execute(
+                "INSERT OR IGNORE INTO checkins(athlete_id, day, sleep, fatigue, soreness, stress, mood, "
+                "training_minutes, rpe, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (athlete_id, day.isoformat(), *items, minutes, rpe, now_isos(day), now_isos(day)))
+            resting, variability = hr + rng.gauss(0, 1.5), rmssd * rng.gauss(1, .07)
+            bed = 23 * 60 + bed_shift + rng.randint(-25, 25)
+            sleep_minutes = rng.randint(445, 505)
+            if days_ago == 0 and profile == "good":
+                resting, variability, sleep_minutes, bed = hr - 5, rmssd * 1.3, 500, 23 * 60 + bed_shift
+            elif days_ago == 0 and profile == "take_care":
+                resting, variability, sleep_minutes, bed = hr + 8, rmssd * .62, 330, 25 * 60
+                db.execute("UPDATE checkins SET sleep = 2, fatigue = 2, soreness = 3, stress = 2, mood = 2 "
+                           "WHERE athlete_id = ? AND day = ?", (athlete_id, day.isoformat()))
+            elif days_ago == 0:
+                resting, variability = hr, rmssd
+                sleep_minutes = 360 if profile in ("normal", "load") else sleep_minutes
+            wake = bed + sleep_minutes
+            db.execute("UPDATE checkins SET resting_hr = ?, hrv_rmssd = ?, bedtime = ?, wake_time = ? "
+                       "WHERE athlete_id = ? AND day = ?",
+                       (round(resting), round(variability, 1), f"{bed // 60 % 24:02d}:{bed % 60:02d}",
+                        f"{wake // 60 % 24:02d}:{wake % 60:02d}", athlete_id, day.isoformat()))
+            if days_ago % 3 == 1 and profile != "learning":  # a second session on some days: gym after practice
+                db.execute("INSERT INTO training_sessions(athlete_id, day, kind, minutes, rpe, source, created_at) "
+                           "VALUES (?, ?, 'gym', ?, ?, 'manual', ?)",
+                           (athlete_id, day.isoformat(), rng.randint(30, 60), rng.randint(5, 7), now_isos(day)))
+            if profile == "load" and days_ago < 5:  # match week: a much higher load than usual
+                db.execute("INSERT INTO training_sessions(athlete_id, day, kind, minutes, rpe, source, created_at) "
+                           "VALUES (?, ?, 'match', 90, 9, 'manual', ?)", (athlete_id, day.isoformat(), now_isos(day)))
+            # Readiness jumps on most mornings: 2-3 countermovement jumps, the best valid one counts.
+            if (profile != "missing" or days_ago > 0) and (days_ago % 4 != 3 or days_ago == 0):
+                morning = rng.gauss(height, .9)
+                if days_ago == 0:
+                    morning = {"good": height + 2.6, "take_care": height - 3.2, "load": height - 3.0}.get(profile, height)
+                for trial in range(2 if days_ago % 2 else 3):
+                    jump_cm = morning - abs(rng.gauss(0, .5)) * (trial > 0)
+                    flight_ms = (8 * jump_cm / 100 / 9.80665) ** .5 * 1000
+                    warnings = ["uncertain_timing"] if profile == "take_care" and days_ago == 0 and trial == 2 else []
+                    metrics = Jump(test="readiness", fps=60, flight_time_ms=flight_ms, jump_height_cm=jump_cm,
+                                   knee_flexion_contact_l=None, knee_flexion_contact_r=None,
+                                   knee_flexion_peak_l=68 + rng.gauss(0, 2), knee_flexion_peak_r=None,
+                                   fppa_peak_l=None, fppa_peak_r=None, knee_ankle_ratio=None,
+                                   flexion_asymmetry_pct=None, quality=.93, warnings=warnings)
+                    at = datetime(day.year, day.month, day.day, 5, 10 + trial * 2, tzinfo=timezone.utc)
+                    db.execute("INSERT INTO jumps(athlete_id, created_at, metrics) VALUES (?, ?, ?)",
+                               (athlete_id, min(at, now - timedelta(minutes=5 - trial)).isoformat(),
+                                metrics.model_dump_json()))
 
 
 def seed_form(db, athlete_id, now, rng):
