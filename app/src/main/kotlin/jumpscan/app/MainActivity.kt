@@ -242,8 +242,8 @@ class MainActivity : Activity() {
         return EditText(this).apply {
             id = View.generateViewId()
             caption.labelFor = id
-            inputType = type
             setSingleLine(true)
+            inputType = type // after setSingleLine, which would otherwise drop password masking
             setText(value)
             instrumentType()
             setTextColor(ink)
