@@ -782,8 +782,9 @@ def install(app, h):
         first = (today - timedelta(weeks=weeks, days=7)).isoformat()
         sets = [(r["day"], r["reps"], r["load_kg"]) for r in db.execute(
             "SELECT day, reps, load_kg FROM set_logs WHERE athlete_id = ? AND day >= ?", (athlete_id, first))]
-        loads = [(r["day"], r["rpe"], r["training_minutes"]) for r in db.execute(
-            "SELECT day, rpe, training_minutes FROM checkins WHERE athlete_id = ? AND day >= ?",
+        # Session-RPE load from every training session of the day (SPEC 9); check-in pairs are sessions too.
+        loads = [(r["day"], r["rpe"], r["minutes"]) for r in db.execute(
+            "SELECT day, rpe, minutes FROM training_sessions WHERE athlete_id = ? AND day >= ?",
             (athlete_id, first))]
         suggestions = []
         seen = set()
