@@ -310,7 +310,7 @@ private fun MainActivity.restBar() {
     val bar = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         background = raisedSurface(hero = true).apply { cornerRadius = 0f }
-        setPadding(dp(18), dp(10), dp(12), dp(10))
+        setPadding(dp(18), dp(10), dp(18), dp(10))
         visibility = View.GONE
         accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_NONE
     }
@@ -319,11 +319,12 @@ private fun MainActivity.restBar() {
     bar.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
     text(getString(R.string.rest_title).uppercase(locale), 12, getColor(R.color.on_hero), column).apply { letterSpacing = .14f; setPadding(0, 0, 0, 0) }
     val countdown = TextView(this).apply {
-        textSize = 40f; instrumentType(numeric = true); setTextColor(getColor(R.color.signal))
+        textSize = 36f; instrumentType(numeric = true); setTextColor(getColor(R.color.signal))
         column.addView(this)
     }
     fun key(label: String, description: Int, action: () -> Unit) = styleButton(android.widget.Button(this), false, ActionTone.SECONDARY).apply {
         text = label; contentDescription = getString(description); textSize = 15f; minWidth = dp(56); minimumWidth = dp(56)
+        setPadding(dp(12), 0, dp(12), 0)
         background = shape(getColor(R.color.hero_top), 10, getColor(R.color.on_hero)); setTextColor(android.graphics.Color.WHITE)
         setOnClickListener { action() }
         bar.addView(this, LinearLayout.LayoutParams(-2, dp(48)).apply { marginStart = dp(6) })

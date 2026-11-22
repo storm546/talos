@@ -26,7 +26,7 @@ internal class PlateView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         val d = resources.displayMetrics.density
         val mid = height / 2f
-        pen.color = context.getColor(R.color.line)
+        pen.color = context.getColor(R.color.on_hero); pen.alpha = 110
         canvas.drawRoundRect(RectF(0f, mid - 4 * d, width.toFloat(), mid + 4 * d), 3 * d, 3 * d, pen)
         canvas.drawRoundRect(RectF(14 * d, mid - 12 * d, 22 * d, mid + 12 * d), 2 * d, 2 * d, pen) // collar
         var x = 26 * d
@@ -36,9 +36,11 @@ internal class PlateView(context: Context) : View(context) {
         for (plate in plates) {
             val h = (height - 26 * d) * (0.34f + 0.66f * (plate / 25.0).toFloat().coerceAtMost(1f))
             val w = (if (plate >= 10) 16 else 11) * d
-            pen.color = context.getColor(if (plate >= 20) R.color.accent else if (plate >= 5) R.color.ink else R.color.muted)
+            // Drawn on the dark hero panel in both themes.
+            pen.color = context.getColor(if (plate >= 20) R.color.signal else R.color.on_hero)
+            pen.alpha = if (plate >= 5) 255 else 150
             canvas.drawRoundRect(RectF(x, mid - h / 2, x + w, mid + h / 2), 3 * d, 3 * d, pen)
-            pen.color = context.getColor(R.color.muted)
+            pen.color = context.getColor(R.color.on_hero); pen.alpha = 200
             canvas.drawText(kg(plate), x + w / 2, height - 2 * d, pen)
             x += w + 4 * d
             if (x > width - 20 * d) break
