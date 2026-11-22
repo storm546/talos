@@ -110,7 +110,7 @@ SCHEMA = """
         fat_g REAL NOT NULL, fibre_g REAL NOT NULL DEFAULT 0,
         source TEXT NOT NULL DEFAULT 'custom',
         servings TEXT, brand TEXT NOT NULL DEFAULT '', barcode TEXT, source_url TEXT NOT NULL DEFAULT '',
-        catalog_id TEXT, nutrients TEXT
+        catalog_id TEXT, nutrients TEXT, created_by INTEGER REFERENCES users(id) ON DELETE SET NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS foods_fdc ON foods(fdc_id) WHERE fdc_id IS NOT NULL;
     {food_logs}
@@ -188,9 +188,19 @@ OLD_LOG_COLUMNS = "id, athlete_id, day, meal, food_id, grams, client_id, created
 NEW_COLUMNS = {
     "set_logs": {"workout_id": "INTEGER REFERENCES workouts(id) ON DELETE SET NULL"},
     "foods": {"servings": "TEXT", "brand": "TEXT NOT NULL DEFAULT ''", "barcode": "TEXT",
-              "source_url": "TEXT NOT NULL DEFAULT ''", "catalog_id": "TEXT", "nutrients": "TEXT"},
+              "source_url": "TEXT NOT NULL DEFAULT ''", "catalog_id": "TEXT", "nutrients": "TEXT",
+              "created_by": "INTEGER REFERENCES users(id) ON DELETE SET NULL"},
     "coaching_programs": {"target_weight_kg": "REAL", "end_date": "TEXT"},
 }
+# Recipe portions carry a count and unit; the client builds the label in its language (SPEC 7.4). The label is a
+# language-neutral key that log entries store. Version 2 stored Bulgarian text, migrated in place below.
+RECIPE_UNITS = {"1 порция": {"label": "serving", "count": 1, "unit": "serving"},
+                "цялата рецепта": {"label": "recipe", "count": 1, "unit": "recipe"}}
+
+
+def recipe_servings(total, servings_count):
+    return [{"label": "serving", "count": 1, "unit": "serving", "grams": round(total / servings_count, 1)},
+            {"label": "recipe", "count": 1, "unit": "recipe", "grams": round(total, 1)}]
 
 
 def init_schema(db):
@@ -210,6 +220,16 @@ def init_schema(db):
             INSERT INTO food_logs_v2({OLD_LOG_COLUMNS}) SELECT {OLD_LOG_COLUMNS} FROM food_logs;
             DROP TABLE food_logs; ALTER TABLE food_logs_v2 RENAME TO food_logs; {FOOD_LOG_INDEXES} COMMIT;""")
     db.execute("CREATE INDEX IF NOT EXISTS set_logs_workout ON set_logs(workout_id) WHERE workout_id IS NOT NULL")
+    # Club and personal foods from before 7.4: the creator from the audit log (food_created, food_scanned).
+    db.execute("UPDATE foods SET created_by = (SELECT audit.actor_id FROM audit JOIN users ON users.id = audit.actor_id "
+               "WHERE audit.action IN ('food_created', 'food_scanned') AND audit.target = CAST(foods.id AS TEXT) "
+               "ORDER BY audit.id LIMIT 1) WHERE created_by IS NULL AND club_id IS NOT NULL AND source != 'recipe'")
+    for row in db.execute("SELECT id, servings FROM foods WHERE source = 'recipe' AND servings NOT LIKE '%\"unit\"%'").fetchall():
+        servings = [{**s, **RECIPE_UNITS.get(s["label"], {})} for s in json.loads(row["servings"])]
+        db.execute("UPDATE foods SET servings = ? WHERE id = ?", (json.dumps(servings), row["id"]))
+    db.execute("UPDATE food_logs SET serving_label = CASE serving_label WHEN '1 порция' THEN 'serving' ELSE 'recipe' END "
+               "WHERE serving_label IN ('1 порция', 'цялата рецепта') "
+               "AND food_id IN (SELECT id FROM foods WHERE source = 'recipe')")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS foods_catalog ON foods(catalog_id) WHERE catalog_id IS NOT NULL")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS foods_barcode ON foods(IFNULL(club_id, 0), IFNULL(owner_id, 0), barcode) "
                "WHERE barcode IS NOT NULL")
@@ -539,7 +559,14 @@ class Program(StrictModel):
 
 
 class Profile(StrictModel):
-    under_18: bool
+    under_18: bool | None = None
+    leaderboard_allowed: bool | None = None  # coach's confirmation for an under-18 athlete (SPEC 8)
+
+    @model_validator(mode="after")
+    def one_field(self):
+        if self.under_18 is None and self.leaderboard_allowed is None:
+            raise ValueError("Send under_18 or leaderboard_allowed")
+        return self
 
 
 def utc_today():
@@ -653,10 +680,15 @@ def install(app, h):
         target = h.managed_user(db, user, target_id)
         if target["role"] != "athlete":
             raise HTTPException(422, "The profile applies to athletes only")
-        db.execute("UPDATE users SET under_18 = ? WHERE id = ?", (body.under_18, target_id))
-        audit(db, user["id"], "profile_changed", target_id, {"under_18": body.under_18})
+        if body.under_18 is not None:
+            db.execute("UPDATE users SET under_18 = ? WHERE id = ?", (body.under_18, target_id))
+            audit(db, user["id"], "profile_changed", target_id, {"under_18": body.under_18})
+        if body.leaderboard_allowed is not None:
+            db.execute("UPDATE users SET leaderboard_allowed = ? WHERE id = ?", (body.leaderboard_allowed, target_id))
+            audit(db, user["id"], "leaderboard_allowed_changed", target_id,
+                  {"leaderboard_allowed": body.leaderboard_allowed})
         db.commit()
-        return {"id": target_id, "under_18": body.under_18}
+        return {"id": target_id, **body.model_dump(exclude_none=True)}
 
     # --- exercises ---
 
@@ -800,6 +832,7 @@ def install(app, h):
              body.plan_id, body.client_id, created_at, workout_id))
         audit(db, user["id"], "set_logged", cursor.lastrowid)
         publish(db, user, "set", cursor.lastrowid, created_at, emit)
+        h.publish_record(db, user, "set_log", cursor.lastrowid, created_at, emit)
         return JSONResponse(status_code=201, content=set_row(
             db.execute("SELECT * FROM set_logs WHERE id = ?", (cursor.lastrowid,)).fetchone()))
 
@@ -1048,16 +1081,31 @@ def install(app, h):
             raise HTTPException(404, "Food not found")
         return row
 
-    def insert_food(db, club_id, owner_id, food):
+    def correctable_food(db, user, food_id):
+        """PATCH scope (SPEC 7.4): as for delete, and also the athlete who scanned or created a club food until
+        another athlete has logged it. Other users who can see the club food get 403."""
+        row = db.execute("SELECT * FROM foods WHERE id = ?", (food_id,)).fetchone()
+        if writable(row, user):
+            return row
+        clause, params = visible_food_sql(user)
+        if row is None or row["club_id"] is None or not db.execute(
+                f"SELECT 1 FROM foods WHERE id = ? AND ({clause})", (food_id, *params)).fetchone():
+            raise HTTPException(404, "Food not found")
+        if user["role"] == "athlete" and row["owner_id"] is None and row["created_by"] == user["id"] and not db.execute(
+                "SELECT 1 FROM food_logs WHERE food_id = ? AND athlete_id != ? LIMIT 1", (food_id, user["id"])).fetchone():
+            return row
+        raise HTTPException(403, "Only staff, or the athlete who added this food before others logged it, can correct it")
+
+    def insert_food(db, club_id, owner_id, food, created_by=None):
         try:
             cursor = db.execute(
                 "INSERT INTO foods(club_id, owner_id, name_bg, name_en, kcal, protein_g, carbs_g, fat_g, fibre_g, "
-                "brand, barcode, servings, nutrients, source, source_url, catalog_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "brand, barcode, servings, nutrients, source, source_url, catalog_id, created_by) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (club_id, owner_id, food["name_bg"], food.get("name_en", ""), food["kcal"], food["protein_g"],
                  food["carbs_g"], food["fat_g"], food.get("fibre_g", 0), food.get("brand", ""), food.get("barcode"),
                  json.dumps(food.get("servings", [])), json.dumps(food.get("nutrients", {})),
-                 food.get("source", "custom"), food.get("source_url", ""), food.get("catalog_id")))
+                 food.get("source", "custom"), food.get("source_url", ""), food.get("catalog_id"), created_by))
         except sqlite3.IntegrityError:
             raise HTTPException(409, "A food with this barcode already exists here") from None
         return cursor.lastrowid
@@ -1153,7 +1201,7 @@ def install(app, h):
         with h.authorized_write(db, request) as (user, _):
             if (row := db.execute(local, (code, *params)).fetchone()) is not None:
                 return food_row(row)
-            food_id = insert_food(db, user["club_id"], None, food)
+            food_id = insert_food(db, user["club_id"], None, food, user["id"])
             audit(db, user["id"], "food_scanned", food_id)
             return JSONResponse(status_code=201, content=food_row(
                 db.execute("SELECT * FROM foods WHERE id = ?", (food_id,)).fetchone()))
@@ -1172,14 +1220,14 @@ def install(app, h):
                     raise HTTPException(422, "club_id applies to staff only")
             else:
                 club_id, owner_id = staff_club(db, user, body.club_id), None
-            food_id = insert_food(db, club_id, owner_id, body.model_dump())
+            food_id = insert_food(db, club_id, owner_id, body.model_dump(), user["id"])
             audit(db, user["id"], "food_created", food_id)
             return food_row(db.execute("SELECT * FROM foods WHERE id = ?", (food_id,)).fetchone())
 
     @app.patch("/api/foods/{food_id}", dependencies=[Depends(current_user)])
     def update_food(food_id: SqlitePath, body: FoodPatch, request: Request, db=Depends(get_db)):
         with h.authorized_write(db, request) as (user, _):
-            row = scoped_food(db, user, food_id)
+            row = correctable_food(db, user, food_id)
             if user["role"] == "athlete":
                 need_consent(user, "foods")
             if row["source"] == "recipe":
@@ -1314,7 +1362,8 @@ def install(app, h):
                 "SELECT id FROM food_logs WHERE athlete_id = ? AND day = ? AND (? IS NULL OR meal = ?) ORDER BY id",
                 (user["id"], body.from_day, body.from_meal, body.from_meal))]
             if not sources:
-                raise HTTPException(422, "Nothing to copy")
+                return JSONResponse(status_code=422, content={"detail": "Nothing to copy from that day",
+                                                              "code": "nothing_to_copy"})
             created_at = h.now_iso()
             copied = [db.execute(
                 "INSERT INTO food_logs(athlete_id, day, meal, food_id, grams, client_id, created_at, serving_label, "
@@ -1401,8 +1450,7 @@ def install(app, h):
         micro = [json.loads(food["nutrients"] or "{}") for food, _ in items]
         known = set.intersection(*(set(m) for m in micro))
         nutrients = {key: sum(m[key] * grams for m, (_, grams) in zip(micro, items)) / total for key in sorted(known)}
-        servings = [{"label": "1 порция", "grams": round(total / body.servings_count, 1)},
-                    {"label": "цялата рецепта", "grams": round(total, 1)}]
+        servings = recipe_servings(total, body.servings_count)
         return {"name_bg": body.name, **per100, "nutrients": nutrients, "servings": servings, "source": "recipe"}, [
             (food["id"], grams) for food, grams in items]
 
@@ -1453,7 +1501,7 @@ def install(app, h):
             else:
                 club_id, owner_id = staff_club(db, user, body.club_id), None
             food, items = recipe_values(db, user, body, True)
-            food_id = insert_food(db, club_id, owner_id, food)
+            food_id = insert_food(db, club_id, owner_id, food, user["id"])
             cursor = db.execute("INSERT INTO recipes(owner_id, club_id, name, servings_count, food_id) VALUES (?, ?, ?, ?, ?)",
                                 (owner_id, club_id, body.name, body.servings_count, food_id))
             write_recipe_items(db, cursor.lastrowid, items)

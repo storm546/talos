@@ -10,6 +10,7 @@ import secrets
 from statistics import median
 
 from .main import FormSet, Jump, database, database_path, init_db, password_hash
+from .training_nutrition_api import recipe_servings
 
 SOFIA = ZoneInfo("Europe/Sofia")
 DEMO_CLUBS = (
@@ -20,6 +21,7 @@ DEMO_CLUBS = (
     ("Втори демо клуб", (("coach2", "Втори демо треньор", "coach"), ("athlete3", "Иван Николов", "athlete"))),
 )
 DEMO_GROUPS = {"Юноши": ("athlete1", "athlete2", "athlete4"), "Състезатели": ("athlete5", "athlete6", "athlete7")}
+LEADERBOARD_OPT_IN = ("athlete1", "athlete5")  # adults; the others stay opted out (SPEC 8)
 SESSION_NOTE = "Демо сесия — синтетични данни"
 PLAN_NOTE = "Демо план: синтетични данни"
 
@@ -82,14 +84,16 @@ def seed(path=None, *, reset=False):
                 salt = secrets.token_bytes(16)
                 cursor = db.execute(
                     "INSERT INTO users(club_id, email, name, role, password_salt, password_hash, "
-                    "consent_recorded, consent_by, consent_at, under_18) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "consent_recorded, consent_by, consent_at, under_18, leaderboard_opt_in) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(email) DO UPDATE SET club_id=excluded.club_id, name=excluded.name, role=excluded.role, "
                     "password_salt=excluded.password_salt, password_hash=excluded.password_hash, active=1, "
                     "consent_recorded=excluded.consent_recorded, consent_by=excluded.consent_by, "
-                    "consent_at=excluded.consent_at, under_18=excluded.under_18 RETURNING id",
+                    "consent_at=excluded.consent_at, under_18=excluded.under_18, "
+                    "leaderboard_opt_in=excluded.leaderboard_opt_in RETURNING id",
                     (club_id, email, name, role, salt, password_hash("demo1234", salt), role == "athlete",
                      "Синтетично съгласие за демонстрацията" if role == "athlete" else None,
-                     now.isoformat() if role == "athlete" else None, account == "athlete7"),
+                     now.isoformat() if role == "athlete" else None, account == "athlete7",
+                     account in LEADERBOARD_OPT_IN),
                 )
                 user_id = cursor.fetchone()[0]
                 user_ids[account] = user_id
@@ -310,16 +314,14 @@ def seed_food_v2(db, club_id):
         food_id = db.execute(
             "INSERT INTO foods(club_id, name_bg, kcal, protein_g, carbs_g, fat_g, fibre_g, servings, nutrients, source) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'recipe')",
-            (club_id, name, *per100.values(), json.dumps([{"label": "1 порция", "grams": round(total / servings, 1)},
-                                                          {"label": "цялата рецепта", "grams": total}]),
-             json.dumps(nutrients))).lastrowid
+            (club_id, name, *per100.values(), json.dumps(recipe_servings(total, servings)), json.dumps(nutrients))).lastrowid
         recipe_id = db.execute("INSERT INTO recipes(club_id, name, servings_count, food_id) VALUES (?, ?, ?, ?)",
                                (club_id, name, servings, food_id)).lastrowid
         db.executemany("INSERT INTO recipe_items(recipe_id, position, food_id, grams) VALUES (?, ?, ?, ?)",
                        [(recipe_id, n, f["id"], g) for n, (f, g) in enumerate(foods)])
         recipe = [food_id]
     return {"scanned": (bar[0], SCANNED_FOOD["serving"][0], SCANNED_FOOD["serving"][1]),
-            "recipe": (recipe[0], "1 порция", round(total / servings, 1))}
+            "recipe": (recipe[0], "serving", round(total / servings, 1))}
 
 
 def seed_training_nutrition(db, user_ids, athlete_ids, groups, club_ids, today, new_athletes):
@@ -391,7 +393,8 @@ def seed_training_nutrition(db, user_ids, athlete_ids, groups, club_ids, today, 
                             (athlete_id, day.isoformat(), meal, food_id, grams,
                              f"seed-food-{athlete_id}-{day.isoformat()}-{food}", now_isos(day), serving,
                              None if serving is None else 1))
-                if days_ago not in (4, 9):  # two days without a weigh-in
+                # Two days without a weigh-in; the coaching athlete gets one consistent series in seed_coaching.
+                if days_ago not in (4, 9) and account != "athlete6":
                     db.execute("INSERT INTO weights(athlete_id, day, kg) VALUES (?, ?, ?)",
                                (athlete_id, day.isoformat(), round(base + days_ago * .04 + rng.gauss(0, .3), 1)))
     template_id = seed_workout_templates(db, user_ids, exercise_ids, demo_club_id)

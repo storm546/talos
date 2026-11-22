@@ -25,10 +25,6 @@
     <string name="tool_plans">Планове</string>
     <string name="tool_plans_note">Седмичният план от треньора</string>
     <string name="tool_calc_note">Дискове, максимум, загрявка</string>
-    <string name="tool_records">Рекорди</string>
-    <string name="tool_leaderboard">Класиране</string>
-    <string name="tool_soon">Идва в тази бета версия</string>
-    <string name="tool_soon_note">Този инструмент идва със следващото обновяване.</string>
     <string name="tool_nutrition_note">Дневник на храненето и цели</string>
     <string name="tool_recipes_note">Вашите и клубните рецепти</string>
     <string name="tool_weight">Тегло</string>
@@ -150,4 +146,6 @@
     <string name="timer_channel">Активни таймери</string>
     <string name="timer_done_channel">Приключили таймери</string>
     <plurals name="workout_exercises"><item quantity="one">%1$d упражнение</item><item quantity="other">%1$d упражнения</item></plurals>
+    <string name="tool_records_note">Личните Ви най-добри резултати</string>
+    <string name="tool_leaderboard_note">Класиране в клуба, само по желание</string>
 </resources>

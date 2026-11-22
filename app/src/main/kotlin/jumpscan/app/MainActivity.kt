@@ -242,8 +242,8 @@ class MainActivity : Activity() {
         return EditText(this).apply {
             id = View.generateViewId()
             caption.labelFor = id
-            inputType = type
             setSingleLine(true)
+            inputType = type // after setSingleLine, which would otherwise drop password masking
             setText(value)
             instrumentType()
             setTextColor(ink)
@@ -1081,6 +1081,7 @@ class MainActivity : Activity() {
                 catch (error: ApiError) { if (error.status == 401) throw error }
                 catch (error: IOException) { if (error is AppError) throw error }
                 val status = when {
+                    sent[names.first()] == NOTHING_COPIED -> R.string.nutr_nothing_to_copy
                     names.all { sent.containsKey(it) } -> R.string.feature_saved
                     names.any { queue.featurePending(it) } -> R.string.saved_pending
                     else -> R.string.feature_rejected
@@ -1428,8 +1429,10 @@ class MainActivity : Activity() {
             "tools" -> home()
             "workout_pick" -> workoutActive()
             "workout", "workout_start", "workout_summary", "calculators", "interval_timer" -> toolsHub()
+            "records", "leaderboard" -> toolsHub()
             "food_log" -> foods()
             "recipe_edit" -> recipes()
+            "goal_form" -> insights()
             "food_search", "quick_add", "food_form", "barcode_manual", "recipes", "ai_entry", "insights" -> nutritionBack()
             else -> home()
         }

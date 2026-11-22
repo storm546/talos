@@ -116,9 +116,9 @@ def test_servings_barcode_and_food_correction(api, auth):
     assert own_grams["grams"] == 50  # sent grams stay the stored truth
     assert client.post("/api/food-logs", json={**body, "serving_label": "чаша"}, headers=athlete).status_code == 422
     assert client.post("/api/food-logs", json={**body, "quantity": 0}, headers=athlete).status_code == 422
-    # correction: club foods by their staff, own foods by the athlete (scope as for delete)
+    # correction: club foods by their staff, own foods by the athlete (scanner rule: test_nutrition_followups)
     fid = data["id"]
-    assert client.patch(f"/api/foods/{fid}", json={"kcal": 440}, headers=athlete).status_code == 404
+    assert client.patch(f"/api/foods/{fid}", json={"kcal": 440}, headers=athlete).status_code == 403  # visible, not theirs (7.4)
     assert client.patch(f"/api/foods/{fid}", json={"kcal": 440}, headers=auth("coach2")).status_code == 404
     fixed = client.patch(f"/api/foods/{fid}", json={"kcal": 440, "name_bg": " Гранола с мед "}, headers=coach)
     assert fixed.status_code == 200 and fixed.json()["kcal"] == 440 and fixed.json()["name_bg"] == "Гранола с мед"
@@ -356,7 +356,7 @@ def test_recipe_values_logging_scope_and_delete(api, auth):
     assert abs(recipe["per_serving"]["kcal"] - expected) < 0.5 and len(recipe["items"]) == 2
     assert recipe["owner_id"] == user_id(path, "athlete1") and recipe["food_id"]
     log = client.post("/api/food-logs", headers=athlete, json={
-        "day": day(), "meal": "breakfast", "food_id": recipe["food_id"], "serving_label": "1 порция", "quantity": 2})
+        "day": day(), "meal": "breakfast", "food_id": recipe["food_id"], "serving_label": "serving", "quantity": 2})
     assert log.status_code == 201 and log.json()["grams"] == 380 and abs(log.json()["kcal"] - 2 * expected) < 1
     assert recipe["id"] in [r["id"] for r in client.get("/api/recipes", headers=athlete).json()]
     for who in ("athlete2", "coach", "coach2"):

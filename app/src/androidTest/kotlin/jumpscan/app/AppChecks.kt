@@ -55,6 +55,9 @@ class AppChecks : Instrumentation() {
             } else if (only == "toolkit") {
                 targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
                 output.putString("parity", ToolkitStudio(this, requireNotNull(fixtureServer)).screens())
+            } else if (only == "records") {
+                targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
+                RecordsStudio(this).screens(requireNotNull(fixtureServer))
             } else if (only == "capture-parity") output.putString("parity", capture.parity())
             else if (only == "capture-visual") capture.visual()
             else if (only == "cutoff") videoCutoffCheck()
@@ -69,6 +72,7 @@ class AppChecks : Instrumentation() {
                 videoPreviewCheck()
                 videoCutoffCheck()
                 numberChecks()
+                recordChecks()
                 capture.policies()
                 diagnosticChecks()
             }
@@ -192,6 +196,14 @@ class AppChecks : Instrumentation() {
                 "POST /api/set-logs", "PUT /api/me/nutrition/days/$day/complete", "POST /api/food-logs", "POST /api/food-logs",
                 "POST /api/food-logs/copy"))
             check(sent[formName] == 17L && restored.count() == 0)
+            // SPEC 7.4: a copy from an empty day is dropped (not set aside) with a receipt the screen turns into a message.
+            val empty = restored.enqueueFeature(FeatureWrite.COPY, "", JSONObject().put("from_day", "2026-11-01").put("to_day", day),
+                UUID.randomUUID().toString())
+            val emptySent = linkedMapOf<String, Long>()
+            restored.send(emptySent, featureSend = { _, _, _ ->
+                throw ApiError(422, """{"detail":"Nothing to copy from that day","code":"nothing_to_copy"}""")
+            }) { error("Not a jump") }
+            check(emptySent[empty] == NOTHING_COPIED && restored.count() == 0 && restored.rejectedCount() == 0)
         } finally { root.deleteRecursively() }
     }
 
@@ -263,6 +275,12 @@ class AppChecks : Instrumentation() {
             try { checkinBody(scores, minutes, rpe); error("Invalid check-in accepted") }
             catch (e: AppError) { check(e.resource == R.string.checkin_invalid) }
         }
+    }
+
+    private fun recordChecks() {
+        // A 400 ms flight is a 19.6 cm jump (h = g t² / 8), both ways.
+        check(kotlin.math.abs(recordJump(19.6133).getDouble("flight_time_ms") - 400) < .01)
+        check(kotlin.math.abs(heightFromFlight(400.0) - 19.6133) < .001)
     }
 
     private fun numberChecks() {

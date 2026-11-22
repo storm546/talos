@@ -25,10 +25,6 @@
     <string name="tool_plans">Plans</string>
     <string name="tool_plans_note">Your coach\'s weekly plan</string>
     <string name="tool_calc_note">Plates, one-rep max, warm-up</string>
-    <string name="tool_records">Records</string>
-    <string name="tool_leaderboard">Leaderboard</string>
-    <string name="tool_soon">Coming in this beta</string>
-    <string name="tool_soon_note">This tool arrives with the next update.</string>
     <string name="tool_nutrition_note">Food diary and targets</string>
     <string name="tool_recipes_note">Your and the club\'s recipes</string>
     <string name="tool_weight">Weight</string>
@@ -150,4 +146,6 @@
     <string name="timer_channel">Running timers</string>
     <string name="timer_done_channel">Finished timers</string>
     <plurals name="workout_exercises"><item quantity="one">%1$d exercise</item><item quantity="other">%1$d exercises</item></plurals>
+    <string name="tool_records_note">Your personal bests</string>
+    <string name="tool_leaderboard_note">Club ranking, opt-in only</string>
 </resources>

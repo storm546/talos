@@ -125,4 +125,17 @@
     <string name="macro_protein">Protein</string>
     <string name="macro_carbs">Carbs</string>
     <string name="macro_fat">Fat</string>
+    <!-- SPEC 7.4: goal form, recipe portion units, copy from an empty day -->
+    <string name="goal_set">Set a goal</string>
+    <string name="goal_change">Change goal</string>
+    <string name="goal_form_title">Your goal</string>
+    <string name="goal_target_weight">Target weight (kg)</string>
+    <string name="goal_end_date">Goal date: %1$s</string>
+    <string name="goal_save">Save goal</string>
+    <string name="goal_saved">Goal saved.</string>
+    <string name="goal_wrong_direction">To lose weight the target must be below your current trend; to gain, above it.</string>
+    <string name="goal_too_soon">Choose a goal date at least a week ahead.</string>
+    <string name="goal_rejected">The server did not accept this goal. It needs enough logged meals and weigh-ins, and at most 2 kg a week.</string>
+    <string name="recipe_unit_recipe">whole recipe</string>
+    <string name="nutr_nothing_to_copy">Nothing to copy from that day</string>
 </resources>

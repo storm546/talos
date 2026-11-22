@@ -63,6 +63,7 @@ Other server-side items:
 | Swagger UI at `/docs`, ReDoc at `/redoc` | Loaded at runtime from jsDelivr (swagger-ui-dist, Apache-2.0; ReDoc, MIT) and Google Fonts; not bundled | OK |
 | Dashboard fonts (`server/static/dashboard.css`) | `system-ui, -apple-system, "Segoe UI", sans-serif`; no font files bundled | OK |
 | Dashboard icons | Favicon is an inline SVG drawn for the project; overview-card icons are Unicode characters (✓ ◷ ↗ ≋) rendered by the viewer's system font; no icon library | OK |
+| Open Food Facts product data (fetched per barcode, not bundled) | Saved as club foods with `source` "Open Food Facts" and the product URL | ODbL 1.0 (database), DbCL 1.0 (contents) | OK: attribution is stored with each scanned food and shown in the app; the club database is not redistributed. CHECK: if foods are ever exported or shared beyond the club, the ODbL share-alike terms apply to that extract |
 | `server/data/foods.csv` | Subset of about 330 foods from USDA FoodData Central, Foundation Foods (2025-12-18) and SR Legacy (2018-04); header states CC0 1.0. Bulgarian names are the project's own | OK (CC0; USDA asks for, but does not require, citation; the file header already cites it) |
 
 ## 3. Android app and core (Kotlin, shipped in the APK)
@@ -74,6 +75,7 @@ Other server-side items:
 | androidx.activity:activity | 1.9.3 | Apache-2.0 | yes | OK |
 | androidx.camera:camera-core, camera-camera2, camera-lifecycle | 1.4.2 | Apache-2.0 | yes | OK |
 | Transitive libraries of the above (AndroidX, protobuf, Guava and similar) | not enumerated | expected Apache-2.0 / BSD | yes | CHECK: run `./gradlew :app:dependencies --configuration releaseRuntimeClasspath` on the build kit and confirm each |
+| com.google.mlkit:barcode-scanning (bundled, offline model) | 17.3.0 | ML Kit Terms of Service (Google APIs Terms); not an open-source licence | yes | CHECK: proprietary terms, not GPL-compatible in the FSF sense; the model runs on the device and sends no images. Confirm with the organisers that a GPL entry may link it, or replace it (e.g. ZXing, Apache-2.0) |
 | Android Gradle Plugin | 8.7.3 | Apache-2.0 | build only | OK |
 | Gradle wrapper (`gradle/wrapper/gradle-wrapper.jar`, Gradle 8.10.2) | — | Apache-2.0 | committed to the repo, not in the APK | OK |
 | JUnit Jupiter | 5.11.3 | EPL-2.0 | test only, never shipped | OK for this use (EPL-2.0 is not GPL-compatible for combined distribution, but test-only use does not combine it with the product) |

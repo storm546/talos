@@ -134,6 +134,14 @@ private fun MainActivity.recipeEditor(day: String, results: List<JSONObject> = e
     }.setTextColor(getColor(R.color.error))
 }
 
+/** A nutrient's name in the app's language (SPEC 7.4: definitions carry name_bg and name_en). */
+private fun MainActivity.nutrientName(item: JSONObject, names: Map<String, JSONObject>): String {
+    val definition = names[item.optString("key")] ?: JSONObject()
+    return listOf(if (locale.language == "bg") "name_bg" else "name_en", "name_en", "name", "key").firstNotNullOfOrNull { key ->
+        definition.optString(key).takeIf { it.isNotBlank() } ?: item.optString(key).takeIf { it.isNotBlank() && !item.isNull(key) }
+    }.orEmpty()
+}
+
 /** Free-text meal entry: the server proposes matches, nothing is logged until the athlete confirms. */
 internal fun MainActivity.aiEntry(day: String = diaryDay, draft: String = "", proposal: List<JSONObject>? = null, message: String? = null) {
     layout(getString(R.string.ai_entry_title), "ai_entry")
@@ -291,6 +299,7 @@ private fun MainActivity.insightPage(day: String, days: Int, data: Insight, mess
         goal.optString("end_date").takeIf { it.length == 10 }?.let { valueRow(getString(R.string.insight_end_date), localDate(it, locale), page) }
         kg(goal, "rate_kg_week")?.let { valueRow(getString(R.string.insight_rate), "${short(it)} kg", page) }
     }
+    button(getString(if (goal == null) R.string.goal_set else R.string.goal_change)) { goalForm(day, days, data) }
     // Expenditure and the weekly check-in.
     section(R.string.nutr_program).setPadding(0, dp(22), 0, 0)
     text(getString(R.string.nutr_coach_note), 13)
@@ -317,8 +326,9 @@ private fun MainActivity.insightPage(day: String, days: Int, data: Insight, mess
         text(getString(if (data.program!!.optBoolean("applied")) R.string.nutr_applied else R.string.nutr_not_applied), 13)
         button(getString(R.string.insight_checkin)) {
             val api = featureApi()
+            // The program view carries protein and fat only inside its recommendation.
             val body = JSONObject().put("goal", program.optString("goal", "maintain")).put("rate_kg_week", program.optDouble("rate_kg_week", 0.0))
-                .put("protein_g", program.optDouble("protein_g")).put("fat_g", program.optDouble("fat_g"))
+                .put("protein_g", recommendation.optDouble("protein_g", 0.0)).put("fat_g", recommendation.optDouble("fat_g", 0.0))
             work(getString(R.string.feature_saving), { api.send("PUT", "/api/athletes/${athleteId()}/nutrition/program", body) },
                 { insights(day, days, getString(R.string.insight_checked_in)) }, { insights(day, days, it) })
         }
@@ -338,8 +348,7 @@ private fun MainActivity.insightPage(day: String, days: Int, data: Insight, mess
     if (known.isEmpty()) text(getString(R.string.insight_no_micros), 14)
     for (item in known) {
         val definition = names[item.optString("key")] ?: JSONObject()
-        val label = listOf(if (locale.language == "bg") "name_bg" else "name_en", "name_en", "name", "key")
-            .firstNotNullOfOrNull { key -> (definition.optString(key).takeIf { it.isNotBlank() } ?: item.optString(key).takeIf { it.isNotBlank() && !item.isNull(key) }) }.orEmpty()
+        val label = nutrientName(item, names)
         val unit = item.optString("unit", definition.optString("unit"))
         val amount = item.optDouble("amount")
         val reference = item.optDouble("reference", definition.optDouble("reference"))
@@ -349,8 +358,59 @@ private fun MainActivity.insightPage(day: String, days: Int, data: Insight, mess
         if (reference.isFinite() && reference > 0) targetBar(label, "$shown / ${fine(reference)} $unit", if (amount.isFinite()) amount / reference else 0.0, page)
         else valueRow(label, shown, page)
     }
-    if (missing.isNotEmpty()) text(getString(R.string.insight_missing_list, missing.joinToString(", ") { item ->
-        names[item.optString("key")]?.optString("name")?.takeIf { it.isNotBlank() } ?: item.optString("name", item.optString("key")) }), 12)
+    if (missing.isNotEmpty()) text(getString(R.string.insight_missing_list, missing.joinToString(", ") { nutrientName(it, names) }), 12)
     if (known.any { it.optInt("total_entries") > it.optInt("known_entries") }) text(getString(R.string.insight_partial_note), 12)
     button(getString(R.string.nutrition_title)) { nutritionHome(day) }
+}
+
+/** The athlete's own goal (SPEC 7.4): phase, target weight and end date, on the same endpoint and guardrails as the coach. */
+private fun MainActivity.goalForm(day: String, days: Int, data: Insight, message: String? = null) {
+    layout(getString(R.string.goal_form_title), "goal_form")
+    if (message != null) notice(message, caution = true)
+    text(getString(R.string.nutr_coach_note), 14)
+    val goal = data.goal?.optJSONObject("goal")
+    val trend = data.goal?.optDouble("current_trend_kg")?.takeIf { it.isFinite() }
+    var phase = goal?.optString("phase")?.takeIf { it in listOf("maintain", "lose", "gain") } ?: "maintain"
+    var end = goal?.optString("end_date")?.takeIf { it.length == 10 } ?: LocalDate.now().plusWeeks(8).toString()
+    trend?.let { valueRow(getString(R.string.insight_trend_now), "${short(it)} kg", page) }
+    val phases = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL; background = shape(getColor(R.color.hover), 10); setPadding(dp(3), dp(3), dp(3), dp(3)) }
+    page.addView(phases, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+    val target = decimalField(R.string.goal_target_weight, goal?.takeIf { !it.isNull("target_weight_kg") }?.let { number(it, "target_weight_kg") }.orEmpty())
+    val endButton = button(getString(R.string.goal_end_date, localDate(end, locale))) {}
+    endButton.setOnClickListener {
+        val date = LocalDate.parse(end)
+        android.app.DatePickerDialog(this, { _, year, month, dayOfMonth ->
+            end = LocalDate.of(year, month + 1, dayOfMonth).toString(); endButton.text = getString(R.string.goal_end_date, localDate(end, locale))
+        }, date.year, date.monthValue - 1, date.dayOfMonth).show()
+    }
+    fun sync() { target.isEnabled = phase != "maintain"; endButton.isEnabled = phase != "maintain" }
+    for (option in listOf("maintain", "lose", "gain")) phases.addView(RadioButton(this).apply {
+        id = android.view.View.generateViewId(); text = goalName(option); textSize = 13f; segment(); maxLines = 2
+        isChecked = option == phase
+        setOnClickListener { phase = option; sync() }
+    }, RadioGroup.LayoutParams(0, -2, 1f))
+    sync()
+    // Protein and fat stay as agreed: the program's recommendation, else the current target.
+    val recommended = data.program?.optJSONObject("program")?.optJSONObject("recommended_target")
+    val current = data.summary?.optJSONObject("target")
+    fun grams(key: String) = listOfNotNull(recommended, current).firstOrNull { it.has(key) && !it.isNull(key) }?.let { number(it, key) }.orEmpty()
+    val macros = fieldRow(listOf(R.string.macro_protein_short, R.string.macro_fat_short), listOf(grams("protein_g"), grams("fat_g")))
+    button(getString(R.string.goal_save), primary = true) {
+        val body = JSONObject().put("phase", phase)
+        if (phase != "maintain") {
+            val kg = decimal(target.value())
+            if (kg == null || kg !in 20.0..400.0) { target.error = getString(R.string.nutr_invalid_weight); return@button }
+            if (trend != null && (kg < trend) != (phase == "lose")) { target.error = getString(R.string.goal_wrong_direction); return@button }
+            if (LocalDate.parse(end) < LocalDate.now().plusWeeks(1)) { snack(getString(R.string.goal_too_soon)); return@button }
+            body.put("target_weight_kg", kg).put("end_date", end)
+        }
+        val values = macros.map { decimal(it.value()) }
+        values.forEachIndexed { index, value -> if (value == null || value < 0 || value > 500) { macros[index].error = getString(R.string.nutr_invalid_macro); return@button } }
+        body.put("protein_g", values[0]).put("fat_g", values[1])
+        val api = featureApi()
+        work(getString(R.string.feature_saving), {
+            try { api.send("PUT", "/api/athletes/${athleteId()}/nutrition/goal", body) }
+            catch (e: ApiError) { if (e.status == 422) throw AppError(R.string.goal_rejected) else throw e }
+        }, { insights(day, days, getString(R.string.goal_saved)) }, { goalForm(day, days, data, it) })
+    }
 }

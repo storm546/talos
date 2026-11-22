@@ -81,6 +81,16 @@ internal class ToolkitStudio(private val test: Instrumentation, private val serv
         fun click(predicate: (View) -> Boolean) = test.runOnMainSync { views(host.window.decorView).first(predicate).performClick() }
         fun button(label: Int) = click { it is Button && it.text == host.getString(label) }
         try {
+            // Stage fix 5b366e4: a typed password shows as dots.
+            test.runOnMainSync {
+                host.login()
+                val password = views(host.page).filterIsInstance<EditText>().first {
+                    it.inputType and android.text.InputType.TYPE_MASK_VARIATION == android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD }
+                views(host.page).filterIsInstance<EditText>().first().setText("athlete1@demo.test")
+                password.setText("demo1234")
+                check(password.transformationMethod is android.text.method.PasswordTransformationMethod) { "password is not masked" }
+            }
+            shot("login-password", "login")
             test.runOnMainSync { host.toolsHub() }; shot("hub", "tools")
             scroll(1f); shot("hub-groups", "tools")
             // Workout: empty start, two exercises from the picker, three sets each.

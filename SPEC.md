@@ -743,13 +743,32 @@ Built in waves; each wave ships as a beta.
   large countdown, audio and vibration cues, keeps running with the screen off (foreground service); a
   finished timer can be logged as a conditioning session (check-in training minutes).
 
-**Wave 2 — body and recovery**
-- Body measurements (waist, hips, chest, arm, thigh, neck) with trend charts and a body-fat estimate from the
-  U.S. Navy circumference formula; progress photos kept on the phone only (never uploaded), compared side by side.
-- Health Connect import (steps, sleep, resting heart rate, workouts from watches), with per-type permission;
-  only daily summaries are synced.
-- Readiness: a daily score from the check-in, sleep, resting heart rate and the acute:chronic training load
-  ratio, shown as an explanation, never as medical advice.
+**Wave 2 — readiness and load (revised 2026-11-22 from logs/research/bevel-report.md)**
+Every score is JumpScan's own method from published sports science, shows "still learning" until it has
+enough data, explains what shaped it, and is framed as information for athlete and coach, never medical advice.
+- **Personal baselines:** per athlete, rolling 28-day mean and SD (minimum 7 values, else "still learning") of
+  morning resting heart rate, HRV as ln(RMSSD) typed in the check-in (optional new fields), check-in wellbeing
+  and jump height. A value is "below normal" only when it differs from the baseline by more than the smallest
+  worthwhile change (0.5 x SD) and the athlete's typical error (Hopkins 2000; Plews 2013; Buchheit 2014).
+- **Jump readiness check:** a quick morning test of 2-3 countermovement jumps through the normal jump flow
+  (`test_type` "readiness"); the best valid jump is compared with the athlete's readiness baseline
+  (Claudino 2017). Uncertain jumps are excluded and counted.
+- **Readiness:** a daily status (good / normal / take care / still learning) from the baselines above plus
+  sleep, with a list of the factors behind it. `GET /api/athletes/{id}/readiness?days=` (scope as 6.2).
+- **Sleep score:** bedtime and wake time in the check-in (optional) give duration against an age-based need
+  (Hirshkowitz 2015) and night-to-night regularity (Phillips 2017).
+- **Load:** session-RPE load per day (several sessions per day allowed: practice, gym, match, each with type,
+  minutes and RPE; workouts and timers can create one), weekly monotony and strain (Foster 1998, 2001), and the
+  acute:chronic ratio with exponentially weighted averages (Williams 2017), shown with its limits.
+- **Coach team board (dashboard):** one row per athlete with today's check-in, readiness, jump vs baseline,
+  load ratio and a "not checked in" mark; sort and filter by group; a "nudge" button sends a reminder event
+  to athletes who have not checked in (audited, at most once a day per athlete).
+- **Coach morning digest:** the server collects the facts for the coach's club (who is below normal and why,
+  missing check-ins, load spikes); the local LLM only phrases them; with no LLM a plain list is shown.
+- **App:** readiness card on the hub, readiness jump test entry, check-in fields for RHR/HRV/sleep times,
+  sessions list per day, load chart, reminder notifications at the athlete's chosen time.
+- Kept from the first draft for later: body measurements (Navy formula), progress photos on the phone only,
+  Health Connect import.
 
 **Wave 3 — more camera tools from the same pose engine**
 - Range-of-motion check (knee, hip, shoulder angles held still, left vs right).
