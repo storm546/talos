@@ -211,3 +211,12 @@ svg polyline {stroke-linecap:round;stroke-linejoin:round}
 .board-lanes {grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
 .record-lanes .flight-lanes {max-height:none;overflow:visible}
 .club-table td.num small {white-space:normal;min-width:16ch}
+/* Readiness board (SPEC 9 wave 2): teal only for good readiness, amber for take care, each paired with text. */
+.rd-controls {display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin:18px 0}.rd-controls select {width:auto;min-width:170px}
+.rd-status {display:inline-block;font-size:.8rem;font-weight:700;padding:3px 9px;border-radius:99px;border:1px solid var(--line);background:var(--hover);white-space:nowrap}
+.rd-good {color:var(--ok);border-color:currentColor}.rd-take_care {color:var(--warn);background:var(--caution);border-color:var(--caution-line)}
+.rd-still_learning,.rd-no_data {color:var(--muted);border-style:dashed;background:transparent}
+.rd-table td small {display:block;white-space:normal;max-width:30ch}.rd-absent td:first-child {box-shadow:inset 3px 0 var(--warn)}
+.rd-strip i.rd-good {background:#98d7c8}.rd-strip i.rd-take_care {background:#ffd186}.rd-strip i.rd-normal {background:var(--hero-muted)}
+.rd-strip i.rd-still_learning,.rd-strip i.rd-no_data,.rd-strip i.absent {background:transparent;border:1px solid var(--hero-muted)}
+.rd-digest .status-list {margin-bottom:12px}.rd-phrased {white-space:pre-wrap}.rd-note {margin-top:16px;font-size:.85rem}
