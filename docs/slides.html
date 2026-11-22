@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>JumpScan — презентация</title>
-<!-- Defence deck, 12 slides at 16:9; `node docs/build.cjs slides.html` prints one slide per PDF page.
+<!-- Defence deck, 13 slides at 16:9; `node docs/build.cjs slides.html` prints one slide per PDF page.
      Talk plan and timings: scenarii-demo.md. Replace the bracketed fields before the defence. -->
 <style>
 @page { size: 297mm 167.06mm; margin: 0; }
@@ -50,7 +50,7 @@ td.r, th.r { text-align: right; }
 <section class="slide title">
   <p class="kicker" style="color:#cfe6da">Национален есенен турнир „Джон Атанасов“ · Разпределени приложения</p>
   <h1>JumpScan</h1>
-  <p>Числа за приземяването — от един телефон, без лаборатория.</p>
+  <p>Фитнес инструменти за спортиста и треньора с общ клубен сървър. Начело: скок, измерен с един телефон.</p>
   <div class="proof">
     <span class="n">64 / 91</span>
     <div>
@@ -63,67 +63,104 @@ td.r, th.r { text-align: right; }
 
 <section class="slide">
   <p class="kicker">Проблемът</p>
-  <h1>Приземяването се оценява на око</h1>
+  <h1>Скокът се оценява на око, а останалото е разпиляно</h1>
   <div class="cols3" style="margin-top:4mm">
-    <div class="card"><b>Лаборатория</b><p>Оптична система с маркери и силови платформи: точно, но струва десетки хиляди левове и иска специалист.</p></div>
-    <div class="card"><b>Клубът</b><p>Треньорът гледа скока, сравнява го с паметта си и не пази история в числа.</p></div>
-    <div class="card"><b>Видеото</b><p>Заснемането на непълнолетни спортисти и качването му някъде е риск за поверителността.</p></div>
+    <div class="card"><b>Лаборатория</b><p>Маркери и силови платформи: точно, но скъпо и със специалист.</p></div>
+    <div class="card"><b>Клубът</b><p>Треньорът гледа на око; тренировки, хранене и самочувствие са в различни приложения или на хартия.</p></div>
+    <div class="card"><b>Видеото</b><p>Заснемането на непълнолетни и качването му някъде е риск за поверителността.</p></div>
   </div>
-  <p class="note">Въпросът: може ли телефонът, който всеки вече има, да даде числа, които се следят във времето?</p>
+  <p class="note">Въпросът: може ли телефонът, който всеки вече има, да даде числа, които клубът следи във времето?</p>
   <span class="num">2</span>
 </section>
 
 <section class="slide">
-  <p class="kicker">Решението</p>
+  <p class="kicker">Основният инструмент</p>
   <h1>Телефонът смята, сървърът помни, треньорът вижда промяната</h1>
   <div class="cols3" style="margin-top:2mm">
     <div class="card"><b>1 · Заснемете</b><p>Клип от 10 секунди, телефонът на височината на коленете.</p></div>
     <div class="card"><b>2 · Анализирайте</b><p>Позата, ъглите, времето на полет и височината се смятат на самия телефон.</p></div>
-    <div class="card"><b>3 · Изпратете</b><p>Към сървъра отиват измерванията, не видеото. Треньорът вижда историята и графиките.</p></div>
+    <div class="card"><b>3 · Изпратете</b><p>Към сървъра отиват числата, не видеото. Треньорът вижда историята спрямо базовата стойност.</p></div>
   </div>
   <p class="note"><b style="color:#176148">Видеото никога не напуска телефона.</b> Няма поле за видео, снимка или точки от позата.</p>
   <span class="num">3</span>
 </section>
 
 <section class="slide">
-  <p class="kicker">Клубна платформа</p>
-  <h1>Анализът е ядрото на една клубна платформа</h1>
-  <div class="cols3" style="margin-top:2mm">
-    <div class="card"><b>„Сесии“ и „Групи“</b><p>Тестове с 1–5 опита за група или клуб, „Календар (.ics)“ и „Доклад“.</p></div>
-    <div class="card"><b>Самочувствие</b><p>Ежедневно отбелязване с пет оценки и натоварване; треньорът вижда отбора за деня.</p></div>
-    <div class="card"><b>Бележки от треньора</b><p>Бележки от треньора за всеки спортист — за скок или сесия — с отговор в приложението.</p></div>
+  <p class="kicker">Набор инструменти</p>
+  <h1>Около скока: инструменти за всеки ден</h1>
+  <div class="cols" style="grid-template-columns: 1.5fr 1fr">
+    <ul>
+      <li><b>Измерване</b> — скоков тест, техника на живо, интервален таймер</li>
+      <li><b>Тренировка</b> — серии с таймер за почивка, шаблони, калкулатори, планове, рекорди</li>
+      <li><b>Хранене</b> — каталог, баркод, рецепти, адаптивни цели</li>
+      <li><b>Тяло</b> — тегло, ежедневен отчет, готовност</li>
+      <li><b>Клуб</b> — сесии, бележки, класация по желание</li>
+      <li><b>Въпроси</b> — AI помощник с потвърждение</li>
+    </ul>
+    <div class="phone" style="align-self:start; justify-self:center"><img src="img/app-hub.png" alt="Екран Инструменти" style="height:90mm"></div>
   </div>
-  <img class="shot" src="img/dash-wellbeing.png" alt="Самочувствие на отбора в треньорския панел" style="max-height:44mm; margin-top:4mm; align-self:center; object-fit:contain">
-  <p class="note"><b style="color:#176148">Всичко се обновява на живо</b> в панела — нов скок, отбелязване или бележка опресняват отворения изглед без презареждане.</p>
+  <p class="note">Всеки инструмент работи и сам; общи са акаунтът, правата, опашката за офлайн изпращане и потокът от събития.</p>
   <span class="num">4</span>
 </section>
 
 <section class="slide">
-  <p class="kicker">Клубни модули</p>
-  <h1>Хранене, тренировки, техника и AI помощник</h1>
-  <div class="cols" style="grid-template-columns: 1.08fr 1fr; margin-top:2mm">
-    <ul>
-      <li><b>Тренировки</b> — планове, дневник на сериите и предложение за прогресия (не се прилага само).</li>
-      <li><b>Хранене</b> — дневник, тегло с тренд и адаптивен разход; седмична програма с дневни цели.</li>
-      <li><b>Техника</b> — на живо или от запис. Валидирани са броят на клековете и общото време в планк; 18 упражнения са в „Експериментални“.</li>
-      <li><b>AI помощник</b> — предлага, не предписва.</li>
+  <p class="kicker">Тренировка</p>
+  <h1>Залата: серии, почивка, калкулатори, рекорди</h1>
+  <div style="display:flex; gap:9mm; align-items:flex-start; flex:1; min-height:0">
+    <div class="phone"><img src="img/app-workout.png" alt="Тренировка с таймер за почивка" style="height:108mm"></div>
+    <div class="phone"><img src="img/app-records.png" alt="Лични рекорди" style="height:108mm"></div>
+    <ul style="flex:1">
+      <li>Таймерът за почивка тръгва след всяка серия и работи в услуга на преден план</li>
+      <li>Интервали, Табата, EMOM, AMRAP</li>
+      <li>Дискове, максимум (Епли, Бжицки), загрявка</li>
+      <li>Рекордите идват от вече записаните данни</li>
     </ul>
-    <img class="shot" src="img/slide-nutrition.png" alt="Хранене: дневни цели и хранителен дневник" style="max-height:88mm; align-self:start">
   </div>
-  <p class="note">Числата за хранене са за обсъждане с треньора, не са предписание. <b style="color:#176148">AI помощникът</b> работи на собствен модел на клуба, действа с правата на потребителя и всяка промяна се потвърждава.</p>
   <span class="num">5</span>
 </section>
 
 <section class="slide">
-  <p class="kicker">Архитектура</p>
-  <h1>Три части, модули и един договор</h1>
-  <img src="img/arhitektura.svg" alt="Архитектура" style="width:100%; max-height:66mm">
-  <div class="cols3" style="margin-top:3mm">
-    <p><b>Администратор</b> — всички клубове, потребители, дневник</p>
-    <p><b>Треньор</b> — групи, сесии, самочувствие, бележки</p>
-    <p><b>Спортист</b> — скокове, сесии, самочувствие, отговори</p>
+  <p class="kicker">Хранене</p>
+  <h1>Дневник, баркод и адаптивни цели</h1>
+  <div class="cols" style="grid-template-columns: 1.5fr 1fr">
+    <ul>
+      <li>Каталог на USDA с 13 588 храни (CC0), порции, рецепти, микронутриенти</li>
+      <li>Баркод на телефона; сървърът търси в Open Food Facts (ODbL)</li>
+      <li>Описано с думи хранене → предложение от локалния модел → потвърждение</li>
+      <li>Разходът се оценява от собствените записи; цели с минимум 1500 kcal, без дефицит за непълнолетен без треньор</li>
+    </ul>
+    <div class="phone" style="align-self:start; justify-self:center"><img src="img/app-nutrition.png" alt="Хранителен дневник" style="height:90mm"></div>
   </div>
+  <p class="note">Числата са за обсъждане с треньора, не са предписание.</p>
   <span class="num">6</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Готовност и натоварване</p>
+  <h1>Всеки спортист спрямо собствените си 28 дни</h1>
+  <div class="cols" style="grid-template-columns: 1fr 1.25fr">
+    <ul>
+      <li>Пулс в покой, вариабилност на пулса, самочувствие, сутрешен скок, сън</li>
+      <li>„По-различно“ само над 0,5 SD и типичната грешка</li>
+      <li>Натоварване: RPE × минути, монотонност, отношение 7/28</li>
+      <li>„Още се учи“, докато няма 7 стойности</li>
+    </ul>
+    <img class="shot" src="img/dash-board.png" alt="Табло Готовност" style="max-height:80mm; object-fit:cover; object-position:top; justify-self:center">
+  </div>
+  <p class="note">Таблото на треньора: напомняне до спортистите без отчет и сутрешен преглед. Информация, не медицински съвет.</p>
+  <span class="num">7</span>
+</section>
+
+<section class="slide">
+  <p class="kicker">Архитектура</p>
+  <h1>Разпределена система: какво къде работи</h1>
+  <img src="img/arhitektura.svg" alt="Архитектура" style="width:100%; max-height:84mm">
+  <div class="cols3" style="margin-top:2mm">
+    <p style="font-size:14pt"><b>Администратор</b> — всички клубове, потребители, дневник</p>
+    <p style="font-size:14pt"><b>Треньор</b> — само своя клуб</p>
+    <p style="font-size:14pt"><b>Спортист</b> — само своите данни</p>
+  </div>
+  <span class="num">8</span>
 </section>
 
 <section class="slide">
@@ -150,22 +187,22 @@ td.r, th.r { text-align: right; }
       <p class="muted">t = 360 ms → h ≈ 15,9 cm</p>
     </div>
   </div>
-  <span class="num">7</span>
+  <span class="num">9</span>
 </section>
 
 <section class="slide">
   <p class="kicker">Демо</p>
-  <h1>От клипа до треньорския панел</h1>
+  <h1>Един скок: от клипа до треньорския панел</h1>
   <div style="display:flex; gap:10mm; align-items:flex-start; flex:1; min-height:0">
     <div class="phone"><img src="img/app-editor.png" alt="Проверка на кадрите в приложението"></div>
     <img class="shot" src="img/dash-charts.png" alt="Графики в панела" style="max-width:150mm">
   </div>
-  <span class="num">8</span>
+  <span class="num">10</span>
 </section>
 
 <section class="slide">
   <p class="kicker">Точност</p>
-  <h1>Измерено срещу лаборатория, не обещано</h1>
+  <h1>Скокът: измерено срещу лаборатория, не обещано</h1>
   <div class="cols" style="grid-template-columns: 1.35fr 1fr">
     <table>
       <tr><th>Девет души, 91 скока на изглед</th><th class="r">Отпред</th><th class="r">Отстрани</th></tr>
@@ -179,58 +216,46 @@ td.r, th.r { text-align: right; }
       <p>Еталон: силова платформа и лабораторна кинематика, набор на Университета в Твенте (CC BY 4.0).</p>
       <p>Всеки човек е проверен с модел, който не го е виждал. „Грешно“ = отместено с повече от два кадъра.</p>
       <p class="muted">Затова числата са за сравнение на спортиста със самия него, не за диагноза.</p>
+      <p style="font-size:14pt"><b>Техника:</b> клекове — 21 от 22 отделени серии точно (12 души); планк — време в 9 от 9. Другите 18 упражнения: „Експериментални“.</p>
     </div>
   </div>
-  <span class="num">9</span>
+  <span class="num">11</span>
 </section>
 
 <section class="slide">
-  <p class="kicker">Поверителност и сигурност</p>
+  <p class="kicker">Поверителност, сигурност, AI</p>
   <h1>Само числа, и само за който има право</h1>
   <div class="cols">
     <ul>
-      <li>Видеото не се качва; JSON с 14 полета, проверени по тип и граници</li>
-      <li>Непознато поле или стойност извън обхват → отказ 422</li>
-      <li>Пароли със scrypt и сол; токени за 30 дни, пазени хеширани</li>
-      <li>След 5 грешни входа за 15 минути за двойка имейл и адрес → 429; общ лимит: 30 за адрес</li>
+      <li>Видеото не се качва; всяко поле се проверява, непознато → 422</li>
+      <li>Пароли със scrypt и сол; токени, пазени хеширани</li>
+      <li>Чужд клуб → 404; съгласие преди първите данни</li>
+      <li>Дневник на действията; изтегляне и изтриване на собствените данни</li>
     </ul>
     <ul>
-      <li>Правата се проверяват при всяко четене: чужд клуб → 404</li>
-      <li>Записано съгласие преди първия скок</li>
-      <li>Дневник на действията, изтриване на собствените данни, CSV</li>
-      <li>CSP, без вграждане в чужди страници, тяло до 16 KB</li>
+      <li>Събитията на живо носят само вид и номер, без стойности</li>
+      <li>AI помощникът е на локален модел и действа с правата на потребителя</li>
+      <li>Нищо не се записва преди „Потвърдете“; правата се проверяват отново</li>
+      <li>Без свързан модел → 503, всичко друго работи</li>
     </ul>
   </div>
-  <span class="num">10</span>
-</section>
-
-<section class="slide">
-  <p class="kicker">Тестове и качество</p>
-  <h1>Една и съща математика навсякъде</h1>
-  <div class="cols3">
-    <div class="card"><span class="big">506</span><p>преминали сървърни теста (1 пропуснат) · 21.11.2026 г.</p></div>
-    <div class="card"><span class="big">71</span><p>преминали теста на ядрото (1 пропуснат) · отчет от 20.11.2026 г.</p></div>
-    <div class="card"><span class="big">CI</span><p>двата набора се пускат при всяко качване в Git</p></div>
-  </div>
-  <p class="note">Числата във валидацията са получени от същия анализатор, който работи на телефона.</p>
-  <span class="num">11</span>
+  <span class="num">12</span>
 </section>
 
 <section class="slide">
   <p class="kicker">Резултат и развитие</p>
   <h1>Работи от край до край днес</h1>
-  <div class="cols">
-    <div>
-      <h2>Готово</h2>
-      <ul><li>Анализ на телефона, без видео навън</li><li>Групи, сесии с доклад и календар, самочувствие, бележки</li><li>Валидация срещу лаборатория на девет души</li><li>Ръчна проверка на кадрите, кадър по кадър</li><li>Обучена мрежа, която потвърждава или предлага кадрите</li><li>Български и английски</li></ul>
-    </div>
-    <div>
-      <h2>Следва</h2>
-      <ul><li>По-точен страничен изглед</li><li>Измерване на реален телефон</li><li>Сървърен модел за страничния изглед, като избор</li></ul>
-    </div>
+  <div class="cols3">
+    <div class="card"><span class="big">600</span><p>сървърни теста (1 пропуснат) · 23.11.2026 г.</p></div>
+    <div class="card"><span class="big">82</span><p>теста на ядрото (1 пропуснат) · 22.11.2026 г.</p></div>
+    <div class="card"><span class="big">CI</span><p>двата набора при всяко качване в Git</p></div>
+  </div>
+  <div class="cols" style="margin-top:5mm">
+    <div><h2>Не е измерено</h2><p style="font-size:15pt">Скорост и батерия на реален телефон, работа с изключен екран, истински клуб.</p></div>
+    <div><h2>Следва</h2><p style="font-size:15pt">Още инструменти с камерата (обхват на движение, баланс, спринт) — в разработка.</p></div>
   </div>
   <p class="note">jumpscan.stormlabs.cloud · код: [АДРЕС НА ХРАНИЛИЩЕТО] · GPL-3.0</p>
-  <span class="num">12</span>
+  <span class="num">13</span>
 </section>
 
 </body>
