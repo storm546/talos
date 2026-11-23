@@ -373,10 +373,10 @@ function relevant(event, view) {
   if (view === 'sessions' || view === 'sessionsMine') return event.type === 'session' || event.type === 'jump';
   if (view === 'leaderboard') return ['record','jump'].includes(event.type);
   if (view === 'board') return ['checkin','jump','training_session'].includes(event.type);
-  if (view === 'training' || view === 'nutrition' || view === 'form' || view === 'records') {
+  if (view === 'training' || view === 'nutrition' || view === 'form' || view === 'records' || view === 'fieldtests') {
     const target = athleteTarget(); if (!target) return false;
     const map = {training:['set','workout','jump','checkin'], nutrition:['food','weight','coaching','nutrition_day','checkin'], form:['form'],
-                 records:['record','jump','set','form']};
+                 records:['record','jump','set','form','measurement'], fieldtests:['measurement']};
     return map[view].includes(event.type) && String(event.athlete_id) === String(target.id);
   }
   return false;
@@ -486,6 +486,7 @@ async function load(view=state.view) {
   }
   if (view === 'records' || view === 'leaderboard') data = await recordsData(view);
   if (view === 'board') data = await boardData();
+  if (view === 'fieldtests') data = await fieldtestsData();
   if (version !== loadVersion || !state.user) return;
   Object.assign(state, data, {view}); message(''); render('h1');
 }
@@ -1227,7 +1228,7 @@ function athleteSubnav(content, current) {
   const own = state.user.role === 'athlete';
   const nav = node('nav', null, 'subnav'); nav.setAttribute('aria-label', t('sectionLinks'));
   for (const [v, key] of [...(own ? [['today','today']] : []), ['history', own ? 'ownHistory' : 'history'], ['training', 'training'],
-                          ['nutrition', 'nutrition'], ['form', 'formView'], ['records', 'recTitle']]) {
+                          ['nutrition', 'nutrition'], ['form', 'formView'], ['records', 'recTitle'], ['fieldtests', 'ftTitle']]) {
     const b = button(key, () => load(v)); if (current === v) b.setAttribute('aria-current', 'page'); nav.append(b);
   }
   content.append(nav);
@@ -1813,7 +1814,7 @@ function render(focusSelector=null) {
   const views=own?[['today','overview','index'],['sessionsMine','mySessions','club'],['checkins','myCheckins','checkin'],['leaderboard','recBoard','history']]:[
     ['team','team','index'],['board','rdBoard','checkin'],['plans','plans','training'],['groups','groups','home'],['sessions','sessions','club'],['wellbeing','wellbeingView','checkin'],['leaderboard','recBoard','history'],
     ['users','users','profile'],...(state.user.role==='admin'?[['clubs','clubs','club'],['audit','audit','more']]:[])];
-  const athleteTab = ['history','training','nutrition','form','records'].includes(state.view);
+  const athleteTab = ['history','training','nutrition','form','records','fieldtests'].includes(state.view);
   for (const [view,key,icon] of views) {
     const control = button(key, () => load(view));
     const glyph = node('span', null, 'nav-glyph icon-' + icon); glyph.setAttribute('aria-hidden', 'true'); control.prepend(glyph);
@@ -1826,7 +1827,7 @@ function render(focusSelector=null) {
   if (content.dataset.previousView !== state.view) view.classList.add('enter');
   content.dataset.previousView = state.view;
   content.append(view);
-  ({today,team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans,records,leaderboard,board})[state.view](view);
+  ({today,team,history,users,clubs,audit,groups,sessions,sessionsMine,wellbeing,checkins,training,nutrition,form,plans,records,leaderboard,board,fieldtests})[state.view](view);
   setLive(state.live);
   renderAssistant();
   if(focusSelector)content.querySelector(focusSelector)?.focus();

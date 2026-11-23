@@ -220,3 +220,10 @@ svg polyline {stroke-linecap:round;stroke-linejoin:round}
 .rd-strip i.rd-good {background:#98d7c8}.rd-strip i.rd-take_care {background:#ffd186}.rd-strip i.rd-normal {background:var(--hero-muted)}
 .rd-strip i.rd-still_learning,.rd-strip i.rd-no_data,.rd-strip i.absent {background:transparent;border:1px solid var(--hero-muted)}
 .rd-digest .status-list {margin-bottom:12px}.rd-phrased {white-space:pre-wrap}.rd-note {margin-top:16px;font-size:.85rem}
+/* Field tests (SPEC 9.3): left/right range of motion as bars from a shared centre. */
+.ft-mirror {display:block;width:180px;height:14px;margin-top:4px}
+.ft-mirror .ft-axis {stroke:var(--line);stroke-width:1}
+.ft-mirror .ft-left {fill:var(--accent)}
+.ft-mirror .ft-right {fill:var(--right)}
+.ft-table td {white-space:nowrap}
+.ft-table td:first-child {white-space:normal;min-width:150px}

@@ -809,7 +809,7 @@ below are uploaded. Same rules as 6.1/6.2: athlete writes need recorded consent,
   reaction time is the first whole-frame activity of at least 0.03 after the cue minus the cue time; activity
   before the cue is a false start and is not saved; above 1500 ms is not saved.
 - `GpsTrack`: fixes with horizontal accuracy above 25 m are dropped; a fix closer than 5 m to the last accepted
-  fix is held back (standing still); a step implying more than 12 m/s is dropped. Distance is the haversine sum
+  fix is held back (standing still); a step implying more than 12 m/s (25 m/s when cycling) is dropped. Distance is the haversine sum
   (R = 6 371 000 m) of accepted steps. Splits are the times at which the distance passes each whole kilometre,
   linearly interpolated within the step; each split is that kilometre's time in seconds. Average pace is
   duration divided by kilometres (null below 10 m).
