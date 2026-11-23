@@ -71,7 +71,7 @@
     <string name="ft_diff_within">Left–right difference %1$s: within the measuring error</string>
     <string name="ft_diff_outside">Left–right difference %1$s: larger than the measuring error</string>
     <string name="ft_one_side">Only one side was held still; repeat to compare left and right.</string>
-    <string name="ft_balance_leg">Standing on the %1$s leg</string>
+    <string name="ft_balance_leg">Stance leg: %1$s</string>
     <string name="ft_ended_by">Ended by: %1$s</string>
     <string name="ft_end_touch">foot touched down</string>
     <string name="ft_end_sway">too much sway</string>

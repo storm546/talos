@@ -140,6 +140,7 @@ class CameraToolActivity : ComponentActivity() {
         else -> getString(R.string.ft_reaction)
     }
 
+    private fun clock(seconds: Double, digits: Int) = String.format(resources.configuration.locales[0], "%.${digits}f", seconds)
     private fun Double.format() = if (this % 1.0 == 0.0) toInt().toString() else String.format(resources.configuration.locales[0], "%.1f", this)
 
     private fun label(value: String, size: Int, color: Int) = TextView(this).apply {
@@ -209,7 +210,7 @@ class CameraToolActivity : ComponentActivity() {
     }
 
     private fun idleText() {
-        readout.text = when (mode) { "rom" -> "—°"; "balance" -> "0.0"; else -> "0.00" }
+        readout.text = when (mode) { "rom" -> "—°"; "balance" -> clock(0.0, 1); else -> clock(0.0, 2) }
         detail.text = getString(when (mode) {
             "rom" -> if (joint.view == JumpAnalyzer.View.SIDE) R.string.ft_rom_live_side else R.string.ft_rom_live_front
             "balance" -> R.string.ft_balance_live
@@ -382,8 +383,8 @@ class CameraToolActivity : ComponentActivity() {
         val result = tracking.feed(frame)
         val start = tracking.startMs
         if (result != null) return finishBalance(result)
-        if (start == null) { say(R.string.ft_lift_foot); readout.text = "0.0"; return }
-        readout.text = "%.1f".format((frame.tMs - start) / 1000.0)
+        if (start == null) { say(R.string.ft_lift_foot); readout.text = clock(0.0, 1); return }
+        readout.text = clock((frame.tMs - start) / 1000.0, 1)
         say(R.string.ft_balance_timing, good = true)
     }
 
@@ -512,7 +513,7 @@ class CameraToolActivity : ComponentActivity() {
 
     private fun tickClock() {
         if (!active || pose) return
-        if (runStarted > 0) readout.text = "%.2f".format((SystemClock.elapsedRealtime() - runStarted) / 1000.0)
+        if (runStarted > 0) readout.text = clock((SystemClock.elapsedRealtime() - runStarted) / 1000.0, 2)
         if (runStarted > 0 && SystemClock.elapsedRealtime() - runStarted > 120_000) return abortTiming(R.string.ft_too_slow)
         readout.postDelayed(::tickClock, 50)
     }

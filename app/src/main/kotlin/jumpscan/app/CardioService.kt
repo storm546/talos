@@ -169,7 +169,7 @@ internal fun MainActivity.cardioHome() {
         prefs.edit().putString("activity", ACTIVITIES[it]).apply(); cardioHome()
     }
     val panel = card(hero = true)
-    panel.addView(Measurement(this).apply { text = "0.00"; textSize = 56f; setTextColor(getColor(R.color.signal)); instrumentType(numeric = true) })
+    panel.addView(Measurement(this).apply { text = String.format(resources.configuration.locales[0], "%.2f", 0.0); textSize = 56f; setTextColor(getColor(R.color.signal)); instrumentType(numeric = true) })
     text(getString(R.string.ft_cardio_setup), 14, getColor(R.color.on_hero), panel)
     notice(getString(R.string.ft_cardio_limits))
     button(getString(R.string.ft_cardio_start), primary = true) {
