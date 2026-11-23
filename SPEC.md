@@ -953,3 +953,27 @@ jumps) and opens the Android share sheet. The image is never uploaded.
 **Done when:** core and server tests pass (server under the memory cap); the app builds on the kit; AppChecks cover
 the week screen, the adjustment flow, the share intent and the card renderer; screenshots dark/light x bg/en of
 Today with the week card, the week screen, the adjustment sheet and a rendered share card; dashboard check passes.
+
+### 10.4 Wave 6: accuracy and robustness (added 2026-11-23)
+
+Source: `logs/research/algorithms-review.md` (sections 2c-7c, 9, 10). Every change below either fixes a defect or
+passes the experiment and pass bar written in that report before it ships; an experiment that fails is reported and
+its change is not shipped. Validated results (squat counts, plank hold, front flight time) must not get worse.
+
+**6A server.** Records: a new best must beat the previous best by more than the measurement's smallest detectable
+change (from the repeatability numbers when available, else the documented typical error), and jumps are compared only
+within the same view and frame-rate class; side-view jumps without other warnings count again. Readiness: HRV
+(ln RMSSD) and resting heart rate use a rolling 7-day mean against the 28-day baseline; acute (7 d) and chronic
+(28 d) load are shown separately and the acute:chronic ratio is secondary information with its known limits.
+Assistant: temperature 0.2, a fallback chain of models from `JUMPSCAN_LLM_FALLBACK` (comma-separated
+`url|model|keyfile` entries, tried in order on timeout, 429 or 5xx), tool subsets chosen by a simple intent router for
+food, training, check-in and reading questions (all tools when unsure), and SPEC 6.4 aligned with six tool rounds.
+Food search: Bulgarian names for the most common catalogue foods and a typo-tolerant fallback (trigram similarity).
+Expenditure: an uncertainty band from the weight trend's own error. Documents: the assistant is described as an
+OpenAI-compatible model (local or cloud), and outdated figures in `docs/validacia.md`/ROADMAP are corrected.
+
+**6B core, app and kit.** Slow-motion guard: the app reads the clip's capture frame rate and refuses a clip whose
+capture rate differs from its timestamp rate by more than 3%, with a clear message (no rescaling until an A54 test
+proves the rule). Field tests: the reaction/sprint cue time is the moment the tone actually plays (AudioTrack
+timestamp), line crossings are interpolated between frames, and balance reports sway velocity above a measured noise
+floor. Kit experiments 1-7 of the report run with their pass bars; results go to `logs/wave6/`.
