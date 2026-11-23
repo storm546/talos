@@ -123,6 +123,7 @@ object Balance {
     const val SWAY_LIMIT = 0.25      // hip midpoint excursion that ends the stance, fraction of leg length
     const val LOST_MS = 300L
     const val LIMIT_MS = 60_000L
+    const val STANCE_KNEE_MAX = 30.0 // the stance starts only on a nearly straight standing leg (a squat shortens the leg)
 
     data class Result(val leg: String, val stanceMs: Long, val swayPct: Double?, val endedBy: String, val fps: Double, val quality: Double) {
         fun toJson() = fieldJson(listOf("kind" to "balance", "leg" to leg, "stance_ms" to stanceMs, "sway_pct" to swayPct,
@@ -163,7 +164,8 @@ object Balance {
                 val raised = if (p[27].y < p[28].y) 0 else 1
                 val length = leg(1 - raised)
                 lift = if (length > 1e-6) abs(p[27].y - p[28].y) / length else 0.0
-                if (lift <= LIFT) { liftSince = null; return null }
+                val knee = RangeOfMotion.angle(frame, aspect, RangeOfMotion.Joint.KNEE_FLEXION, 1 - raised)
+                if (lift <= LIFT || knee == null || knee > STANCE_KNEE_MAX) { liftSince = null; return null }
                 if (liftSince == null || raised != liftedSide) { liftSince = frame.tMs; liftedSide = raised }
                 if (frame.tMs - liftSince!! < LIFT_MS) return null
                 startMs = liftSince

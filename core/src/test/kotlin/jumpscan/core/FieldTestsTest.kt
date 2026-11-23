@@ -83,7 +83,8 @@ class FieldTestsTest {
 
     /** Front view at 25 fps; leg length 0.4 (hip y 0.5, ankle y 0.9). */
     private fun stance(t: Long, leftLift: Double, hipShift: Double = 0.0, hidden: Boolean = false) = pose(mapOf(
-        23 to (0.45 + hipShift to 0.5), 24 to (0.55 + hipShift to 0.5), 27 to (0.45 to 0.9 - leftLift), 28 to (0.55 to 0.9)),
+        23 to (0.45 + hipShift to 0.5), 24 to (0.55 + hipShift to 0.5), 25 to (0.45 to 0.7 - leftLift), 26 to (0.55 to 0.7),
+        27 to (0.45 to 0.9 - leftLift), 28 to (0.55 to 0.9)),
         if (hidden) setOf(23, 24, 27, 28) else emptySet(), t)
 
     private fun run(frames: List<Frame>, stop: Boolean = false): Balance.Result? {
@@ -121,6 +122,10 @@ class FieldTestsTest {
         assertEquals("stopped", stopped.endedBy); assertEquals(2400 - 440L, stopped.stanceMs)
         // A lift shorter than 300 ms never starts the clock.
         assertNull(run((0..60).map { i -> val t = i * 40L; stance(t, if (t in 440..680) 0.1 else 0.0) }, stop = true))
+        // A bent standing knee (a squat) never starts the clock, even with one ankle higher.
+        assertNull(run((0..60).map { i -> val t = i * 40L
+            pose(mapOf(23 to (0.45 to 0.6), 24 to (0.55 to 0.6), 25 to (0.4 to 0.75), 26 to (0.65 to 0.75),
+                27 to (0.45 to 0.8), 28 to (0.55 to 0.9)), t = t) }, stop = true))
         // Raised less than 8% of leg length (0.03 / 0.4 = 7.5%) is not a single-leg stance.
         assertNull(run((0..60).map { i -> stance(i * 40L, 0.03) }, stop = true))
     }
@@ -176,5 +181,19 @@ class FieldTestsTest {
         assertEquals(6.0, recorder.distanceM, 1e-6)
         assertNull(recorder.summary(10_000).paceSPerKm) // under 10 m
         assertTrue(GpsTrack.Recorder("cycle", 0).run { add(GpsTrack.Fix(0, 0.0, 0.0, 5f)); add(GpsTrack.Fix(1_000, 20 * step, 0.0, 5f)) })
+    }
+
+    /** Replay of a real Pose Landmarker Lite clip (front view, wide squats, both shoes planted; see test resources README). */
+    @Test
+    fun replayOfARealTwoFootedClipStartsNoStanceAndRefusesSideViewAngles() {
+        val (aspect, frames) = java.util.zip.GZIPInputStream(checkNotNull(javaClass.getResourceAsStream("/squat_jumps_one_person.csv.gz")))
+            .bufferedReader().use(::readLandmarkCsv)
+        val tracker = Balance.Tracker(aspect)
+        frames.forEach { tracker.feed(it) }
+        assertNull(tracker.stop()) // both feet stay on the floor: no single-leg stance is timed
+        assertEquals(listOf("wrong_view"), RangeOfMotion.analyze(frames, aspect, RangeOfMotion.Joint.KNEE_FLEXION).warnings)
+        val shoulders = RangeOfMotion.analyze(frames, aspect, RangeOfMotion.Joint.SHOULDER_ABDUCTION)
+        println("replay shoulder abduction: left=${shoulders.leftDeg} right=${shoulders.rightDeg} quality=${shoulders.quality} ${shoulders.warnings}")
+        assertEquals("front", shoulders.view)
     }
 }

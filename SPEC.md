@@ -794,7 +794,8 @@ below are uploaded. Same rules as 6.1/6.2: athlete writes need recorded consent,
   shoulder angles have no reference measurement; they report the same 10 degrees and the warning `not_validated`.
   A left/right difference smaller than the error is shown as "within the measuring error".
 - `Balance`: front view, standing on one leg. The lifted foot is the ankle higher than the other by more than
-  8% of the stance leg length (hip to ankle, image plane, aspect-corrected); the stance starts after 300 ms of
+  8% of the stance leg length (hip to ankle, image plane, aspect-corrected) while the stance knee is bent
+  less than 30 degrees (a squat shortens the leg and must not start a stance); the stance starts after 300 ms of
   that and ends at the first frame of a 200 ms run below 4% (`touch_down`), when the hip midpoint moves more than
   25% of leg length from its position over the first 500 ms (`sway`), after 300 ms without the hips and ankles
   visible (`lost_tracking`), at 60 s (`time_limit`) or when stopped (`stopped`). Stance time is end minus start
