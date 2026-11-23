@@ -15,10 +15,10 @@ import java.time.format.DateTimeFormatter
 // Today: the home screen (SPEC 10.2). One request to /api/me/today fills every card; the last good answer is cached
 // on the phone with its time, so the screen works signed out and offline. Card order and hidden cards stay on the phone.
 
-internal val TODAY_CARDS = listOf("readiness", "plan", "checkin", "nutrition", "training", "weight", "records",
+internal val TODAY_CARDS = listOf("readiness", "plan", "checkin", "week", "nutrition", "training", "weight", "records",
     "next_session", "messages", "jump")
 /** Server events that change a Today card; the whole aggregate is reloaded and only changed cards are redrawn. */
-internal val TODAY_EVENTS = setOf("checkin", "jump", "form", "comment", "record", "measurement")
+internal val TODAY_EVENTS = setOf("checkin", "jump", "form", "comment", "record", "measurement", "adjustment")
 
 private fun Context.todayPrefs() = getSharedPreferences("today", Context.MODE_PRIVATE)
 
@@ -127,6 +127,8 @@ internal fun MainActivity.refreshToday() {
 private fun sectionOf(key: String, data: JSONObject?): String? = when (key) {
     "jump" -> ""
     "messages" -> data?.opt("unread")?.toString()
+    // The flag changes the readiness and plan cards too.
+    "readiness", "plan" -> data?.opt(key)?.toString() + data?.opt("adjustment")
     else -> data?.opt(key)?.toString()
 }
 
@@ -159,6 +161,7 @@ private fun cardTitle(key: String) = when (key) {
     "records" -> R.string.today_records
     "next_session" -> R.string.today_next_session
     "messages" -> R.string.today_messages
+    "week" -> R.string.week_title
     else -> R.string.tool_jump
 }
 
@@ -167,7 +170,7 @@ private fun cardIcon(key: String) = when (key) {
     "plan", "training" -> "training"
     "checkin" -> "checkin"
     "nutrition" -> "food"
-    "weight", "records" -> "insights"
+    "weight", "records", "week" -> "insights"
     "next_session" -> "club"
     else -> "assistant"
 }
@@ -182,6 +185,7 @@ private fun MainActivity.openCard(key: String) = when (key) {
     "records" -> records()
     "next_session" -> clubHome()
     "messages" -> feedback()
+    "week" -> weekScreen()
     else -> jumpHome()
 }
 
@@ -237,7 +241,7 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
                 else -> R.string.rd_summary_normal
             }))
             val strip = row(panel)
-            readiness.getJSONArray("factors").objects().filter { !it.isNull("value") }.take(4).forEach { factor ->
+            readiness.getJSONArray("factors").objects().filter { !it.isNull("value") && it.getString("key") != "adjustment" }.take(4).forEach { factor ->
                 val (fill, ink) = when (factor.getString("state")) {
                     "worse" -> R.color.notice to R.color.warning; "better" -> R.color.ready_surface to R.color.ready
                     else -> R.color.segment_selected to R.color.on_hero
@@ -247,11 +251,19 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
                     (layoutParams as LinearLayout.LayoutParams).apply { marginStart = 0; marginEnd = dp(6); topMargin = dp(8) }
                 }
             }
+            val flag = data?.optJSONObject("adjustment")
+            if (flag != null) line(getString(R.string.adj_flag, adjustLabel(flag.getString("reason")).lowercase(locale),
+                adjustLabel(flag.getString("mode")).lowercase(locale)), 14, Color.WHITE)
+            actions((if (flag == null) R.string.adj_question else R.string.adj_change) to { adjustmentSheet(flag) })
         } ?: line(getString(R.string.today_no_data))
         "plan" -> {
             val plan = section as? JSONObject
             val items = plan?.getJSONArray("items")?.objects().orEmpty()
-            if (items.isEmpty()) line(getString(R.string.today_plan_empty))
+            when (plan?.optString("adjusted")) {
+                "rest" -> { text(getString(R.string.adj_rest_day), 18, ink, panel).instrumentType(display = true); line(getString(R.string.adj_rest_note)) }
+                "lighter" -> chip(getString(R.string.adj_lighter_note), panel)
+                else -> if (items.isEmpty()) line(getString(R.string.today_plan_empty))
+            }
             items.take(4).forEach { item ->
                 val reps = item.getInt("reps").let { low -> item.optInt("reps_max", low).let { if (it > low) "$low–$it" else "$low" } }
                 val load = if (item.isNull("load_kg")) "" else " · " + getString(R.string.feature_kg, short(item.getDouble("load_kg")))
@@ -317,6 +329,7 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
             val found = (section as? org.json.JSONArray)?.objects().orEmpty()
             if (found.isEmpty()) line(getString(R.string.today_records_empty))
             found.take(3).forEach { record -> valueRow(recordLabel(record), recordValue(record), panel) }
+            found.firstOrNull()?.let { newest -> shareButton(newest, row(panel)) }
         }
         "next_session" -> {
             val session = section as? JSONObject
@@ -325,6 +338,7 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
                 line(localDateTime(session.getString("starts_at"), locale) + (session.optString("place").takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""))
             }
         }
+        "week" -> consistencyRows((section as? JSONObject)?.optJSONObject("consistency"), panel)
         "messages" -> {
             val unread = (section as? Number)?.toInt() ?: 0
             if (unread == 0) line(getString(R.string.today_messages_none)) else {
@@ -336,7 +350,7 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
     return panel
 }
 
-private fun MainActivity.recordLabel(record: JSONObject): String = when (record.getString("measure")) {
+internal fun MainActivity.recordLabel(record: JSONObject): String = when (record.getString("measure")) {
     "jump_height" -> getString(R.string.records_height)
     "flight_time" -> getString(R.string.records_flight)
     "balance_stance" -> getString(R.string.ft_balance)

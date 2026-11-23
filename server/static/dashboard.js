@@ -383,12 +383,12 @@ function relevant(event, view) {
     return false;
   }
   if (view === 'team') return ['checkin','jump','session'].includes(event.type);
-  if (view === 'today') return ['checkin','jump','form','comment','record','measurement','food','coaching','nutrition_day','set','weight','workout','training_session'].includes(event.type) &&
+  if (view === 'today') return ['checkin','jump','form','comment','record','measurement','food','coaching','nutrition_day','set','weight','workout','training_session','adjustment'].includes(event.type) &&
     String(event.athlete_id) === String(state.user.id);
   if (view === 'wellbeing') return event.type === 'checkin';
   if (view === 'sessions' || view === 'sessionsMine') return event.type === 'session' || event.type === 'jump';
   if (view === 'leaderboard') return ['record','jump'].includes(event.type);
-  if (view === 'board') return ['checkin','jump','training_session'].includes(event.type);
+  if (view === 'board') return ['checkin','jump','training_session','adjustment'].includes(event.type);
   if (view === 'training' || view === 'nutrition' || view === 'form' || view === 'records' || view === 'fieldtests') {
     const target = athleteTarget(); if (!target) return false;
     const map = {training:['set','workout','jump','checkin'], nutrition:['food','weight','coaching','nutrition_day','checkin'], form:['form'],
@@ -401,7 +401,7 @@ function signedOut() {
   state.liveGeneration++;
   liveController?.abort();
   Object.assign(state, {todayCheckins:[], teamFlights:[], lastSession:null, lastReport:null, formCatalogue:[]});
-  Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],todayData:null,live:'idle',training:null,setLogs:[],workouts:[],exercises:[],plansData:[],nutritionDay:null,nutSummary:null,weightsData:null,expenditure:null,program:null,nutTarget:null,foodLogs:[],foods:[],formSets:[],planEdit:null,assistant:{open:false,conversationId:null,reply:null,proposal:null,note:null,error:null}});
+  Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],todayData:null,weekData:null,week:null,live:'idle',training:null,setLogs:[],workouts:[],exercises:[],plansData:[],nutritionDay:null,nutSummary:null,weightsData:null,expenditure:null,program:null,nutTarget:null,foodLogs:[],foods:[],formSets:[],planEdit:null,assistant:{open:false,conversationId:null,reply:null,proposal:null,note:null,error:null}});
   setLive('idle');
   render();
 }
@@ -428,7 +428,8 @@ async function load(view=state.view) {
     const [summary, jumps, todayData] = await Promise.all([
       api('/api/athletes/' + id + '/summary'), api('/api/jumps?athlete_id=' + id + '&limit=1'),
       api('/api/me/today?day=' + day)]);
-    data = {summary, jumps, todayData};
+    const weekData = await api('/api/me/week?language=' + state.language + (state.week ? '&week=' + state.week : '')).catch(() => null);
+    data = {summary, jumps, todayData, weekData};
   }
   if (view === 'history') {
     const id = state.user.role === 'athlete' ? state.user.id : state.selected.id;
@@ -582,12 +583,15 @@ function today(content) {
   const readiness = overviewCard(t('rdBoard'), r ? t('rd_' + r.status) : null, r ? t('tdReadiness_' + r.status) : t('tdNoData'), 'checkin', 'card-subject');
   readiness.classList.add('today-hero');
   for (const f of (r?.factors || []).filter(f => f.value != null).slice(0, 4)) {
+    if (f.key === 'adjustment') { readiness.append(line(t('rd_adjustment'), t('adj_' + f.value) + ' · ' + t('adjMode_' + f.mode))); continue; }
     const state_ = {better:'rdBetter', worse:'rdWorse'}[f.state];
     readiness.append(line(t('rd_' + f.key), (f.key === 'hrv' ? formatNumber(Math.exp(f.value)) + ' ms' : formatNumber(f.value) +
       ({points:'', bpm:state.language==='bg'?' уд/мин':' bpm', cm:state.language==='bg'?' см':' cm', score:''}[f.unit] ?? '')) + (state_ ? ' · ' + t(state_).replace(/: $/, '') : '')));
   }
   const p = data.plan;
-  const plan = overviewCard(t('todayPlan'), p?.items.length ? p.items[0].plan : null, p?.items.length ? '' : t('todayRest'), 'history', 'card-subject');
+  const plan = overviewCard(t('todayPlan'), p?.adjusted === 'rest' ? t('adjRestDay') : p?.items.length ? p.items[0].plan : null,
+    p?.adjusted === 'rest' ? t('adjRestNote') : p?.items.length ? '' : t('todayRest'), 'history', 'card-subject');
+  if (p?.adjusted === 'lighter') plan.append(node('span', t('adjLighterBadge'), 'badge'));
   for (const item of p?.items || []) plan.append(node('p', item.exercise + ' · ' + item.sets + ' × ' + item.reps +
     (item.reps_max > item.reps ? '–' + item.reps_max : '') + (item.load_kg == null ? '' : ' · ' + format(item.load_kg) + ' ' + t('recKg')), 'muted'));
   if (p?.more) plan.append(empty('+' + p.more));
@@ -637,6 +641,7 @@ function today(content) {
   }
   grid.append(readiness, plan, checkin, food, training, weight, records, session, messages, jumpCard);
   content.append(grid);
+  weekSection(content);
 }
 function field(form, key, name, type='text', value='') {
   const label = node('label',t(key)); const input = node('input'); input.name=name; input.type=type; input.required=true; input.value=value;

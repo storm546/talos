@@ -101,6 +101,7 @@ class MainActivity : Activity() {
         scheduleReminder(this)
         openNotification(intent)
         openDeepLink(intent)
+        openSharedText(intent)
     }
 
     override fun onResume() {
@@ -150,8 +151,18 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (!openDeepLink(intent)) openVideo(intent)
+        if (!openSharedText(intent) && !openDeepLink(intent)) openVideo(intent)
         openNotification(intent)
+    }
+
+    /** Text shared from another app becomes a draft in the assistant; nothing is sent until the user taps Send. */
+    private fun openSharedText(intent: Intent): Boolean {
+        if (intent.action != Intent.ACTION_SEND || intent.type?.startsWith("text/") != true) return false
+        val shared = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()?.take(4000).orEmpty()
+        intent.action = null
+        if (token().isEmpty()) login(getString(R.string.share_signed_out))
+        else assistantScreen(getString(R.string.share_draft_note), draft = shared)
+        return true
     }
 
     @Suppress("DEPRECATION")

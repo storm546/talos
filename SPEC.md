@@ -954,6 +954,22 @@ jumps) and opens the Android share sheet. The image is never uploaded.
 the week screen, the adjustment flow, the share intent and the card renderer; screenshots dark/light x bg/en of
 Today with the week card, the week screen, the adjustment sheet and a rendered share card; dashboard check passes.
 
+**Contract details settled while building (2026-11-23).**
+- Consistency per habit is `{score, percent, done, days}`: `done` of the last `days` days (14, fewer while the history
+  is shorter), or `null` before the first day with a check-in, set, workout or training session (history capped at
+  365 days). Training frequency is the number of distinct planned weekdays of the plans that apply that day / 7.
+- `GET /api/me/week` takes `language=bg|en` (default `bg`) for `text`; Bulgarian text addresses the athlete formally.
+  The facts come from the routes as in `today`; `training.days` counts days with a session, a set or a workout;
+  `readiness` counts the days of the week up to today; `nutrition` is the nutrition summary's 7-day average ending
+  on Sunday with the current targets; `weight` is the first and last trend value inside the week. Staff get 403.
+- `GET /api/me/today` gains `adjustment` (`{reason, mode}` or null) and `week` (`{week, consistency}`); `plan` gains
+  `adjusted` (`rest`, `lighter` or null; `rest` empties `items`); `records` entries carry `previous`.
+- The adjustment day must be within one day of the server's UTC date (as `today`), which covers the phone's today
+  and yesterday; consent must be recorded; the audit row holds the day only. The readiness factor is
+  `{key: "adjustment", value: reason, mode, state: "flagged"}`, listed first and never scored; staff reading
+  readiness get `value: null`, and team board rows carry `not_100`. An `adjustment` event refreshes Today and the
+  board. The table `day_adjustments` joins export and delete-my-data.
+
 ### 10.4 Wave 6: accuracy and robustness (added 2026-11-23)
 
 Source: `logs/research/algorithms-review.md` (sections 2c-7c, 9, 10). Every change below either fixes a defect or

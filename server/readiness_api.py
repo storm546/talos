@@ -229,11 +229,39 @@ def load_summary(db, athlete_id, last, days):
                     "of history. Monotony is undefined when every day has the same load."}
 
 
+def phrase(system, facts):
+    """The local model phrases the facts; any failure returns None and the plain facts are shown."""
+    try:
+        url, model, headers = assistant_api.model_client()
+    except HTTPException:
+        return None
+    messages = [{"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(facts, ensure_ascii=False)}]
+    try:
+        with httpx.Client(timeout=httpx.Timeout(20.0, connect=2.0), trust_env=False) as client:
+            response = client.post(url, headers=headers, json={"model": model, "messages": messages, "max_tokens": 400})
+            response.raise_for_status()
+            if len(response.content) > 64 * 1024:
+                return None
+            text = response.json()["choices"][0]["message"]["content"]
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+        return None
+    return text.strip()[:2000] if isinstance(text, str) and text.strip() else None
+
+
 def readiness_range(db, athlete, last, days):
     first = last - timedelta(days=days - 1)
     checkins, trials, excluded = athlete_data(db, athlete["id"], first - timedelta(days=r.WINDOW_DAYS), last)
     under_18 = bool(athlete["under_18"])
-    return [day_readiness(last - timedelta(days=n), checkins, trials, excluded, under_18) for n in range(days)]
+    flags = {row["day"]: row for row in db.execute(
+        "SELECT day, reason, mode FROM day_adjustments WHERE athlete_id = ? AND day BETWEEN ? AND ?",
+        (athlete["id"], first.isoformat(), last.isoformat()))}
+    result = [day_readiness(last - timedelta(days=n), checkins, trials, excluded, under_18) for n in range(days)]
+    for day in result:
+        if flag := flags.get(day["day"]):  # "not feeling 100%" (SPEC 10.3): listed, never scored
+            day["factors"].insert(0, {"key": "adjustment", "value": flag["reason"], "mode": flag["mode"], "unit": None,
+                                   "state": "flagged"})
+    return result
 
 
 def install(app, h):
@@ -309,7 +337,11 @@ def install(app, h):
                   day: Annotated[str | None, Query(max_length=10)] = None,
                   user=Depends(current_user), db=Depends(get_db)):
         athlete = h.athlete_access(db, user, athlete_id)
-        return {"athlete_id": athlete_id, "days": readiness_range(db, athlete, parse_day(day), days),
+        result = readiness_range(db, athlete, parse_day(day), days)
+        if user["role"] != "athlete":  # staff see that the athlete is not 100%, not why (SPEC 10.3)
+            for f in (f for d in result for f in d["factors"] if f["key"] == "adjustment"):
+                f["value"] = None
+        return {"athlete_id": athlete_id, "days": result,
                 "note": "Information for athlete and coach, not medical advice. Compared with this athlete's own "
                         "last 28 days; a change counts only beyond 0.5 x SD and the typical error."}
 
@@ -351,6 +383,7 @@ def install(app, h):
                 "athlete_id": athlete["id"], "name": athlete["name"], "group_ids": memberships.get(athlete["id"], []),
                 "checked_in": today["checked_in"], "nudged": nudged(db, athlete["id"], day),
                 "wellbeing": factors["wellbeing"]["value"], "status": today["status"],
+                "not_100": "adjustment" in factors,
                 "worse": [f["key"] for f in today["factors"] if f["state"] == "worse"],
                 "better": [f["key"] for f in today["factors"] if f["state"] == "better"],
                 "learning": [f["key"] for f in today["factors"] if f["state"] == "learning"],
@@ -409,26 +442,8 @@ def install(app, h):
         order = {"below_usual": 0, "load_spike": 1, "missing_checkin": 2}
         return sorted(facts, key=lambda fact: order[fact["kind"]])
 
-    def phrase(facts, language):
-        """The local model phrases the facts; any failure returns None and the plain list is shown."""
-        try:
-            url, model, headers = assistant_api.model_client()
-        except HTTPException:
-            return None
-        messages = [{"role": "system", "content": DIGEST_PROMPT.format(
-            language="in Bulgarian" if language == "bg" else "in English")},
-            {"role": "user", "content": json.dumps(facts, ensure_ascii=False)}]
-        try:
-            with httpx.Client(timeout=httpx.Timeout(20.0, connect=2.0), trust_env=False) as client:
-                response = client.post(url, headers=headers, json={"model": model, "messages": messages,
-                                                                     "max_tokens": 400})
-                response.raise_for_status()
-                if len(response.content) > 64 * 1024:
-                    return None
-                text = response.json()["choices"][0]["message"]["content"]
-        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
-            return None
-        return text.strip()[:2000] if isinstance(text, str) and text.strip() else None
+    def phrase_digest(facts, language):
+        return phrase(DIGEST_PROMPT.format(language="in Bulgarian" if language == "bg" else "in English"), facts)
 
     @app.get("/api/team/digest")
     def digest(day: Annotated[str | None, Query(max_length=10)] = None,
@@ -445,7 +460,7 @@ def install(app, h):
             if key not in digest_cache:  # regenerate only when the facts change; keep the cache small
                 if len(digest_cache) >= 64:
                     digest_cache.pop(next(iter(digest_cache)))
-                text = phrase(facts, language)
+                text = phrase_digest(facts, language)
                 if text is None:
                     return result
                 digest_cache[key] = text

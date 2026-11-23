@@ -10,6 +10,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Query
 
+from . import week_api
 from .readiness_api import wellbeing_sum
 
 MAX_PLAN_ITEMS, MAX_SESSIONS, MAX_RECORDS = 20, 10, 10
@@ -43,8 +44,10 @@ def plan(c):
                   for i in p["items"] if i["weekday"] == weekday]
     workouts = c.get("/api/workouts")(athlete_id=None, from_=c.day, to=c.day, limit=1, offset=0, user=c.user, db=c.db)
     sets = c.db.execute("SELECT COUNT(*) FROM set_logs WHERE athlete_id = ? AND day = ?", (c.uid, c.day)).fetchone()[0]
+    mode = (week_api.adjustment(c.db, c.uid, c.day) or {}).get("mode")  # "not feeling 100%" (SPEC 10.3)
+    items = [] if mode == "rest" else [week_api.lighter(i) for i in items] if mode == "lighter" else items
     return {"items": items[:MAX_PLAN_ITEMS], "more": max(len(items) - MAX_PLAN_ITEMS, 0),
-            "logged": bool(workouts) or sets > 0}
+            "logged": bool(workouts) or sets > 0, "adjusted": mode}
 
 
 def training(c):
@@ -79,7 +82,7 @@ def records(c):
     since = (c.date - timedelta(days=6)).isoformat()
     recent = sorted((r for r in found if r["new"] and since <= r["date"][:10] <= c.day),
                     key=lambda r: r["date"], reverse=True)
-    return [{k: r.get(k) for k in ("measure", "value", "unit", "date", "reps", "exercise", "name_bg", "name_en")}
+    return [{k: r.get(k) for k in ("measure", "value", "unit", "date", "reps", "exercise", "name_bg", "name_en", "previous")}
             for r in recent[:MAX_RECORDS]]
 
 
@@ -90,12 +93,22 @@ def next_session(c):
     return upcoming and {k: upcoming[k] for k in ("id", "title", "starts_at", "place", "test")}
 
 
+def adjustment(c):
+    return week_api.adjustment(c.db, c.uid, c.day)
+
+
+def week(c):
+    return {"week": f"{c.date.isocalendar()[0]}-W{c.date.isocalendar()[1]:02d}",
+            "consistency": week_api.consistency(c, c.date)}
+
+
 def unread(c):
     return c.get("/api/me/unread")(user=c.user, db=c.db)["comments"]
 
 
 SECTIONS = {"readiness": readiness, "checkin": checkin, "plan": plan, "training": training, "nutrition": nutrition,
-            "weight": weight, "records": records, "next_session": next_session, "unread": unread}
+            "weight": weight, "records": records, "next_session": next_session, "unread": unread,
+            "adjustment": adjustment, "week": week}
 EVERYONE = {"next_session"}  # the rest is the athlete's own data; staff get null
 
 
