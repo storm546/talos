@@ -117,6 +117,13 @@ internal fun MainActivity.intervalTimer(mode: String? = null) {
     }
     inputs.values.forEach { it.onChange(::update) }
     update()
+    page.addView(android.widget.Switch(this).apply {
+        text = getString(R.string.timer_voice)
+        setTextColor(getColor(R.color.ink)); textSize = 15f; minHeight = dp(48)
+        instrumentSwitch()
+        isChecked = voiceCues()
+        setOnCheckedChangeListener { _, on -> prefs.edit().putBoolean("voice", on).apply() }
+    }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
     button(getString(R.string.timer_start), primary = true) {
         val plan = phases(chosen, current())
         askNotifications()

@@ -41,7 +41,8 @@ def test_sections_equal_the_separate_routes(api, auth):
     food = client.get("/api/foods", params={"q": "ориз"}, headers=headers).json()[0]["id"]
     assert client.post("/api/food-logs", headers=headers,
                        json={"day": day(), "meal": "lunch", "food_id": food, "grams": 150}).status_code == 201
-    jump(client, headers, 40)
+    jump(client, headers, 30)
+    jump(client, headers, 40)  # a first value is not a record yet; beating it is (SPEC 8)
     result = today(client, headers)
     route = client.get(f"/api/athletes/{athlete}/readiness", params={"days": 1, "day": day()}, headers=headers).json()
     assert result["readiness"]["factors"] == route["days"][0]["factors"]
