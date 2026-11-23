@@ -198,6 +198,7 @@ class AppChecks : Instrumentation() {
                     FeatureWrite.COMPLETE -> check(json.length() == 0)
                     FeatureWrite.WORKOUT -> error("No workout was queued here")
                     FeatureWrite.SESSION -> error("No session is queued in this check")
+                    FeatureWrite.MEASUREMENT -> error("No measurement is queued in this check")
                 }
                 17L
             }) { error("Not a jump") }
