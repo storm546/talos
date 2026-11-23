@@ -7,9 +7,17 @@ When a rule here and `SPEC.md` disagree, `SPEC.md` wins for that feature and thi
 
 ## 1. What JumpScan is
 
-A fitness toolkit for a sports club. One phone, one club server, one coach dashboard. Jump scanning is the
-flagship tool; around it sit form tracking, workouts, timers, calculators, nutrition, readiness and load,
-records, field tests (range of motion, balance, sprint and reaction, GPS cardio) and an assistant.
+The one app an athlete and their coach run their whole training life from, the way the owner's Hermes
+Companion became the one app he manages his homelab and day with. One phone, one club server, one coach
+dashboard. Jump scanning is the flagship tool; around it sit form tracking, workouts, timers, calculators,
+nutrition, readiness and load, records, field tests (range of motion, balance, sprint and reaction, GPS
+cardio) and an assistant, with more to come. The goal is that nothing fitness-related makes the user open a
+second app. (The product will get a new name that fits this wider scope; until then it is called JumpScan.)
+
+Borrowing is encouraged: study the best trackers and health apps, take their ideas, behaviours, formulas
+and UX patterns, and reuse open-source code whose licence is compatible with GPL-3.0-or-later, with
+attribution in `LICENSES-AUDIT.md`. Proprietary apps are studied, not copied: their code, assets and text
+never enter the repo, because the entry is released under the GPL as the owner's own work.
 
 Three promises hold for every tool:
 
