@@ -196,3 +196,5 @@ def install(app, h):
         else:
             result["not_shown"] = not_shown
         return result
+
+    return {"athlete_records": athlete_records, "leaderboard": leaderboard}

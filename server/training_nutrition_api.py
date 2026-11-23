@@ -2050,7 +2050,7 @@ def install(app, h):
         list_plans, get_plan, list_exercises, list_set_logs, training_summary, list_foods,
         list_food_logs, athlete_weights, nutrition_estimate, get_target, nutrition_summary,
         nutrition_expenditure, get_program, create_plan, edit_plan, log_set, log_food,
-        save_weight, save_target, save_program,
+        save_weight, save_target, save_program, list_workouts, get_workout, list_templates,
     )}
 
 

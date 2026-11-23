@@ -964,9 +964,9 @@ def create_app(db_path=None):
     app.add_middleware(RequestBodyLimit)
     app.state.events = EventBus()
     training_tools = training_nutrition_api.install(app, sys.modules[__name__])
-    records_api.install(app, sys.modules[__name__])
-    readiness_api.install(app, sys.modules[__name__])
-    measurements_api.install(app, sys.modules[__name__])
+    training_tools.update(records_api.install(app, sys.modules[__name__]))
+    training_tools.update(readiness_api.install(app, sys.modules[__name__]))
+    training_tools.update(measurements_api.install(app, sys.modules[__name__]))
     app.mount("/static", StaticFiles(directory=Path(__file__).with_name("static")), name="static")
 
     csp = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
