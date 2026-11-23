@@ -79,7 +79,7 @@ def records(c):
     since = (c.date - timedelta(days=6)).isoformat()
     recent = sorted((r for r in found if r["new"] and since <= r["date"][:10] <= c.day),
                     key=lambda r: r["date"], reverse=True)
-    return [{k: r.get(k) for k in ("measure", "value", "unit", "date", "exercise", "name_bg", "name_en")}
+    return [{k: r.get(k) for k in ("measure", "value", "unit", "date", "reps", "exercise", "name_bg", "name_en")}
             for r in recent[:MAX_RECORDS]]
 
 
