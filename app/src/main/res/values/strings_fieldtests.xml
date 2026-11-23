@@ -15,7 +15,7 @@
     <string name="ft_rom_setup_side">Phone at hip height, 2–3 m away. Stand side-on so the camera sees one side; you will turn round for the other.</string>
     <string name="ft_rom_setup_front">Phone at chest height, 2–3 m away. Face the camera with both arms in view.</string>
     <string name="ft_rom_how">Move slowly to the end of your comfortable range and hold still for about a second. The tool keeps the highest angle you hold still, beeps, and then asks for the other side.</string>
-    <string name="ft_rom_error_knee">Typical error ±10° (side-view knee against a lab reference, core/VALIDATION.md). Compare with yourself in the same setup; it is not a clinical goniometer.</string>
+    <string name="ft_rom_error_knee">Typical error ±10° (side-view knee, checked against a lab measurement). Compare with yourself in the same setup; it is not a clinical goniometer.</string>
     <string name="ft_rom_error_other">Hip and shoulder angles have no reference measurement yet. Expect at least the knee\'s ±10° error and compare only with yourself.</string>
     <string name="ft_open_camera">Open camera</string>
     <string name="ft_balance_setup">Phone at hip height, 2–3 m away, facing you. Stand on one leg with both feet in view.</string>
