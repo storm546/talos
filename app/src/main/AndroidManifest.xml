@@ -31,6 +31,10 @@
                 android:value="Workout rest timer and interval timer that keep counting and signal the end of each phase with sound and vibration while the screen is off" />
         </service>
         <service android:name=".CardioService" android:exported="false" android:foregroundServiceType="location" />
+        <receiver android:name=".TodayWidget" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/today_widget" />
+        </receiver>
         <receiver android:name=".ReminderReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -52,6 +56,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="talos" android:host="tool" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

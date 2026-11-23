@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static launcher shortcuts; each opens a tool through its talos://tool/<key> deep link (SPEC 10.2). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="checkin" android:icon="@drawable/ic_checkin" android:shortcutShortLabel="@string/shortcut_checkin">
+        <intent android:action="android.intent.action.VIEW" android:data="talos://tool/checkin"
+            android:targetPackage="jumpscan.app" android:targetClass="jumpscan.app.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="workout" android:icon="@drawable/ic_training" android:shortcutShortLabel="@string/shortcut_workout">
+        <intent android:action="android.intent.action.VIEW" android:data="talos://tool/workout"
+            android:targetPackage="jumpscan.app" android:targetClass="jumpscan.app.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="scan_food" android:icon="@drawable/ic_scan" android:shortcutShortLabel="@string/shortcut_scan">
+        <intent android:action="android.intent.action.VIEW" android:data="talos://tool/scan_food"
+            android:targetPackage="jumpscan.app" android:targetClass="jumpscan.app.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="timer" android:icon="@drawable/ic_timer" android:shortcutShortLabel="@string/shortcut_timer">
+        <intent android:action="android.intent.action.VIEW" android:data="talos://tool/timer"
+            android:targetPackage="jumpscan.app" android:targetClass="jumpscan.app.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="jump" android:icon="@drawable/ic_legs" android:shortcutShortLabel="@string/shortcut_jump">
+        <intent android:action="android.intent.action.VIEW" android:data="talos://tool/jump"
+            android:targetPackage="jumpscan.app" android:targetClass="jumpscan.app.MainActivity" />
+    </shortcut>
+</shortcuts>

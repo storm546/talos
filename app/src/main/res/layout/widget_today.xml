@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="14dp" android:background="@drawable/widget_surface">
+    <TextView android:id="@+id/widget_title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="@string/ui_today" android:textAllCaps="true" android:letterSpacing="0.12"
+        android:textColor="@color/signal" android:textSize="12sp" android:fontFamily="@font/spacegrotesk_bold" />
+    <TextView android:id="@+id/widget_readiness" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="2dp" android:textColor="#FFFFFF" android:textSize="22sp" android:maxLines="2"
+        android:fontFamily="@font/spacegrotesk_bold" />
+    <TextView android:id="@+id/widget_checkin" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" android:textColor="@color/on_hero" android:textSize="13sp"
+        android:fontFamily="@font/spacegrotesk_regular" />
+    <TextView android:id="@+id/widget_kcal" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:textColor="@color/on_hero" android:textSize="13sp" android:fontFamily="@font/jetbrainsmono_regular" />
+    <Button android:id="@+id/widget_check_in" android:layout_width="wrap_content" android:layout_height="40dp"
+        android:layout_marginTop="8dp" android:minWidth="48dp" android:paddingStart="14dp" android:paddingEnd="14dp"
+        android:background="@drawable/widget_action" android:text="@string/today_check_in" android:textAllCaps="false"
+        android:textColor="@color/on_action" android:textSize="14sp" android:fontFamily="@font/spacegrotesk_bold" />
+</LinearLayout>

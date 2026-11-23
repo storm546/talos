@@ -187,7 +187,7 @@ internal class CaptureChecks(private val test: Instrumentation) {
             awaitState(150000) { field(main, "screen").get(main) == "result" }
             result = field(main, "analysis").get(main) as Analysis
             checkNotNull(FlightStrip.read(prefs.getString("flight_strip", null)))
-            movie("today-flight") { test.runOnMainSync { main.home() } }; SystemClock.sleep(2600); shot("today-measured")
+            movie("today-flight") { test.runOnMainSync { main.jumpHome() } }; SystemClock.sleep(2600); shot("today-measured")
         }
         movie("digit-roll") {
             test.runOnMainSync {

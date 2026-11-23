@@ -18,6 +18,7 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.speech.tts.TextToSpeech
 
 /**
  * Rest and interval timers (SPEC 9). A foreground service with a partial wake lock keeps counting, beeping and
@@ -44,6 +45,9 @@ internal fun clock(ms: Long): String {
     return if (total >= 3600) "%d:%02d:%02d".format(total / 3600, total / 60 % 60, total % 60) else "%d:%02d".format(total / 60, total % 60)
 }
 
+/** Spoken cues are on unless the user turned them off on the interval timer screen (SPEC 10.2). */
+internal fun Context.voiceCues() = getSharedPreferences("timer", Context.MODE_PRIVATE).getBoolean("voice", true)
+
 internal fun Context.startTimer(kind: String, labels: List<String>, details: List<String>, seconds: IntArray, work: BooleanArray) =
     startForegroundService(Intent(this, TimerService::class.java).setAction(TimerService.START).putExtra("kind", kind)
         .putExtra("labels", labels.toTypedArray()).putExtra("details", details.toTypedArray())
@@ -67,6 +71,8 @@ class TimerService : Service() {
     private var tone: ToneGenerator? = null
     private var wake: PowerManager.WakeLock? = null
     private var lastBeep = -1L
+    private var voice: TextToSpeech? = null
+    private var voiceReady = false
     private val tick = object : Runnable {
         override fun run() {
             step()
@@ -98,6 +104,11 @@ class TimerService : Service() {
                 wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "jumpscan:timer")
                     .apply { setReferenceCounted(false); acquire(limit) }
                 if (tone == null) tone = runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 90) }.getOrNull()
+                if (voice == null && voiceCues()) voice = TextToSpeech(this) { status ->
+                    voiceReady = status == TextToSpeech.SUCCESS &&
+                        (voice?.setLanguage(resources.configuration.locales[0]) ?: TextToSpeech.LANG_NOT_SUPPORTED) >= TextToSpeech.LANG_AVAILABLE
+                    if (voiceReady) cue(0)
+                }
                 val notification = running()
                 if (Build.VERSION.SDK_INT >= 34) startForeground(RUNNING_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
                 else startForeground(RUNNING_ID, notification)
@@ -121,9 +132,9 @@ class TimerService : Service() {
         val now = SystemClock.elapsedRealtime()
         val left = state.phaseEnd - now
         val second = (left + 999) / 1000
-        if (left > 0 && second in 1..3 && second != lastBeep) {
+        if (left > 0 && second != lastBeep && (second in 1..3 || second == 10L && state.seconds[state.index] >= 20)) {
             lastBeep = second
-            tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+            if (second == 10L) say(getString(R.string.voice_ten_seconds)) else tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
         }
         if (left > 0) return
         if (state.index + 1 >= state.seconds.size) return finish(alert = true)
@@ -132,6 +143,7 @@ class TimerService : Service() {
         lastBeep = -1
         tone?.startTone(if (state.work[state.index]) ToneGenerator.TONE_PROP_BEEP2 else ToneGenerator.TONE_PROP_ACK, 400)
         buzz(longArrayOf(0, 250))
+        cue(state.index)
         notifyRunning()
     }
 
@@ -141,6 +153,7 @@ class TimerService : Service() {
         if (state.running) state.finishedAt = SystemClock.elapsedRealtime()
         state.running = false
         if (alert) {
+            say(getString(if (state.kind == "rest") R.string.voice_rest_over else R.string.timer_done))
             tone?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 900)
             buzz(longArrayOf(0, 400, 200, 400))
             channels()
@@ -152,7 +165,18 @@ class TimerService : Service() {
         stopForeground(STOP_FOREGROUND_REMOVE)
         wake?.takeIf { it.isHeld }?.release()
         // Let the final tone finish before the generator is released.
-        handler.postDelayed({ if (!TimerState.running) { tone?.release(); tone = null; stopSelf() } }, 1200)
+        handler.postDelayed({ if (!TimerState.running) { tone?.release(); tone = null; stopSelf() } }, 2500)
+    }
+
+    /** "Round 3 of 8" when a work phase starts, the phase name otherwise; rest timers only speak their end. */
+    private fun cue(index: Int) {
+        val state = TimerState
+        if (state.kind != "interval" || index >= state.labels.size) return
+        say(if (state.work.getOrElse(index) { false }) state.details[index] else state.labels[index])
+    }
+
+    private fun say(words: String) {
+        if (voiceReady && voiceCues()) voice?.speak(words, TextToSpeech.QUEUE_FLUSH, null, "timer")
     }
 
     private fun buzz(pattern: LongArray) {
@@ -193,6 +217,7 @@ class TimerService : Service() {
         handler.removeCallbacksAndMessages(null)
         wake?.takeIf { it.isHeld }?.release()
         tone?.release()
+        voice?.shutdown()
         super.onDestroy()
     }
 }

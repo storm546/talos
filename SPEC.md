@@ -871,12 +871,14 @@ fails or has no data is `null` and the rest still return. Sections:
 - `readiness`: status, the factor list and "still learning" exactly as `GET /api/athletes/{id}/readiness` for
   that day (athletes only; staff get null);
 - `checkin`: whether today's check-in exists and its wellbeing sum;
-- `plan`: today's planned items (title, sets x reps or minutes) and whether a workout was already logged today;
+- `plan`: today's planned items (plan title, exercise, sets x reps or a rep range, load; plan items carry no minutes)
+  and whether a workout or a set was already logged today;
 - `training`: today's sessions with their sRPE load, the day's total, and the acute:chronic ratio with its
   "still learning" state from the load route;
 - `nutrition`: today's kcal, protein, carbs and fat against the current targets, and the number of food logs;
 - `weight`: the latest weigh-in and the trend value from the weight trend;
-- `records`: records set in the last 7 days (measure, value, unit, date);
+- `records`: records set in the last 7 days (measure, value, unit, date, reps for a set), i.e. the records route's
+  `new` records: a first value is not a record until it is beaten;
 - `next_session`: the next visible club session, or null;
 - `unread`: unread comment count.
 No new tables. Bounded: at most 20 plan items, 10 sessions, 10 records. Tests cover each section, the
@@ -897,9 +899,11 @@ away):
 **App: phone integration**
 - Static launcher shortcuts: Check in, Start workout, Scan food, Interval timer, Jump test.
 - Deep links `talos://tool/<key>` for every tool key of the tools hub (the shortcuts use them); unknown keys
-  open the hub.
+  open the hub. A `scan_food` tool (barcode into today's food log) joins the hub so Scan food has a key; tools that
+  need an account open sign-in when signed out, as in the hub.
 - A home-screen widget "Today": readiness status, check-in done or not, kcal eaten of target; tap opens Today,
-  the check-in button opens the check-in. Updated after each sync and at most every 30 minutes.
+  the check-in button opens the check-in. Updated after each sync and at most every 30 minutes (the system's
+  periodic update also fetches `today` when signed in).
 - Voice cues in the interval timer and the rest timer through the phone's TextToSpeech in the app language
   ("round 3 of 8", "10 seconds", "rest over"), on by default, with a switch; beeps and vibration stay.
 

@@ -15,7 +15,7 @@ internal val sessionKinds = listOf("practice" to R.string.rd_kind_practice, "gym
     "match" to R.string.rd_kind_match, "conditioning" to R.string.rd_kind_conditioning, "other" to R.string.rd_kind_other)
 
 /** Load in the background and show the result only while `view` is still on screen. */
-private fun <T> MainActivity.later(view: android.view.View, load: () -> T, show: (T?) -> Unit) {
+internal fun <T> MainActivity.later(view: android.view.View, load: () -> T, show: (T?) -> Unit) {
     val host = page
     readinessWork.submit {
         val result = runCatching(load).getOrNull()
@@ -38,7 +38,7 @@ private fun MainActivity.readinessChip(status: String, parent: LinearLayout) = w
     else -> statusChip(readinessLabel(status), R.color.hover, R.color.muted, parent)
 }
 
-private fun MainActivity.factorValue(factor: JSONObject): String? {
+internal fun MainActivity.factorValue(factor: JSONObject): String? {
     if (factor.isNull("value")) return null
     val value = factor.getDouble("value")
     return when (factor.getString("key")) {
@@ -51,7 +51,7 @@ private fun MainActivity.factorValue(factor: JSONObject): String? {
     }
 }
 
-private fun MainActivity.factorState(factor: JSONObject): String = when (factor.getString("state")) {
+internal fun MainActivity.factorState(factor: JSONObject): String = when (factor.getString("state")) {
     "better" -> getString(R.string.rd_state_better)
     "worse" -> getString(R.string.rd_state_worse)
     "usual" -> getString(R.string.rd_state_usual)
@@ -59,48 +59,8 @@ private fun MainActivity.factorState(factor: JSONObject): String = when (factor.
     else -> getString(R.string.rd_state_missing)
 }
 
-private val factorLabels = mapOf("wellbeing" to R.string.rd_wellbeing, "resting_hr" to R.string.rd_resting_hr,
+internal val factorLabels = mapOf("wellbeing" to R.string.rd_wellbeing, "resting_hr" to R.string.rd_resting_hr,
     "hrv" to R.string.rd_hrv, "jump" to R.string.rd_jump, "sleep" to R.string.rd_sleep)
-
-/** Today's readiness with the factors behind it: on Today and, from wave 1, on the tools hub. */
-internal fun MainActivity.readinessCard(parent: LinearLayout = page): LinearLayout = card(parent).also { panel ->
-    val head = row(panel, center = true)
-    section(R.string.rd_title, head).layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-    val summary = text(getString(R.string.rd_loading), 14, parent = panel)
-    val factors = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    panel.addView(factors)
-    val actions = row(panel)
-    button(getString(R.string.rd_check), parent = actions, look = ActionTone.TONAL) { readinessCheck() }
-        .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10) }
-    button(getString(R.string.rd_sessions_title), parent = actions) { sessionsScreen() }
-        .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10); marginStart = dp(8) }
-    val api = featureApi(); val id = athleteId()
-    later(panel, { api.obj("/api/athletes/$id/readiness?days=1&day=${todayLocal()}").getJSONArray("days").getJSONObject(0) }) { day ->
-        if (day == null) { summary.text = getString(R.string.rd_offline); return@later }
-        val status = day.getString("status")
-        readinessChip(status, head)
-        summary.text = getString(when (status) {
-            "good" -> R.string.rd_summary_good
-            "take_care" -> R.string.rd_summary_take_care
-            "still_learning" -> R.string.rd_summary_still_learning
-            "no_data" -> R.string.rd_summary_no_data
-            else -> R.string.rd_summary_normal
-        })
-        day.getJSONArray("factors").objects().forEachIndexed { index, factor ->
-            val value = factorValue(factor)
-            if (value == null && factor.getString("state") != "learning") return@forEachIndexed
-            if (factors.childCount > 0) divider(factors, inset = false)
-            val line = valueRow(getString(factorLabels.getValue(factor.getString("key"))), value ?: "—", factors)
-            text(factorState(factor), 12, getColor(when (factor.getString("state")) {
-                "worse" -> R.color.warning
-                "better" -> R.color.ready
-                else -> R.color.muted
-            }), factors).setPadding(0, 0, 0, dp(4))
-            line.arrive(index * 40L)
-        }
-        text(getString(R.string.rd_not_advice), 12, parent = factors).setPadding(0, dp(8), 0, 0)
-    }
-}
 
 /** The morning jump check: today's trials, the best valid one against the usual, and the record button. */
 internal fun MainActivity.readinessCheck() {

@@ -8,7 +8,7 @@ internal class Tool(val key: String, val label: Int, val note: Int, val icon: St
 
 internal fun toolGroups(): List<Pair<Int, List<Tool>>> = listOf(
     R.string.tools_measure to listOf(
-        Tool("jump", R.string.tool_jump, R.string.tool_jump_note, "legs", local = true) { home() },
+        Tool("jump", R.string.tool_jump, R.string.tool_jump_note, "legs", local = true) { jumpHome() },
         Tool("readiness", R.string.rd_title, R.string.rd_check, "legs") { readinessCheck() },
         Tool("jump_history", R.string.tool_jump_history, R.string.tool_jump_history_note, "history") { history() },
         Tool("form", R.string.ui_technique, R.string.tool_form_note, "form", local = true) { formHome() },
@@ -26,6 +26,7 @@ internal fun toolGroups(): List<Pair<Int, List<Tool>>> = listOf(
         Tool("records", R.string.records_title, R.string.tool_records_note, "insights") { records() }),
     R.string.tools_fuel to listOf(
         Tool("nutrition", R.string.nutrition_title, R.string.tool_nutrition_note, "food") { nutritionHome() },
+        Tool("scan_food", R.string.tool_scan_food, R.string.tool_scan_food_note, "scan") { scanBarcode() },
         Tool("recipes", R.string.recipes_title, R.string.tool_recipes_note, "recipe") { recipes() }),
     R.string.tools_body to listOf(
         Tool("weight", R.string.tool_weight, R.string.tool_weight_note, "insights") { insights(days = 30) },

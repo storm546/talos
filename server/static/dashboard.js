@@ -203,6 +203,14 @@ Object.assign(dictionary.bg, {
   sourceLive:'На живо', sourceVideo:'Запис', sideLeft:'Ляво', sideRight:'Дясно',
   noTargetShort:'Няма зададена цел', openAppCheckin:'Отбележете как се чувствате в приложението Talos.',
   mealBreakdown:'Подробности за храненията', kcalUnit:'ккал', gramUnit:'г', descentMs:'Спускане (мс)', ascentMs:'Изправяне (мс)',
+  tdReadiness_good:'По-добре от обичайното поне в един показател и нищо под него.', tdReadiness_normal:'Близо до обичайното.',
+  tdReadiness_take_care:'Два или повече показателя са по-неблагоприятни от обичайното. Обсъдете тренировката с треньора.',
+  tdReadiness_still_learning:'Нужни са поне 7 дни собствени стойности преди сравнение.',
+  tdReadiness_no_data:'Отбележете как се чувствате или направете сутрешен скок.', tdNoData:'Още няма данни.',
+  tdLogged:'Записана днес', tdFoodLogs:'записи: ', tdLoad:'Натоварване днес', tdLoadUnit:'AU', tdSessions:'тренировки: ',
+  tdWeight:'Тегло', tdTrend:'тенденция ', tdWeightEmpty:'Още няма претегляне.', tdRecords:'Нови рекорди (7 дни)',
+  tdRecordsEmpty:'Тази седмица няма нови рекорди.', tdNextSession:'Следваща тренировка', tdNoSession:'Няма планирана тренировка в клуба.',
+  tdMessages:'Съобщения', tdUnread:'Непрочетени от треньора.', tdNoUnread:'Няма непрочетени съобщения.',
   checkinToday:'Как сте днес?', checkinTotal:'Общо за сън, свежест, мускулен комфорт, спокойствие и настроение.',
   attemptsOf:' от ', effortShort:'усилие'
 });
@@ -219,6 +227,14 @@ Object.assign(dictionary.en, {
   sourceLive:'Live', sourceVideo:'Video', sideLeft:'Left', sideRight:'Right',
   noTargetShort:'No target set', openAppCheckin:'Use the Talos app to check in.',
   mealBreakdown:'Meal breakdown', kcalUnit:'kcal', gramUnit:'g', descentMs:'Descent (ms)', ascentMs:'Ascent (ms)',
+  tdReadiness_good:'Better than your usual in at least one measure and nothing below it.', tdReadiness_normal:'Close to your usual.',
+  tdReadiness_take_care:'Two or more measures are less favourable than usual. Talk with your coach about today’s session.',
+  tdReadiness_still_learning:'Needs at least 7 days of your own values before comparing.',
+  tdReadiness_no_data:'Check in or do a morning jump to see today’s readiness.', tdNoData:'Nothing loaded yet.',
+  tdLogged:'Logged today', tdFoodLogs:'entries: ', tdLoad:'Load today', tdLoadUnit:'AU', tdSessions:'sessions: ',
+  tdWeight:'Weight', tdTrend:'trend ', tdWeightEmpty:'No weigh-in yet.', tdRecords:'New records (7 days)',
+  tdRecordsEmpty:'No new records this week.', tdNextSession:'Next session', tdNoSession:'No club session planned.',
+  tdMessages:'Messages', tdUnread:'Unread from your coach.', tdNoUnread:'No unread messages.',
   checkinToday:'How you feel today', checkinTotal:'Total for sleep, freshness, muscle comfort, calm and mood.',
   attemptsOf:' of ', effortShort:'effort'
 });
@@ -367,7 +383,7 @@ function relevant(event, view) {
     return false;
   }
   if (view === 'team') return ['checkin','jump','session'].includes(event.type);
-  if (view === 'today') return ['checkin','jump','food','coaching','nutrition_day','set'].includes(event.type) &&
+  if (view === 'today') return ['checkin','jump','form','comment','record','measurement','food','coaching','nutrition_day','set','weight','workout','training_session'].includes(event.type) &&
     String(event.athlete_id) === String(state.user.id);
   if (view === 'wellbeing') return event.type === 'checkin';
   if (view === 'sessions' || view === 'sessionsMine') return event.type === 'session' || event.type === 'jump';
@@ -385,7 +401,7 @@ function signedOut() {
   state.liveGeneration++;
   liveController?.abort();
   Object.assign(state, {todayCheckins:[], teamFlights:[], lastSession:null, lastReport:null, formCatalogue:[]});
-  Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],live:'idle',training:null,setLogs:[],workouts:[],exercises:[],plansData:[],nutritionDay:null,nutSummary:null,weightsData:null,expenditure:null,program:null,nutTarget:null,foodLogs:[],foods:[],formSets:[],planEdit:null,assistant:{open:false,conversationId:null,reply:null,proposal:null,note:null,error:null}});
+  Object.assign(state, {token:null,user:null,selected:null,athletes:[],users:[],clubs:[],audit:[],jumps:[],summary:null,consent:null,reset:null,deleting:false,groups:[],groupEdit:null,membersEdit:null,sessions:[],sessionEdit:null,sessionReport:null,wellbeing:[],wellbeingDay:null,checkins:[],sessionsMine:[],comments:[],todayData:null,live:'idle',training:null,setLogs:[],workouts:[],exercises:[],plansData:[],nutritionDay:null,nutSummary:null,weightsData:null,expenditure:null,program:null,nutTarget:null,foodLogs:[],foods:[],formSets:[],planEdit:null,assistant:{open:false,conversationId:null,reply:null,proposal:null,note:null,error:null}});
   setLive('idle');
   render();
 }
@@ -409,11 +425,10 @@ async function load(view=state.view) {
   if (view === 'today') {
     const id = state.user.id;
     const day = apiDay();
-    const [summary, jumps, checkins, nutSummary, plansData] = await Promise.all([
+    const [summary, jumps, todayData] = await Promise.all([
       api('/api/athletes/' + id + '/summary'), api('/api/jumps?athlete_id=' + id + '&limit=1'),
-      api('/api/checkins?athlete_id=' + id + '&from=' + day + '&to=' + day),
-      api('/api/athletes/' + id + '/nutrition/summary?day=' + day), api('/api/plans')]);
-    data = {summary, jumps, checkins, nutSummary, plansData};
+      api('/api/me/today?day=' + day)]);
+    data = {summary, jumps, todayData};
   }
   if (view === 'history') {
     const id = state.user.role === 'athlete' ? state.user.id : state.selected.id;
@@ -555,24 +570,58 @@ function teamOverview(content) {
   cards.append(checkin, session, testing, flags);
   content.append(cards);
 }
+// The same cards as the phone's Today screen, from the same /api/me/today aggregate (SPEC 10.2).
 function today(content) {
   content.append(overviewHero(t('athleteDesk'), t('today'), state.user.name + '  ·  ' + date(apiDay())));
   athleteSubnav(content, 'today');
+  const data = state.todayData || {};
   const grid = node('div', null, 'overview-grid today-grid');
-  const saved = state.checkins[0];
-  const checkin = overviewCard(t('checkinToday'), saved ? wellbeingSum(saved) + '\u00a0/\u00a025' : null,
-    t(saved ? 'checkinTotal' : 'openAppCheckin'), 'checkin');
-  const day = apiDay();
-  const weekday = (new Date(day + 'T00:00:00Z').getUTCDay() + 6) % 7;
-  const scheduled = state.plansData.filter(plan => {
-    const distance = (Date.parse(day) - Date.parse(plan.starts_on)) / 86400000;
-    return distance >= 0 && distance < plan.weeks * 7 && plan.items.some(item => item.weekday === weekday);
-  });
-  const training = overviewCard(t('todayPlan'), scheduled[0]?.title, scheduled.length ? '' : t('todayRest'), 'history', 'card-subject');
-  for (const plan of scheduled) for (const item of plan.items.filter(item => item.weekday === weekday)) {
-    training.append(node('p', item.exercise + ' · ' + item.sets + ' × ' + item.reps +
-      (item.reps_max > item.reps ? '–' + item.reps_max : ''), 'muted'));
+  const empty = text => node('p', text, 'muted');
+  const line = (label, value) => { const row = node('div', null, 'stat-line'); row.append(node('span', label), node('strong', value)); return row; };
+  const r = data.readiness;
+  const readiness = overviewCard(t('rdBoard'), r ? t('rd_' + r.status) : null, r ? t('tdReadiness_' + r.status) : t('tdNoData'), 'checkin', 'card-subject');
+  readiness.classList.add('today-hero');
+  for (const f of (r?.factors || []).filter(f => f.value != null).slice(0, 4)) {
+    const state_ = {better:'rdBetter', worse:'rdWorse'}[f.state];
+    readiness.append(line(t('rd_' + f.key), (f.key === 'hrv' ? formatNumber(Math.exp(f.value)) + ' ms' : formatNumber(f.value) +
+      ({points:'', bpm:' bpm', cm:' cm', score:''}[f.unit] ?? '')) + (state_ ? ' · ' + t(state_).replace(/: $/, '') : '')));
   }
+  const p = data.plan;
+  const plan = overviewCard(t('todayPlan'), p?.items.length ? p.items[0].plan : null, p?.items.length ? '' : t('todayRest'), 'history', 'card-subject');
+  for (const item of p?.items || []) plan.append(node('p', item.exercise + ' · ' + item.sets + ' × ' + item.reps +
+    (item.reps_max > item.reps ? '–' + item.reps_max : '') + (item.load_kg == null ? '' : ' · ' + format(item.load_kg) + ' ' + t('recKg')), 'muted'));
+  if (p?.more) plan.append(empty('+' + p.more));
+  if (p?.logged) plan.append(node('span', t('tdLogged'), 'badge'));
+  const c = data.checkin;
+  const checkin = overviewCard(t('checkinToday'), c?.done ? c.wellbeing + ' / ' + c.out_of : null,
+    t(c?.done ? 'checkinTotal' : 'openAppCheckin'), 'checkin');
+  const n = data.nutrition;
+  const food = overviewCard(t('nutrition'), n ? formatNumber(n.eaten.kcal) + (n.target ? ' / ' + formatNumber(n.target.kcal) : '') : null,
+    n ? t('kcalUnit') + ' · ' + t('tdFoodLogs') + n.logs : t('tdNoData'), 'home');
+  for (const [k, label] of [['kcal', 'kcal'], ['protein_g', 'protein'], ['carbs_g', 'carbs'], ['fat_g', 'fat']]) {
+    const target = n?.target?.[k];
+    if (!(target > 0)) continue;
+    const progress = node('progress'); progress.max = target; progress.value = Math.min(target, n.eaten[k]);
+    progress.setAttribute('aria-label', t(label));
+    progress.setAttribute('aria-valuetext', formatNumber(n.eaten[k]) + ' / ' + formatNumber(target));
+    const row = node('div', null, 'target-row');
+    row.append(node('span', t(label).replace(/ \([^)]+\)$/, '')), node('strong', formatNumber(n.eaten[k]) + ' / ' + formatNumber(target)), progress);
+    food.append(row);
+  }
+  const tr = data.training;
+  const training = overviewCard(t('tdLoad'), tr ? formatNumber(tr.total_load) : null, tr ? t('tdLoadUnit') + ' · ' + t('tdSessions') + tr.sessions.length : t('tdNoData'), 'training');
+  if (tr) training.append(line(t('rdLoad'), tr.acute_chronic.still_learning || tr.acute_chronic.band == null ? t('rdLoadLearning')
+    : format(tr.acute_chronic.ratio, 'knee_ankle_ratio') + ' · ' + t('rd_' + tr.acute_chronic.band)));
+  const w = data.weight;
+  const weight = overviewCard(t('tdWeight'), w ? format(w.kg) : null, w ? t('recKg') + ' · ' + date(w.day) +
+    (w.trend_kg == null ? '' : ' · ' + t('tdTrend') + format(w.trend_kg) + ' ' + t('recKg')) : t('tdWeightEmpty'), 'profile');
+  const records = overviewCard(t('tdRecords'), null, (data.records || []).length ? '' : t('tdRecordsEmpty'), 'index');
+  const timed = {balance_stance:1, sprint_time:2, agility_time:2};
+  for (const rec of (data.records || []).slice(0, 3)) records.append(line(t(REC_LABEL[rec.measure] || 'recTitle') +
+    (rec.exercise ? ' · ' + rec.exercise : ''), rec.measure in timed ? ftSeconds(rec.value, timed[rec.measure]) : recValue(rec)));
+  const s = data.next_session;
+  const session = overviewCard(t('tdNextSession'), s ? s.title : null, s ? dateTime(s.starts_at) + (s.place ? ' · ' + s.place : '') : t('tdNoSession'), 'club', 'card-subject');
+  const messages = overviewCard(t('tdMessages'), data.unread ? String(data.unread) : null, t(data.unread ? 'tdUnread' : 'tdNoUnread'), 'more');
   const jump = state.jumps[0];
   const jumpCard = overviewCard(t('latestJump'), jump ? t(jump.test) : null, jump ? dateTime(jump.created_at) : t('noData'), 'index', 'card-subject');
   if (jump && (!jump.flight_time_ms || jump.warnings.includes('no_flight_detected'))) {
@@ -586,8 +635,7 @@ function today(content) {
       (jump[field] == null ? '' : ' · ' + change(jump[field] - metric.baseline, field))));
     jumpCard.append(row);
   }
-  const food = nutritionSummaryView(state.nutSummary);
-  grid.append(checkin, training, food, jumpCard);
+  grid.append(readiness, plan, checkin, food, training, weight, records, session, messages, jumpCard);
   content.append(grid);
 }
 function field(form, key, name, type='text', value='') {

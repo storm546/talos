@@ -60,7 +60,8 @@ class ReminderReceiver : BroadcastReceiver() {
 }
 
 /** Reads the events stream while the app is in the foreground and shows the coach's nudge as a notification. */
-internal class NudgeStream(private val context: Context, private val base: String, private val token: String) {
+internal class NudgeStream(private val context: Context, private val base: String, private val token: String,
+                           private val changed: (String) -> Unit = {}) {
     @Volatile private var open = true
     @Volatile private var connection: HttpURLConnection? = null
     private val thread = Thread {
@@ -81,6 +82,7 @@ internal class NudgeStream(private val context: Context, private val base: Strin
                         val event = runCatching { JSONObject(line.removePrefix("data:").trim()) }.getOrNull() ?: continue
                         if (event.optString("type") == "nudge") postNotification(context, 2,
                             context.getString(R.string.rd_nudge_title), context.getString(R.string.rd_nudge_text))
+                        else changed(event.optString("type"))
                     }
                 }
             } catch (_: Exception) {}
