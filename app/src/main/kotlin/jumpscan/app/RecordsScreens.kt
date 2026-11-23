@@ -86,7 +86,8 @@ private fun MainActivity.recordsScreen(data: JSONObject) {
             if (index > 0) divider(group, inset = false)
             val label = when (record.getString("measure")) {
                 "balance_stance" -> getString(R.string.ft_record_balance, getString(if (record.getString("leg") == "L") R.string.ft_left else R.string.ft_right))
-                "sprint_time" -> getString(R.string.ft_sprint_named, String.format(locale, "%.0f", record.getDouble("distance_m")))
+                "sprint_time" -> getString(R.string.ft_sprint_named, String.format(locale, "%.0f", record.getDouble("distance_m"))) +
+                    " · " + getString(if (record.optString("start") == "crossing") R.string.ft_start_crossing else R.string.ft_start_cue)
                 else -> getString(if (record.getString("test") == "t_test") R.string.ft_t_test else R.string.ft_505)
             }
             recordRow(label, record, group)

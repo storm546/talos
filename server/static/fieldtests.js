@@ -125,7 +125,7 @@ function fieldRecords(records) {
   const grid = table(['ftTest', 'recBest', 'recPrevious', 'date'], t('ftFieldRecords'));
   grid.wrap.classList.add('club-table');
   for (const r of list) {
-    const which = r.measure === 'balance_stance' ? t('ftLeg' + r.leg) : r.measure === 'sprint_time' ? format(r.distance_m) + ' ' + t('ftM') : t('ft_' + r.test);
+    const which = r.measure === 'balance_stance' ? t('ftLeg' + r.leg) : r.measure === 'sprint_time' ? format(r.distance_m) + ' ' + t('ftM') + ' · ' + t(r.start === 'cue' ? 'ftCue' : 'ftCrossing') : t('ft_' + r.test);
     const best = node('td', null, 'num'); best.append(node('strong', ftSeconds(r.value, r.measure === 'balance_stance' ? 1 : 2)));
     if (r.new) best.append(' ', node('span', t('recNew'), 'badge record-badge'));
     const tr = node('tr'); tr.append(node('td', t(REC_LABEL[r.measure]) + ' · ' + which), best,

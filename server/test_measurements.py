@@ -115,6 +115,7 @@ def test_records_longest_stance_per_leg_and_fastest_time_per_distance_and_test(a
     fast = post(client, headers, {**SPRINT, "time_ms": 3300}, "s2")["id"]
     post(client, headers, {**SPRINT, "time_ms": 3400}, "s3")
     ten = post(client, headers, {**SPRINT, "distance_m": 10, "time_ms": 2100}, "s4")["id"]
+    flying = post(client, headers, {**SPRINT, "start": "crossing", "time_ms": 2900}, "s5")["id"]
     t_test = post(client, headers, {**AGILITY, "test": "t_test", "time_ms": 10_500}, "t1")["id"]
     post(client, headers, REACTION, "r1")
     records = client.get(f"/api/athletes/{athlete}/records", headers=auth("coach")).json()["records"]
@@ -122,9 +123,11 @@ def test_records_longest_stance_per_leg_and_fastest_time_per_distance_and_test(a
     assert (left["value"], left["source_id"], left["unit"], left["source"]) == (20_000, best, "ms", "measurement")
     assert (left["previous"]["value"], left["previous"]["source_id"]) == (12_400, first)
     assert (by(records, "balance_stance", leg="R")["source_id"], by(records, "balance_stance", leg="R")["previous"]) == (right, None)
-    twenty = by(records, "sprint_time", distance_m=20)
+    twenty = by(records, "sprint_time", distance_m=20, start="cue")
     assert (twenty["value"], twenty["source_id"], twenty["previous"]["source_id"]) == (3300, fast, slow)
     assert by(records, "sprint_time", distance_m=10)["source_id"] == ten
+    # a line start leaves out reaction time, so it is a separate record and never beats a beep start
+    assert (by(records, "sprint_time", distance_m=20, start="crossing")["source_id"], twenty["source_id"]) == (flying, fast)
     assert by(records, "agility_time", test="t_test")["source_id"] == t_test
     assert not any(r["measure"].startswith("reaction") for r in records)
 

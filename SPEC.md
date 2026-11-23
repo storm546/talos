@@ -831,7 +831,7 @@ created by the idempotent startup migration.
     `avg_pace_s_per_km` (null or 60–3600 for run/walk, any positive for cycle), `splits_s` (up to 500 numbers > 0).
 - `GET /api/measurements?athlete_id=&kind=&limit=100&offset=0`: newest first, `{...fields, id, athlete_id, kind,
   created_at, client_id}`; scope as `GET /api/form`. Athlete export includes `measurements`; delete removes them.
-- Records (section 8) add `balance_stance` per `leg` (longest, ms), `sprint_time` per `distance_m` and `agility_time`
+- Records (section 8) add `balance_stance` per `leg` (longest, ms), `sprint_time` per `distance_m` and `start` (a beep start includes reaction time) and `agility_time`
   per `test` (fastest, ms; the earlier result keeps a tie).
 
 **Dashboard**: the athlete page gains a "Field tests" panel: latest range of motion per joint (left, right, error),
