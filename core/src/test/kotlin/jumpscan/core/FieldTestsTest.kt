@@ -177,7 +177,7 @@ class FieldTestsTest {
         // 0.0 at 400 ms to 0.2 at 500 ms reaches 0.12 at 460 ms; 0.0 at 1400 to 0.13 at 1500 reaches it at 1492.31.
         assertEquals(460.0, crossings[0], 1e-9)
         assertEquals(1400 + 100 * 0.12 / 0.13, crossings[1], 1e-9)
-        assertEquals(433.0, LineCrossing.interpolate(400, 0.06, 500, 0.06 + 0.18, 0.12), 1e-9) // a third of the way
+        assertEquals(400 + 100 / 3.0, LineCrossing.interpolate(400, 0.06, 500, 0.06 + 0.18, 0.12), 1e-9) // a third of the way
         assertEquals(500.0, LineCrossing.interpolate(400, 0.2, 500, 0.1, 0.12), 1e-9) // falling activity: the busy frame
     }
 
