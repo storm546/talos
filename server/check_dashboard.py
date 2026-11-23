@@ -44,11 +44,11 @@ def check():
         for role, account in [('coach', 'coach'), ('athlete', 'athlete1'), ('admin', 'admin')]:
             login(account)
             # The athlete's own page starts with the phone's Today cards from /api/me/today (SPEC 10.2).
-            assert page.locator('.overview-card').count() == (10 if role == 'athlete' else 4)
+            assert page.locator('.overview-card').count() - page.locator('#week .overview-card').count() == (10 if role == 'athlete' else 4)
             assert all(value.replace('\u00a0', '').replace('/', '').replace(' ', '').replace(',', '').replace('.', '').isdigit()
                        for value in page.locator('.overview-card .big-value').all_text_contents())
             if role == 'athlete':
-                assert page.locator('progress').count() == 4
+                assert page.locator('.today-grid progress').count() == 4
                 assert page.locator('.today-hero .card-subject').inner_text() in ('Добре', 'Нормално', 'Внимание', 'Още се учи', 'Няма данни')
                 for title in ('Днешен план', 'Тегло', 'Нови рекорди (7 дни)', 'Следваща тренировка', 'Съобщения', 'Последен скок'):
                     expect(page.get_by_role('heading', name=title, exact=True)).to_be_visible()
@@ -298,6 +298,42 @@ def check():
         page.get_by_role('button', name='Изход', exact=True).click()
         page.locator('#login-form').wait_for()
 
+        # SPEC 10.3: the athlete's week under Today, and "not feeling 100%" (set through the API, as the phone does).
+        login('athlete1')
+        page.locator('#week').wait_for()
+        assert page.evaluate("""async () => (await fetch('/api/me/days/' + apiDay() + '/adjustment', {method: 'PUT',
+            headers: {'Authorization': 'Bearer ' + state.token, 'Content-Type': 'application/json'},
+            body: JSON.stringify({reason: 'tired', mode: 'lighter'})})).status""") == 200
+        page.evaluate("load('today')")
+        page.locator('.today-hero').get_by_text('Не сте на 100%', exact=True).wait_for()
+        assert page.locator('.today-hero').get_by_text('умора · по-леко днес', exact=True).is_visible()
+        expect(page.locator('#week').get_by_role('heading', name='Тази седмица', exact=True)).to_be_visible()
+        for title in ('Тренировки', 'Постоянство', 'Самочувствие и храна', 'Рекорди'):
+            expect(page.locator('#week').get_by_role('heading', name=title, exact=True)).to_be_visible()
+        assert page.locator('#week .stat-line small').filter(has_text='от последните').count() >= 1
+        assert page.locator('#week-next').is_disabled()
+        dates = page.locator('#week .section-head .muted').inner_text()
+        page.locator('#week-prev').click()
+        expect(page.locator('#week .section-head .muted')).not_to_have_text(dates)
+        assert not page.locator('#week-next').is_disabled()
+        page.locator('#week-next').click()
+        expect(page.locator('#week .section-head .muted')).to_have_text(dates)
+        for theme in ['dark', 'light']:
+            page.evaluate(f'document.documentElement.dataset.theme = "{theme}"')
+            for language in ['bg', 'en']:
+                page.locator('#language').select_option(language)
+                for width in [1280, 390]:
+                    page.set_viewport_size({'width': width, 'height': 960})
+                    page.locator('#week').scroll_into_view_if_needed()
+                    page.locator('#week').screenshot(path=str(output / f'athlete-week-{language}-{width}-{theme}.png'))
+                    assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+                    page.evaluate('window.scrollTo(0, 0)')
+                    screenshot(f'athlete-today-adjusted-{language}-{width}-{theme}')
+        page.locator('#language').select_option('bg')
+        page.set_viewport_size({'width': 1280, 'height': 960})
+        page.get_by_role('button', name='Изход', exact=True).click()
+        page.locator('#login-form').wait_for()
+
         # SPEC 9 wave 2: coach readiness board, morning digest and nudges (the seed has every state).
         login('coach')
         page.locator('.main-nav').get_by_role('button', name='Готовност', exact=True).click()
@@ -305,6 +341,7 @@ def check():
         assert page.locator('.rd-table tbody tr').count() == 6
         statuses = set(page.locator('.rd-table .rd-status').all_text_contents())
         assert {'Добре', 'Нормално', 'Внимание', 'Още се учи'} <= statuses, statuses
+        assert page.locator('.rd-table .rd-not-100').all_text_contents() == ['Не е на 100%']  # neutral, no reason
         assert page.locator('.rd-digest').get_by_text('Няма отчет: Мартин Колев', exact=True).is_visible()
         assert page.locator('.rd-digest').get_by_text('Под обичайното: Борис Петров', exact=True).is_visible()
         page.locator('#digest-phrase').click()
