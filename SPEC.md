@@ -1,6 +1,7 @@
 # JumpScan: spec and contracts
 
 Three parts in one repo. Each worker touches only its own directory.
+Design and development principles: `PHILOSOPHY.md` (read it first).
 
 ```
 server/   Python API + coach dashboard         (Worker S)
