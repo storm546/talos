@@ -310,8 +310,9 @@ def build_tools(h, operations):
     read("get_workout", "get_workout", "Read one workout with its sets.", workout_id=(record_id, ...))
     read("list_templates", "list_templates", "List workout templates you can start from.")
     read("athlete_records", "athlete_records", "Read personal records (jumps, form, strength, field tests).", **target)
-    read("leaderboard", "leaderboard", "Read the club jump leaderboard (opted-in athletes only).",
-         measure=(Literal["jump_height", "flight_time"], "jump_height"), period=(Literal["30", "90", "all"], "all"))
+    read("leaderboard", "leaderboard", "Read the club jump leaderboard (opted-in athletes only), ranked per "
+         "frame-rate class within one camera view.", measure=(Literal["jump_height", "flight_time"], "jump_height"),
+         period=(Literal["30", "90", "all"], "all"), view=(Literal["front", "side"], "front"))
     read("list_measurements", "list_measurements", "Read field tests: range of motion, balance, sprint, reaction, "
          "agility and GPS cardio.", **optional_target,
          kind=(Literal["rom", "balance", "sprint", "reaction", "agility", "cardio"] | None, None), **paging)

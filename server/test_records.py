@@ -12,8 +12,12 @@ from server.test_server import METRICS, api, auth, template, temporary_directory
 from server.test_training_nutrition_api import audit_actions, day, exercise_id, make_athlete
 
 
-def jump(client, headers, height, warnings=(), flight=None):
-    body = {**METRICS, "jump_height_cm": height, "flight_time_ms": flight or height * 10, "warnings": list(warnings)}
+def jump(client, headers, height, warnings=(), flight=None, fps=60):
+    body = {**METRICS, "jump_height_cm": height, "flight_time_ms": flight or height * 10, "warnings": list(warnings),
+            "fps": fps}
+    if "single_leg_view" in warnings:  # side view measures one leg (SPEC 2)
+        body.update(knee_flexion_contact_r=None, knee_flexion_peak_r=None, fppa_peak_l=None, fppa_peak_r=None,
+                    knee_ankle_ratio=None, flexion_asymmetry_pct=None)
     response = client.post("/api/jumps", json=body, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()["id"]
@@ -41,15 +45,78 @@ def test_jump_records_exclude_uncertain_results_and_keep_the_previous_best(api, 
     athlete, headers = make_athlete(client, auth)
     first = jump(client, headers, 30)
     jump(client, headers, 45, ["uncertain_timing"])
-    best = jump(client, headers, 32)
-    jump(client, headers, 32)  # a tie does not replace the earlier record
+    jump(client, headers, 33)  # better, but within the measurement error: not a record
+    best = jump(client, headers, 35)
+    jump(client, headers, 35)  # a tie does not replace the earlier record
     jump(client, headers, 50, ["low_visibility"])
     records = client.get(f"/api/athletes/{athlete}/records", headers=headers).json()
     assert records["excluded_jumps"] == 2
     height = by_measure(records, "jump_height")
-    assert (height["value"], height["source_id"], height["unit"], height["new"]) == (32, best, "cm", True)
+    assert (height["value"], height["source_id"], height["unit"], height["new"]) == (35, best, "cm", True)
+    assert (height["view"], height["fps_class"]) == ("front", 60)
+    assert height["margin"] == round(records_api.jump_margin("jump_height", "front", 35), 2)
     assert (height["previous"]["value"], height["previous"]["source_id"]) == (30, first)
-    assert by_measure(records, "flight_time")["value"] == 320
+    flight = by_measure(records, "flight_time")
+    assert (flight["value"], flight["previous"]["value"], flight["margin"]) == (350, 300, 32.1)
+
+
+def test_measurement_error_table_and_frame_rate_classes():
+    assert records_api.FLIGHT_ERROR_MS == {"front": 32.1, "side": 60.6}
+    assert records_api.jump_margin("flight_time", "side", 30) == 60.6
+    # h = g t^2 / 8: a 30 cm jump (0.495 s) gains about 4 cm from 32.1 ms more flight; a higher jump gains more.
+    assert records_api.jump_margin("jump_height", "front", 30) == pytest.approx(4.02, abs=0.01)
+    assert records_api.jump_margin("jump_height", "front", 50) > records_api.jump_margin("jump_height", "front", 30)
+    assert records_api.jump_margin("jump_height", "side", 30) == pytest.approx(7.80, abs=0.01)
+    assert [records_api.fps_class(f) for f in (10, 29.97, 33, 42, 43, 59.94, 100, 120, 200, 240, 400, 480)] == [
+        30, 30, 30, 30, 60, 60, 120, 120, 240, 240, 480, 480]
+    assert records_api.jump_view({"warnings": ["single_leg_view"]}) == "side"
+    assert records_api.jump_view({"warnings": []}) == "front"
+
+
+def test_side_view_jumps_count_and_groups_are_compared_separately(api, auth):
+    client, _ = api
+    athlete, headers = make_athlete(client, auth)
+    front = jump(client, headers, 30)
+    side = jump(client, headers, 28, ["single_leg_view"])
+    jump(client, headers, 60, ["single_leg_view", "uncertain_timing"])  # still excluded: a real warning
+    fast = jump(client, headers, 27, fps=240)  # lower than the 60 fps best, but the first in its own class
+    side_beat = jump(client, headers, 37, ["single_leg_view"])  # more than the side error above 28 cm
+    records = client.get(f"/api/athletes/{athlete}/records", headers=headers).json()
+    assert records["excluded_jumps"] == 1
+    heights = {(r["view"], r["fps_class"]): r for r in records["records"] if r["measure"] == "jump_height"}
+    assert set(heights) == {("front", 60), ("front", 240), ("side", 60)}
+    assert (heights["front", 60]["source_id"], heights["front", 60]["previous"]) == (front, None)
+    assert (heights["front", 240]["source_id"], heights["front", 240]["previous"]) == (fast, None)
+    assert heights["side", 60]["source_id"] == side_beat and heights["side", 60]["previous"]["source_id"] == side
+    assert heights["side", 60]["margin"] == round(records_api.jump_margin("jump_height", "side", 37), 2)
+    # A side gain within the side error is not a record, though it would beat a front record.
+    jump(client, headers, 41, ["single_leg_view"])
+    records = client.get(f"/api/athletes/{athlete}/records", headers=headers).json()
+    side_best = next(r for r in records["records"]
+                     if r["measure"] == "jump_height" and r["view"] == "side")
+    assert side_best["source_id"] == side_beat
+
+
+def test_leaderboard_uses_the_record_rule_view_and_frame_rate_class(api, auth):
+    client, _ = api
+    people = []
+    for index, name in enumerate(("Ana Petrova", "Boris Kolev")):
+        _, headers = make_athlete(client, auth, email=f"lb{index}@demo.test")
+        with main.database(api[1]) as db:
+            db.execute("UPDATE users SET name = ? WHERE email = ?", (name, f"lb{index}@demo.test"))
+        client.patch("/api/me/profile", json={"leaderboard_opt_in": True}, headers=headers)
+        people.append(headers)
+    jump(client, people[0], 90)
+    jump(client, people[0], 93)  # within error of 90: Ana's board value stays 90
+    jump(client, people[1], 85, fps=120)
+    jump(client, people[1], 70, ["single_leg_view"])
+    rows = {row["name"]: row for row in board(client, people[0])["rows"]}
+    assert (rows["Ana P."]["value"], rows["Ana P."]["fps_class"], rows["Ana P."]["rank"]) == (90, 60, 1)
+    # Boris is first in the 120 fps class, not second behind Ana's 60 fps jump.
+    assert (rows["Boris K."]["value"], rows["Boris K."]["fps_class"], rows["Boris K."]["rank"]) == (85, 120, 1)
+    side = board(client, people[0], view="side")
+    assert side["view"] == "side" and side["error_ms"] == 60.6
+    assert [(row["name"], row["value"]) for row in side["rows"]] == [("Boris K.", 70)]
 
 
 def test_set_records_use_epley_up_to_ten_reps(api, auth):
@@ -119,8 +186,9 @@ def test_record_event_only_when_a_previous_best_is_beaten(api, auth):
     jump(client, headers, 30)
     jump(client, headers, 28)
     jump(client, headers, 40, ["low_visibility"])
-    assert [e["type"] for e in events] == ["jump", "jump", "jump"]
-    beat = jump(client, headers, 33)
+    jump(client, headers, 33)  # within the measurement error of 30 cm
+    assert [e["type"] for e in events] == ["jump", "jump", "jump", "jump"]
+    beat = jump(client, headers, 35)
     record = events[-1]
     assert record == {"type": "record", "id": beat, "athlete_id": athlete, "club_id": record["club_id"],
                       "at": record["at"]}
@@ -136,7 +204,8 @@ def test_leaderboard_shows_opted_in_athletes_with_short_names(api, auth):
     coach = board(client, auth("coach"))
     assert [row["name"] for row in sorted(coach["rows"], key=lambda r: r["name"])] == ["Александра И.", "Даниел С."]
     assert coach["not_shown"] == 4 and "me" not in coach and coach["unit"] == "cm"
-    assert all(set(row) == {"rank", "name", "value", "date", "you"} for row in coach["rows"])
+    assert all(set(row) == {"rank", "name", "value", "date", "fps_class", "you"} for row in coach["rows"])
+    assert (coach["view"], coach["error_ms"]) == ("front", 32.1)
     mine = board(client, auth("athlete1"))
     assert "not_shown" not in mine and [row["you"] for row in mine["rows"]].count(True) == 1
     assert mine["me"] == {"leaderboard_opt_in": True, "leaderboard_allowed": False, "under_18": False, "shown": True}
@@ -156,6 +225,7 @@ def test_leaderboard_shows_opted_in_athletes_with_short_names(api, auth):
     assert client.get("/api/clubs/me/leaderboard").status_code == 401
     assert client.get("/api/clubs/me/leaderboard?measure=quality", headers=athlete2).status_code == 422
     assert client.get("/api/clubs/me/leaderboard?period=7", headers=athlete2).status_code == 422
+    assert client.get("/api/clubs/me/leaderboard?view=top", headers=athlete2).status_code == 422
 
 
 def test_withdrawn_consent_or_deactivation_removes_an_athlete(api, auth):

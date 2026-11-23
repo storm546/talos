@@ -6,6 +6,7 @@ main module (auth, scope and audit helpers are reused).
 
 from datetime import datetime, timedelta, timezone
 import json
+from math import log, sqrt
 from typing import Annotated, Literal
 
 from fastapi import Depends, HTTPException, Query
@@ -17,6 +18,14 @@ from .input_bounds import SQLITE_MAX, SqlitePath
 JUMP_MEASURES = {"jump_height": ("jump_height_cm", "cm", 1), "flight_time": ("flight_time_ms", "ms", 0)}
 EPLEY_MAX_REPS = 10
 NEW_RECORD_DAYS = 7
+# Flight-time measurement error per view (ms): the one table that decides when a jump beats a record. Front: mean
+# absolute error of the shipped rules on nine Twente subjects at 33 fps (docs/validacia.md 4.8, 32.1 ms). Side: the
+# "correct" bound of the shipped learned side policy, two 33 fps frames (core/VALIDATION.md, 60.6 ms). No faster
+# capture has a measured error yet, so every frame-rate class uses these numbers. Wave 6B's repeatability analysis
+# (smallest detectable change per view) replaces this table when it exists.
+FLIGHT_ERROR_MS = {"front": 32.1, "side": 60.6}
+FPS_CLASSES = (30, 60, 120, 240, 480)
+G = 9.81
 
 
 def init_schema(db):
@@ -34,24 +43,57 @@ class LeaderboardChoice(StrictModel):
     leaderboard_opt_in: bool
 
 
+def jump_view(metrics):
+    """Side view always carries `single_leg_view` (SPEC 2); every other jump is a front-view jump."""
+    return "side" if "single_leg_view" in metrics.get("warnings", ()) else "front"
+
+
+def fps_class(fps):
+    """The nearest standard capture rate (30, 60, 120, 240 or 480 fps) on a log scale."""
+    return min(FPS_CLASSES, key=lambda rate: abs(log(fps / rate)))
+
+
 def valid_jumps(db, athlete_id, since=None):
-    """Jumps without any warning, oldest first, and how many were left out because of a warning."""
+    """Jumps without a warning other than the side view's own `single_leg_view`, oldest first, each with its view
+    and frame-rate class, and how many were left out because of a warning."""
     rows, excluded = [], 0
     for row in db.execute("SELECT id, created_at, metrics FROM jumps WHERE athlete_id = ? "
                           "AND (? IS NULL OR created_at >= ?) ORDER BY created_at, id", (athlete_id, since, since)):
         metrics = json.loads(row["metrics"])
-        if metrics.get("warnings"):
+        if set(metrics.get("warnings", ())) - {"single_leg_view"}:
             excluded += 1
         else:
-            rows.append({**metrics, "id": row["id"], "date": row["created_at"]})
+            rows.append({**metrics, "id": row["id"], "date": row["created_at"], "view": jump_view(metrics),
+                         "fps_class": fps_class(metrics["fps"])})
     return rows, excluded
 
 
-def progression(rows, key):
-    """The best row and the best before it (the record it beat); a tie keeps the earlier record."""
+def jump_margin(measure, view, value):
+    """How much a jump must beat `value` by to count: the view's flight-time error, as ms or as the height it adds
+    to a jump of this height (h = g t^2 / 8)."""
+    error = FLIGHT_ERROR_MS[view]
+    if measure == "flight_time":
+        return error
+    flight = sqrt(8 * value / 100 / G)
+    return G * (flight + error / 1000) ** 2 / 8 * 100 - value
+
+
+def jump_groups(jumps, measure):
+    """{(view, frame-rate class): jumps with this measure}, so jumps are compared only within one group."""
+    field = JUMP_MEASURES[measure][0]
+    groups = {}
+    for jump in jumps:
+        if jump.get(field) is not None:
+            groups.setdefault((jump["view"], jump["fps_class"]), []).append(jump)
+    return groups
+
+
+def progression(rows, key, margin=None):
+    """The best row and the best before it (the record it beat); a tie keeps the earlier record. With `margin`, a
+    new best must beat the old one by more than margin(old best value)."""
     best = previous = None
     for row in rows:
-        if best is None or key(row) > key(best):
+        if best is None or key(row) > (key(best) + margin(key(best)) if margin else key(best)):
             previous, best = best, row
     return best, previous
 
@@ -64,10 +106,12 @@ def compute_records(db, athlete_id, catalogue):
     recent = (datetime.now(timezone.utc) - timedelta(days=NEW_RECORD_DAYS)).date().isoformat()
     records = []
 
-    def add(measure, unit, source, rows, value, rank=None, **extra):
-        best, previous = progression(rows, rank or value)
+    def add(measure, unit, source, rows, value, rank=None, margin=None, **extra):
+        best, previous = progression(rows, rank or value, margin)
         if best is None:
             return
+        if margin:
+            extra["margin"] = round(margin(value(best)), 2)
 
         def point(row):
             sets = {"load_kg": row["load_kg"], "reps": row["reps"]} if source == "set_log" else {}
@@ -78,7 +122,9 @@ def compute_records(db, athlete_id, catalogue):
 
     jumps, excluded = valid_jumps(db, athlete_id)
     for measure, (field, unit, _) in JUMP_MEASURES.items():
-        add(measure, unit, "jump", [j for j in jumps if j.get(field) is not None], lambda row, f=field: row[f])
+        for (view, rate), rows in sorted(jump_groups(jumps, measure).items()):
+            add(measure, unit, "jump", rows, lambda row, f=field: row[f], view=view, fps_class=rate,
+                margin=lambda value, m=measure, v=view: jump_margin(m, v, value))
 
     holds = {}
     for row in db.execute("SELECT id, created_at, metrics FROM form_sets WHERE athlete_id = ? ORDER BY created_at, id",
@@ -166,7 +212,7 @@ def install(app, h):
 
     @app.get("/api/clubs/me/leaderboard")
     def leaderboard(measure: Literal["jump_height", "flight_time"] = "jump_height",
-                    period: Literal["30", "90", "all"] = "all",
+                    period: Literal["30", "90", "all"] = "all", view: Literal["front", "side"] = "front",
                     group_id: Annotated[int | None, Query(gt=0, le=SQLITE_MAX)] = None,
                     user=Depends(current_user), db=Depends(get_db)):
         if group_id is not None and h.scoped_group(db, user, group_id)["club_id"] != user["club_id"]:
@@ -181,16 +227,22 @@ def install(app, h):
             if not on_leaderboard(athlete):
                 not_shown += 1
                 continue
-            values = [jump for jump in valid_jumps(db, athlete["id"], since)[0] if jump.get(field) is not None]
-            if values:
-                best = max(values, key=lambda jump: round(jump[field], digits))
-                rows.append({"name": display_name(athlete["name"]), "value": round(best[field], digits),
-                             "date": best["date"], "you": athlete["id"] == user["id"]})
-        rows.sort(key=lambda row: (-row["value"], row["name"]))
+            # The athlete's record under the same rule as their records page, per frame-rate class of this view.
+            for (jumps_view, rate), jumps in jump_groups(valid_jumps(db, athlete["id"], since)[0], measure).items():
+                if jumps_view == view:
+                    best = progression(jumps, lambda jump: jump[field],
+                                       lambda value: jump_margin(measure, view, value))[0]
+                    rows.append({"name": display_name(athlete["name"]), "value": round(best[field], digits),
+                                 "date": best["date"], "fps_class": rate, "you": athlete["id"] == user["id"]})
+        # Ranked within each frame-rate class; ties share a rank.
+        rows.sort(key=lambda row: (row["fps_class"], -row["value"], row["name"]))
+        start = {}
         for index, row in enumerate(rows):
-            tied = index and row["value"] == rows[index - 1]["value"]
-            row["rank"] = rows[index - 1]["rank"] if tied else index + 1
-        result = {"measure": measure, "unit": unit, "period": period, "group_id": group_id, "rows": rows}
+            first = start.setdefault(row["fps_class"], index)
+            tied = index > first and row["value"] == rows[index - 1]["value"]
+            row["rank"] = rows[index - 1]["rank"] if tied else index - first + 1
+        result = {"measure": measure, "unit": unit, "period": period, "group_id": group_id, "view": view,
+                  "error_ms": FLIGHT_ERROR_MS[view], "rows": rows}
         if user["role"] == "athlete":
             result["me"] = leaderboard_state(user)
         else:

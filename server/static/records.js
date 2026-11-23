@@ -2,7 +2,9 @@
 // Personal records and the club leaderboard (SPEC 8). Loaded after dashboard.js and built from its helpers.
 Object.assign(dictionary.bg, {
   recTitle:'Рекорди', recBoard:'Класация', recClubBoard:'Клубна класация',
-  recIntro:'Най-добрите резултати от вече записаните скокове, серии и задържания. Скокове с предупреждение не се броят.',
+  recIntro:'Най-добрите резултати от вече записаните скокове, серии и задържания. Нов рекорд при скок се брои само ако подобрява предишния с повече от грешката на измерването, и само спрямо скокове от същия изглед и със същата честота на кадрите. Скокове с предупреждение не се броят; страничният изглед сам по себе си не е предупреждение.',
+  recFront:'отпред', recSide:'отстрани', recFps:'кадъра/с', recMargin:'За нов рекорд: над ', recView:'Изглед',
+  recBoardNote:'Класирането е отделно за всяка честота на кадрите. Разлика под грешката на измерването (около {ms} мс време във въздуха) не е реална разлика.',
   recHeight:'Височина на скока', recFlight:'Време във въздуха', recHeaviest:'Най-тежка серия',
   recEstimate:'Изчислен максимум за 1 повторение', recEstimateNote:'По формулата на Епли, само от серии до 10 повторения.',
   recHold:'Най-дълго задържане', recPrevious:'Предишен рекорд', recNew:'Нов рекорд', recFirst:'Първи резултат',
@@ -19,7 +21,9 @@ Object.assign(dictionary.bg, {
 });
 Object.assign(dictionary.en, {
   recTitle:'Records', recBoard:'Leaderboard', recClubBoard:'Club leaderboard',
-  recIntro:'Best results from the jumps, sets and holds already recorded. Jumps with a warning do not count.',
+  recIntro:'Best results from the jumps, sets and holds already recorded. A jump counts as a new record only when it beats the previous best by more than the measurement error, and only against jumps from the same camera view and frame rate. Jumps with a warning do not count; the side view on its own is not a warning.',
+  recFront:'front', recSide:'side', recFps:'fps', recMargin:'New record needs more than ', recView:'View',
+  recBoardNote:'Ranked separately for each frame rate. A difference smaller than the measurement error (about {ms} ms of flight time) is not a real difference.',
   recHeight:'Jump height', recFlight:'Flight time', recHeaviest:'Heaviest set',
   recEstimate:'Estimated one-rep max', recEstimateNote:'Epley formula, from sets of at most 10 reps only.',
   recHold:'Longest hold', recPrevious:'Previous best', recNew:'New record', recFirst:'First result',
@@ -34,7 +38,7 @@ Object.assign(dictionary.en, {
   recAllow:'Confirm participation (under 18)', recDisallow:'Withdraw confirmation', recUnder18:'Under 18',
   recScale:'shared scale 0–', recCm:'cm', recMs:'ms', recKg:'kg', recSec:'s'
 });
-state.board = {measure:'jump_height', period:'all', group:''};
+state.board = {measure:'jump_height', period:'all', view:'front', group:''};
 const REC_LABEL = {jump_height:'recHeight', flight_time:'recFlight', heaviest_set:'recHeaviest', estimated_1rm:'recEstimate', form_hold:'recHold'};
 const REC_PERIOD = {'30':'rec30', '90':'rec90', all:'recAll'};
 
@@ -43,7 +47,7 @@ async function recordsData(view) {
     const target = athleteTarget();
     return {records: target ? await api('/api/athletes/' + target.id + '/records') : null};
   }
-  const params = new URLSearchParams({measure:state.board.measure, period:state.board.period});
+  const params = new URLSearchParams({measure:state.board.measure, period:state.board.period, view:state.board.view});
   if (state.board.group) params.set('group_id', state.board.group);
   const own = state.user.role === 'admin' ? '?club_id=' + state.user.club_id : '';
   const [leaderboard, boardGroups] = await Promise.all([api('/api/clubs/me/leaderboard?' + params), api('/api/groups' + own)]);
@@ -71,11 +75,13 @@ function recordsBoard(records) {
   const lanes = node('div', null, 'flight-lanes'); board.append(lanes);
   for (const record of jumps) {
     const lane = node('div', null, 'flight-lane' + (record.new ? ' record-new' : ''));
-    const label = record.measure === 'form_hold' ? record['name_' + state.language] + ' · ' + t('recHold') : t(REC_LABEL[record.measure]);
+    const label = record.measure === 'form_hold' ? record['name_' + state.language] + ' · ' + t('recHold') : t(REC_LABEL[record.measure]) +
+      (record.view ? ' · ' + t(record.view === 'side' ? 'recSide' : 'recFront') + ' · ' + record.fps_class + ' ' + t('recFps') : '');
     if (record.measure !== 'form_hold') lane.append(flightGlyph(boardJump(record.measure, record.value), scale));
     lane.append(node('span', label, 'record-label'), node('strong', recValue(record)));
     if (record.new) lane.append(node('span', t('recNew'), 'badge record-badge'));
     lane.append(node('span', date(record.date)), node('span', recPrevious(record)));
+    if (record.margin != null) lane.append(node('span', t('recMargin') + recValue({...record, value:record.margin}), 'muted'));
     lanes.append(lane);
   }
   return board;
@@ -154,10 +160,12 @@ function leaderboard(content) {
   const data = state.leaderboard;
   const own = state.user.role === 'athlete';
   const pick = change => { Object.assign(state.board, change); load('leaderboard'); };
-  const hero = overviewHero(t('recClubBoard'), t('recBoard'), t(REC_LABEL[data.measure]) + ' · ' + t(REC_PERIOD[data.period]));
+  const hero = overviewHero(t('recClubBoard'), t('recBoard'), t(REC_LABEL[data.measure]) + ' · ' +
+    t(data.view === 'side' ? 'recSide' : 'recFront') + ' · ' + t(REC_PERIOD[data.period]));
   const controls = node('div', null, 'board-controls');
   controls.append(segmented('recMeasure', [['jump_height', 'recHeight'], ['flight_time', 'recFlight']], data.measure, measure => pick({measure})),
-    segmented('recPeriod', [['30', 'rec30'], ['90', 'rec90'], ['all', 'recAll']], data.period, period => pick({period})));
+    segmented('recPeriod', [['30', 'rec30'], ['90', 'rec90'], ['all', 'recAll']], data.period, period => pick({period})),
+    segmented('recView', [['front', 'recFront'], ['side', 'recSide']], data.view, view => pick({view})));
   const groups = state.boardGroups.filter(g => g.club_id === state.user.club_id);
   if (groups.length) {
     const select = node('select'); select.id = 'board-group'; select.setAttribute('aria-label', t('recGroup'));
@@ -177,7 +185,7 @@ function leaderboard(content) {
     for (const row of rows.slice(0, 8)) {
       const lane = node('li', null, 'flight-lane' + (row.you ? ' own-lane' : ''));
       lane.append(flightGlyph(boardJump(data.measure, row.value), scale), node('strong', recValue({...row, unit:data.unit, measure:data.measure})),
-        node('span', row.rank + '. ' + row.name + (row.you ? ' · ' + t('recYou') : '')));
+        node('span', row.rank + '. ' + row.name + (row.you ? ' · ' + t('recYou') : '') + ' · ' + row.fps_class + ' ' + t('recFps')));
       lanes.append(lane);
     }
     board.append(lanes); hero.append(board);
@@ -198,16 +206,17 @@ function leaderboard(content) {
   }
   if (!rows.length) content.append(node('p', t('recEmptyBoard'), 'empty'));
   else {
-    const grid = table(['recRank', 'recName', 'recBest', 'date'], t('recBoard'));
+    const grid = table(['recRank', 'recName', 'recBest', 'recFps', 'date'], t('recBoard'));
     grid.wrap.classList.add('club-table', 'board-table');
     grid.head.children[0].className = 'num'; grid.head.children[2].className = 'num';
     for (const row of rows) {
       const tr = node('tr', null, row.you ? 'own-row' : null);
       tr.append(node('td', String(row.rank), 'num'), node('td', row.name + (row.you ? ' · ' + t('recYou') : '')),
-        node('td', recValue({...row, unit:data.unit, measure:data.measure}), 'num'), node('td', date(row.date)));
+        node('td', recValue({...row, unit:data.unit, measure:data.measure}), 'num'), node('td', String(row.fps_class)),
+        node('td', date(row.date)));
       grid.body.append(tr);
     }
-    content.append(grid.wrap);
+    content.append(grid.wrap, node('p', t('recBoardNote').replace('{ms}', format(data.error_ms)), 'muted'));
   }
   if (!own) content.append(node('p', t('recNotShown') + format(data.not_shown), 'muted board-hidden'));
 }
