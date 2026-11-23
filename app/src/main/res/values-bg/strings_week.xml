@@ -38,7 +38,7 @@
     <string name="week_card_line">%1$s %2$d%% · %3$s</string>
     <string name="adj_question">Не сте на 100%?</string>
     <string name="adj_title">Не съм на 100% днес</string>
-    <string name="adj_intro">Кажете на Талос какъв е денят и планът ще се съобрази. Треньорът вижда само, че не сте на 100%, никога причината.</string>
+    <string name="adj_intro">Кажете на Talos какъв е денят и планът ще се съобрази. Треньорът вижда само, че не сте на 100%, никога причината.</string>
     <string name="adj_reason">Какво се случва?</string>
     <string name="adj_ill">Неразположение</string>
     <string name="adj_aches">Болежки</string>
