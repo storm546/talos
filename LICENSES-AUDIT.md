@@ -78,6 +78,7 @@ Other server-side items:
 | com.google.mlkit:barcode-scanning (bundled, offline model) | 17.3.0 | ML Kit Terms of Service (Google APIs Terms); not an open-source licence | yes | CHECK: proprietary terms, not GPL-compatible in the FSF sense; the model runs on the device and sends no images. Confirm with the organisers that a GPL entry may link it, or replace it (e.g. ZXing, Apache-2.0) |
 | Android Gradle Plugin | 8.7.3 | Apache-2.0 | build only | OK |
 | Gradle wrapper (`gradle/wrapper/gradle-wrapper.jar`, Gradle 8.10.2) | — | Apache-2.0 | committed to the repo, not in the APK | OK |
+| Loop Habit Tracker, uhabits-core `Score.compute` (habit strength formula, ported to `core/.../Consistency.kt` and `server/week_api.py`, SPEC 10.3) | upstream source in `/root/research/competitors/src/uhabits` | GPL-3.0-or-later, Copyright (C) 2016-2025 Álinson Santos Xavier | yes (as ported code) | OK: same licence as the project; attribution in both file headers |
 | JUnit Jupiter | 5.11.3 | EPL-2.0 | test only, never shipped | OK for this use (EPL-2.0 is not GPL-compatible for combined distribution, but test-only use does not combine it with the product) |
 
 Note on Apache-2.0: the FSF considers Apache-2.0 compatible with GPL version 3 (not with GPL version 2).
