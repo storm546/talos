@@ -94,17 +94,20 @@ class MainActivity : Activity() {
         if (savedInstanceState?.getString("screen") == "diagnostics" || pendingTrial != null) diagnostics()
         else if (savedInstanceState?.getString("screen") == "profile") profile()
         else if (lastForm != null && retained?.screen == "form_result") formResult(lastForm!!.metrics, lastForm)
-        else if (analysis != null && retained?.screen in listOf("frames", "result")) { if (edits != null) frameEditor() else result() } else if (!openVideo(intent)) {
+        else if (analysis != null && retained?.screen in listOf("frames", "result")) { if (edits != null) frameEditor() else result() } else if (intent.data?.scheme == "talos") home() else if (!openVideo(intent)) {
             if (token().isEmpty()) login() else home()
         }
         sendPending(automatic = true)
         scheduleReminder(this)
         openNotification(intent)
+        openDeepLink(intent)
     }
 
     override fun onResume() {
         super.onResume()
-        if (token().isNotEmpty() && nudges == null) nudges = NudgeStream(applicationContext, base(), token())
+        if (token().isNotEmpty() && nudges == null) nudges = NudgeStream(applicationContext, base(), token()) { type ->
+            runOnUiThread { if (!isDestroyed && screen == "home" && type in TODAY_EVENTS) refreshToday() }
+        }
     }
 
     override fun onPause() {
@@ -114,6 +117,16 @@ class MainActivity : Activity() {
 
     private fun openNotification(intent: Intent) {
         if (intent.getStringExtra("open") == "checkin" && token().isNotEmpty()) { intent.removeExtra("open"); checkin() }
+        else if (intent.getStringExtra("open") == "today") { intent.removeExtra("open"); home() }
+    }
+
+    /** talos://tool/<key> from launcher shortcuts and links: the tool with that hub key, or the hub for an unknown key. */
+    private fun openDeepLink(intent: Intent): Boolean {
+        val link = intent.data?.takeIf { it.scheme == "talos" && it.host == "tool" } ?: return false
+        intent.data = null
+        val tool = toolGroups().flatMap { it.second }.firstOrNull { it.key == link.pathSegments.firstOrNull() }
+        if (tool == null) toolsHub() else openTool(tool)
+        return true
     }
 
     internal fun startReadinessJump() { test = "readiness"; selectedSession = null; recordJump(whenReady = true) }
@@ -137,7 +150,7 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        openVideo(intent)
+        if (!openDeepLink(intent)) openVideo(intent)
         openNotification(intent)
     }
 
@@ -151,7 +164,7 @@ class MainActivity : Activity() {
             else -> null
         } ?: return false
         if (uri.scheme !in listOf("content", "file")) {
-            home(getString(R.string.local_video))
+            jumpHome(getString(R.string.local_video))
         } else startAnalysis(uri, if (BuildConfig.DEBUG) intent.getStringExtra("analysis_mode").orEmpty() else "full")
         return true
     }
@@ -351,13 +364,13 @@ class MainActivity : Activity() {
         url = field(getString(R.string.server_url), server, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, connection)
     }
 
-    internal fun home(message: String? = null) {
-        layout(getString(R.string.ui_today), "home", headline = false)
+    /** The jump test, one tap from its Today card and the tools hub (SPEC 10.2). */
+    internal fun jumpHome(message: String? = null) {
+        layout(getString(R.string.tool_jump), "jump", headline = false)
         val signedIn = token().isNotEmpty()
-        val name = prefs.getString("name", "").orEmpty()
-        val day = localDate(todayLocal(), locale)
-        text(getString(R.string.ui_today) + "  ·  " + (if (signedIn) "$day  ·  $name" else day), 13).apply {
-            setPadding(0, dp(14), 0, 0)
+        text(getString(R.string.tool_jump), 30).apply {
+            instrumentType(display = true)
+            setPadding(0, dp(10), 0, 0)
             if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
         }
         if (message != null) notice(message, caution = true)
@@ -394,9 +407,7 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply { topMargin = dp(10); marginStart = dp(8) }
         }
         if (analysis != null) button(getString(R.string.last_result), look = ActionTone.TEXT) { result() }
-        if (signedIn) toolRow(UiTile(R.string.history, "history") { history() }, UiTile(R.string.ui_club, "club") { clubHome() },
-            UiTile(R.string.checkin_title, "checkin") { checkin() }, UiTile(R.string.tools_title, "more") { toolsHub() })
-        if (signedIn) readinessCard()
+        if (signedIn) toolRow(UiTile(R.string.history, "history") { history() }, UiTile(R.string.ui_club, "club") { clubHome() })
         if (signedIn) pendingControls()
         if (!signedIn) text(getString(R.string.coach_note), 13).setPadding(0, dp(18), 0, 0)
     }
@@ -511,13 +522,13 @@ class MainActivity : Activity() {
                     status.text = if (rows.isEmpty()) getString(R.string.sessions_empty) else ""
                         selectedSession?.let { chosen ->
                             rows.firstOrNull { it.id == chosen.id }?.let { fresh ->
-                                if (fresh.cancelled) { selectedSession = null; home(); return@runOnUiThread }
+                                if (fresh.cancelled) { selectedSession = null; jumpHome(); return@runOnUiThread }
                                 selectedSession = fresh
-                            } ?: run { selectedSession = null; home(); return@runOnUiThread }
+                            } ?: run { selectedSession = null; jumpHome(); return@runOnUiThread }
                         }
                         rows.forEach { session ->
                             button(sessionLabel(session), parent = sessions, look = ActionTone.TONAL) {
-                                selectedSession = session; test = session.test; home()
+                                selectedSession = session; test = session.test; jumpHome()
                             }.apply {
                                 isEnabled = !session.cancelled
                                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -701,7 +712,7 @@ class MainActivity : Activity() {
         }
         text(getString(R.string.analysis_hint), 14)
         button(getString(R.string.continue_video), primary = true, action = continueAction)
-        button(getString(R.string.cancel)) { home() }
+        button(getString(R.string.cancel)) { jumpHome() }
     }
 
     @Suppress("DEPRECATION")
@@ -710,7 +721,7 @@ class MainActivity : Activity() {
         catch (_: Exception) {
             val error = getString(R.string.no_video_app)
             if (request == 30) { pendingTrial = null; diagnostics(error) }
-            else if (request in 12..13) formHome(error) else if (request == 40) snack(getString(R.string.scan_camera_failed)) else home(error)
+            else if (request in 12..13) formHome(error) else if (request == 40) snack(getString(R.string.scan_camera_failed)) else jumpHome(error)
         }
     }
 
@@ -733,11 +744,11 @@ class MainActivity : Activity() {
             val file = name?.let { java.io.File(cacheDir, "jump-capture/$it") }
             if (file?.isFile == true && fps in listOf(60, 120, 240)) {
                 startAnalysis(Uri.fromFile(file), captureFps = fps)
-            } else home(getString(R.string.no_video_returned))
+            } else jumpHome(getString(R.string.no_video_returned))
         }
         if (requestCode == 11 && resultCode == RESULT_OK) {
             val uri = data?.data
-            if (uri != null) startAnalysis(uri) else home(getString(R.string.no_video_returned))
+            if (uri != null) startAnalysis(uri) else jumpHome(getString(R.string.no_video_returned))
         }
         if (requestCode == 30) {
             val trial = pendingTrial
@@ -804,7 +815,7 @@ class MainActivity : Activity() {
                 edgePair(it, page, 330)?.let { strip -> page.removeView(strip); page.addView(strip, at.coerceAtLeast(0)) }
                 page.postDelayed({ if (generation == expectedGeneration && screen == "busy" && !isDestroyed) result() }, 750)
             } else result()
-        } else diagnostics() }, { if (trial == null) home(it) else diagnostics(it) }, phoneTest = trial != null, scan = scan)
+        } else diagnostics() }, { if (trial == null) jumpHome(it) else diagnostics(it) }, phoneTest = trial != null, scan = scan)
         text(getString(R.string.first_ten), 14)
     }
 
@@ -836,7 +847,7 @@ class MainActivity : Activity() {
     }
 
     private fun result(message: String? = null) {
-        val current = analysis ?: return home()
+        val current = analysis ?: return jumpHome()
         layout(getString(R.string.result), "result", headline = false)
         text(getString(R.string.result), 13).apply { setPadding(0, dp(12), 0, 0); if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true }
         val metrics = JSONObject(current.metrics.toJson())
@@ -945,7 +956,7 @@ class MainActivity : Activity() {
     }
 
     private fun frameEditor(message: String? = null) {
-        val current = analysis ?: return home()
+        val current = analysis ?: return jumpHome()
         val selection = edits ?: return result()
         layout(getString(R.string.check_frames), "frames")
         text(getString(R.string.frame_instructions), 14)
@@ -1165,7 +1176,7 @@ class MainActivity : Activity() {
         val savedOwner = prefs.getLong("user_id", 0)
         val queue = pending()
         queueSending = true
-        if (screen == "result") result() else if (screen == "home") home() else if (screen == "profile") profile()
+        if (screen == "result") result() else if (screen == "home") refreshToday() else if (screen == "jump") jumpHome() else if (screen == "profile") profile()
         else if (screen == "form_result") lastForm?.let { formResult(it.metrics, it) }
         else if (screen == "field_result") lastField?.let { fieldResult(it) }
         executor.submit {
@@ -1184,7 +1195,7 @@ class MainActivity : Activity() {
                         prefs.edit().remove("token").apply()
                         if (screen != "busy") login(getString(R.string.session_expired))
                     } else {
-                        if (screen == "result") result() else if (screen == "home") home() else if (screen == "profile") profile()
+                        if (screen == "result") result() else if (screen == "home") refreshToday() else if (screen == "jump") jumpHome() else if (screen == "profile") profile()
                         else if (screen == "form_result") lastForm?.let { formResult(it.metrics, it) }
                         else if (screen == "field_result") lastField?.let { fieldResult(it) }
                         if (error != null && error !is InterruptedException) {
@@ -1469,7 +1480,7 @@ class MainActivity : Activity() {
             "technique_history" -> formHome()
             "technique_detail" -> techniqueHistory()
             "form_video", "form_detail", "form_result" -> formHome()
-            "nutrition" -> home()
+            "nutrition", "jump" -> home()
             "tools" -> home()
             "workout_pick" -> workoutActive()
             "workout", "workout_start", "workout_summary", "calculators", "interval_timer" -> toolsHub()
