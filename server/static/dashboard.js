@@ -616,8 +616,9 @@ function today(content) {
   const weight = overviewCard(t('tdWeight'), w ? format(w.kg) : null, w ? t('recKg') + ' · ' + date(w.day) +
     (w.trend_kg == null ? '' : ' · ' + t('tdTrend') + format(w.trend_kg) + ' ' + t('recKg')) : t('tdWeightEmpty'), 'profile');
   const records = overviewCard(t('tdRecords'), null, (data.records || []).length ? '' : t('tdRecordsEmpty'), 'index');
+  const timed = {balance_stance:1, sprint_time:2, agility_time:2};
   for (const rec of (data.records || []).slice(0, 3)) records.append(line(t(REC_LABEL[rec.measure] || 'recTitle') +
-    (rec.exercise ? ' · ' + rec.exercise : ''), recValue(rec)));
+    (rec.exercise ? ' · ' + rec.exercise : ''), rec.measure in timed ? ftSeconds(rec.value, timed[rec.measure]) : recValue(rec)));
   const s = data.next_session;
   const session = overviewCard(t('tdNextSession'), s ? s.title : null, s ? dateTime(s.starts_at) + (s.place ? ' · ' + s.place : '') : t('tdNoSession'), 'club', 'card-subject');
   const messages = overviewCard(t('tdMessages'), data.unread ? String(data.unread) : null, t(data.unread ? 'tdUnread' : 'tdNoUnread'), 'more');

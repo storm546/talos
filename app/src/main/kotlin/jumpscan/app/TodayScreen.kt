@@ -139,8 +139,10 @@ private fun MainActivity.drawToday(cards: LinearLayout, data: JSONObject?) {
         val old = cards.findViewWithTag<View>("card-$key")
         if (old != null && shown[key] == section) return@forEachIndexed
         shown[key] = section
-        val view = todayCard(key, data, cards)
-        cards.removeView(view)
+        // Built off-window and then moved, so animations that stop on detach (the kcal dial) still run.
+        val holder = LinearLayout(this)
+        val view = todayCard(key, data, holder)
+        holder.removeView(view)
         if (old != null) { val at = cards.indexOfChild(old); cards.removeView(old); cards.addView(view, at) }
         else cards.addView(view, minOf(index, cards.childCount))
         view.arrive(if (old == null) index * 18L else 0L)
@@ -263,8 +265,8 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
         "checkin" -> {
             val checkin = section as JSONObject
             if (checkin.getBoolean("done")) {
-                big(getString(R.string.today_checkin_done))
-                line(getString(R.string.today_wellbeing, metricNumber(checkin.getDouble("wellbeing"), "training_minutes", locale), checkin.getInt("out_of")))
+                big(metricNumber(checkin.getDouble("wellbeing"), "training_minutes", locale) + " / " + checkin.getInt("out_of"))
+                line(getString(R.string.today_checkin_done))
             } else {
                 line(getString(R.string.today_checkin_missing), 15, ink)
                 actions(R.string.today_check_in to { checkin() })
@@ -294,8 +296,8 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
         }
         "training" -> {
             val training = section as JSONObject
-            big(metricNumber(training.getDouble("total_load"), "kcal", locale) + " " + getString(R.string.today_load_unit))
-            line(getString(R.string.today_sessions, training.getJSONArray("sessions").length()))
+            big(metricNumber(training.getDouble("total_load"), "kcal", locale))
+            line(getString(R.string.today_load_unit) + " · " + getString(R.string.today_sessions, training.getJSONArray("sessions").length()))
             val ratio = training.getJSONObject("acute_chronic")
             line(if (ratio.optBoolean("still_learning") || ratio.isNull("band")) getString(R.string.today_ratio_learning)
                 else getString(R.string.rd_ratio) + ": " + String.format(locale, "%.2f", ratio.getDouble("ratio")) + " · " + getString(when (ratio.getString("band")) {
@@ -337,6 +339,9 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
 private fun MainActivity.recordLabel(record: JSONObject): String = when (record.getString("measure")) {
     "jump_height" -> getString(R.string.records_height)
     "flight_time" -> getString(R.string.records_flight)
+    "balance_stance" -> getString(R.string.ft_balance)
+    "sprint_time" -> getString(R.string.ft_speed)
+    "agility_time" -> getString(R.string.ft_agility)
     else -> record.optString(if (locale.language == "bg") "name_bg" else "name_en").takeIf { it.isNotBlank() && it != "null" }
         ?: record.optString("exercise").takeIf { it.isNotBlank() && it != "null" } ?: getString(R.string.ft_records)
 }

@@ -32,9 +32,7 @@
     <string name="today_checkin_done">Checked in</string>
     <string name="today_checkin_missing">Not checked in yet. It takes half a minute.</string>
     <string name="today_check_in">Check in</string>
-    <string name="today_wellbeing">Wellbeing %1$s of %2$d</string>
     <string name="today_kcal_of">of %1$s kcal</string>
-    <string name="today_kcal_eaten">%1$s kcal eaten</string>
     <string name="today_protein">Protein %1$s of %2$s g</string>
     <string name="today_protein_plain">Protein %1$s g</string>
     <string name="today_food_logs">Entries today: %1$d</string>

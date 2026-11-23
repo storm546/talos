@@ -32,11 +32,9 @@
     <string name="today_checkin_done">Попълнено</string>
     <string name="today_checkin_missing">Още не си попълнил как се чувстваш. Отнема половин минута.</string>
     <string name="today_check_in">Попълни</string>
-    <string name="today_wellbeing">Самочувствие %1$s от %2$d</string>
-    <string name="today_kcal_of">от %1$s kcal</string>
-    <string name="today_kcal_eaten">%1$s kcal изядени</string>
-    <string name="today_protein">Протеин %1$s от %2$s g</string>
-    <string name="today_protein_plain">Протеин %1$s g</string>
+    <string name="today_kcal_of">от %1$s ккал</string>
+    <string name="today_protein">Протеин %1$s от %2$s г</string>
+    <string name="today_protein_plain">Протеин %1$s г</string>
     <string name="today_food_logs">Записи днес: %1$d</string>
     <string name="today_scan_food">Сканирай храна</string>
     <string name="today_add_food">Добави храна</string>
@@ -44,7 +42,7 @@
     <string name="today_sessions">Тренировки днес: %1$d</string>
     <string name="today_ratio_learning">Съотношение 7 / 28 дни: още се учи</string>
     <string name="today_weight_empty">Още няма претегляне. Запиши едно, за да започне тенденцията.</string>
-    <string name="today_weight_trend">Тенденция %1$s kg · претегляне %2$s</string>
+    <string name="today_weight_trend">Тенденция %1$s кг · претегляне %2$s</string>
     <string name="today_records_empty">Тази седмица няма нови рекорди. Продължавай да записваш; Талос ще ги забележи.</string>
     <string name="today_session_empty">Няма планирана тренировка в клуба.</string>
     <string name="today_messages_none">Няма непрочетени съобщения.</string>
@@ -55,8 +53,8 @@
     <string name="widget_signed_out">Влез в Талос, за да видиш деня си</string>
     <string name="widget_checkin_done">Попълнено</string>
     <string name="widget_checkin_missing">Не е попълнено</string>
-    <string name="widget_kcal">%1$s / %2$s kcal</string>
-    <string name="widget_kcal_plain">%1$s kcal</string>
+    <string name="widget_kcal">%1$s / %2$s ккал</string>
+    <string name="widget_kcal_plain">%1$s ккал</string>
     <string name="shortcut_checkin">Самочувствие</string>
     <string name="shortcut_workout">Тренировка</string>
     <string name="shortcut_scan">Сканирай храна</string>
