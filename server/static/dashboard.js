@@ -584,7 +584,8 @@ function today(content) {
   for (const f of (r?.factors || []).filter(f => f.value != null).slice(0, 4)) {
     const state_ = {better:'rdBetter', worse:'rdWorse'}[f.state];
     readiness.append(line(t('rd_' + f.key), (f.key === 'hrv' ? formatNumber(Math.exp(f.value)) + ' ms' : formatNumber(f.value) +
-      ({points:'', bpm:state.language==='bg'?' уд/мин':' bpm', cm:state.language==='bg'?' см':' cm', score:''}[f.unit] ?? '')) + (state_ ? ' · ' + t(state_).replace(/: $/, '') : '')));
+      ({points:'', bpm:state.language==='bg'?' уд/мин':' bpm', cm:state.language==='bg'?' см':' cm', score:''}[f.unit] ?? '')) +
+      ('week_values' in f ? ' · ' + t('rdWeekMean') : '') + (state_ ? ' · ' + t(state_).replace(/: $/, '') : '')));
   }
   const p = data.plan;
   const plan = overviewCard(t('todayPlan'), p?.items.length ? p.items[0].plan : null, p?.items.length ? '' : t('todayRest'), 'history', 'card-subject');
@@ -610,8 +611,9 @@ function today(content) {
   }
   const tr = data.training;
   const training = overviewCard(t('tdLoad'), tr ? formatNumber(tr.total_load) : null, tr ? t('tdLoadUnit') + ' · ' + t('tdSessions') + tr.sessions.length : t('tdNoData'), 'training');
-  if (tr) training.append(line(t('rdLoad'), tr.acute_chronic.still_learning || tr.acute_chronic.band == null ? t('rdLoadLearning')
-    : format(tr.acute_chronic.ratio, 'knee_ankle_ratio') + ' · ' + t('rd_' + tr.acute_chronic.band)));
+  if (tr) training.append(line(t('rdLoad'), formatNumber(tr.acute_load.load) + ' / ' +
+    (tr.chronic_load.weekly_load == null ? t('rdLoadLearning') : formatNumber(tr.chronic_load.weekly_load) +
+      (tr.acute_chronic.band == null ? '' : ' · ' + t('rd_' + tr.acute_chronic.band)))));
   const w = data.weight;
   const weight = overviewCard(t('tdWeight'), w ? format(w.kg) : null, w ? t('recKg') + ' · ' + date(w.day) +
     (w.trend_kg == null ? '' : ' · ' + t('tdTrend') + format(w.trend_kg) + ' ' + t('recKg')) : t('tdWeightEmpty'), 'profile');

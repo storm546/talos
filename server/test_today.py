@@ -52,6 +52,7 @@ def test_sections_equal_the_separate_routes(api, auth):
     assert [s["load"] for s in result["training"]["sessions"]] == [420] and result["training"]["total_load"] == 420
     load = client.get(f"/api/athletes/{athlete}/load", params={"days": 7, "day": day()}, headers=headers).json()
     assert result["training"]["acute_chronic"]["ratio"] == load["acute_chronic"]["ratio"]
+    assert (result["training"]["acute_load"], result["training"]["chronic_load"]) == (load["acute_load"], load["chronic_load"])
     summary = client.get(f"/api/athletes/{athlete}/nutrition/summary", params={"day": day()}, headers=headers).json()
     assert result["nutrition"]["eaten"]["kcal"] == summary["totals"]["kcal"] > 0 and result["nutrition"]["logs"] == 1
     assert result["nutrition"]["target"] == summary["target"]

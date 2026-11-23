@@ -7,6 +7,7 @@ module (auth, scope, consent, audit and event helpers are reused). The numbers c
 from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
+from statistics import fmean
 from typing import Annotated, Literal
 
 import httpx
@@ -163,6 +164,7 @@ DAILY_FACTORS = {  # key: (value from a check-in, higher is better, unit)
     "resting_hr": (lambda c: c.get("resting_hr"), False, "bpm"),
     "hrv": (lambda c: r.ln_rmssd(c.get("hrv_rmssd")), True, "ln_ms"),
 }
+WEEK_FACTORS = {"resting_hr", "hrv"}  # compared as a 7-day mean (SPEC 10.4)
 
 
 def factor(key, value, base, error, higher_is_better, unit, **extra):
@@ -178,8 +180,14 @@ def day_readiness(day, checkins, trials, excluded, under_18):
     for key, (value_of, higher, unit) in DAILY_FACTORS.items():
         past = [value_of(checkins[d]) if d in checkins else None for d in window]
         known = [value for value in past if value is not None]
-        factors.append(factor(key, value_of(today) if today else None, r.baseline(known),
-                              r.typical_error(r.differences(known)), higher, unit))
+        value, base, error = value_of(today) if today else None, r.baseline(known), r.typical_error(r.differences(known))
+        if key not in WEEK_FACTORS:
+            factors.append(factor(key, value, base, error, higher, unit))
+            continue
+        week = [v for v in past[-(r.WEEK_DAYS - 1):] + [value] if v is not None]
+        factors.append({"key": key, "value": fmean(week) if value is not None and week else None, "unit": unit,
+                        "today": value, "week_values": len(week), "week_needed": r.MIN_WEEK_VALUES,
+                        "baseline": base, "typical_error": error, **r.compare_week(value, week, base, error, higher)})
     best = [max(trials[d]) for d in window if d in trials]
     within = [diff for d in window if d in trials for diff in r.differences(trials[d])]
     todays = trials.get(day.isoformat(), [])
@@ -216,6 +224,7 @@ def load_summary(db, athlete_id, last, days):
     loads = [load for _, load, _ in rows]
     history = loads[len(rows) - (last - history_start).days - 1:] if first_row else []
     ratio = r.acute_chronic(history)
+    blocks = r.load_blocks(history)
     weeks = []
     for end in range(len(loads), max(len(loads) - days, 0) + 6, -7):
         week = loads[end - 7:end]
@@ -224,9 +233,12 @@ def load_summary(db, athlete_id, last, days):
                           "monotony": r.monotony(week), "strain": r.strain(week)})
     return {"athlete_id": athlete_id, "day": last.isoformat(),
             "daily": [{"day": d, "load": load, "sessions": n} for d, load, n in rows if d >= shown_start.isoformat()],
-            "weeks": weeks[::-1], "acute_chronic": {**ratio, "band": r.ratio_band(ratio["ratio"])},
-            "note": "A comparison of recent and usual training load only: not a forecast, and it needs 28 days "
-                    "of history. Monotony is undefined when every day has the same load."}
+            "weeks": weeks[::-1], "acute_load": blocks["acute"], "chronic_load": blocks["chronic"],
+            "acute_chronic": {**ratio, "band": r.ratio_band(ratio["ratio"])},
+            "note": "Acute load is the last 7 days' total and chronic load the usual weekly total over 28 days. The "
+                    "acute:chronic ratio is secondary: a comparison of recent and usual load only, not a forecast or "
+                    "a risk score, and its use is disputed (Impellizzeri 2020). It needs 28 days of history. "
+                    "Monotony is undefined when every day has the same load."}
 
 
 def readiness_range(db, athlete, last, days):
@@ -311,7 +323,8 @@ def install(app, h):
         athlete = h.athlete_access(db, user, athlete_id)
         return {"athlete_id": athlete_id, "days": readiness_range(db, athlete, parse_day(day), days),
                 "note": "Information for athlete and coach, not medical advice. Compared with this athlete's own "
-                        "last 28 days; a change counts only beyond 0.5 x SD and the typical error."}
+                        "last 28 days; a change counts only beyond 0.5 x SD and the typical error. Resting heart rate "
+                        "and HRV compare the mean of the last 7 days (today's value and at least 3 in all)."}
 
     @app.get("/api/athletes/{athlete_id}/load")
     def load(athlete_id: SqlitePath, days: Annotated[int, Query(ge=7, le=90)] = 28,
@@ -343,7 +356,8 @@ def install(app, h):
         rows = []
         for athlete in athletes:
             today = readiness_range(db, athlete, day, 1)[0]
-            ratio = load_summary(db, athlete["id"], day, 7)["acute_chronic"]
+            load = load_summary(db, athlete["id"], day, 7)
+            ratio = load["acute_chronic"]
             factors = {f["key"]: f for f in today["factors"]}
             jump = factors["jump"]
             base = jump["baseline"]
@@ -357,6 +371,7 @@ def install(app, h):
                 "jump": {"value": jump["value"], "baseline": base["mean"], "state": jump["state"],
                          "difference_pct": jump["difference"] / base["mean"] * 100 if jump["difference"] is not None and base["mean"] else None,
                          "baseline_n": base["n"], "needed": base["needed"], "excluded": jump["excluded"]},
+                "load_acute": load["acute_load"]["load"], "load_chronic": load["chronic_load"]["weekly_load"],
                 "load_ratio": ratio["ratio"], "load_band": ratio["band"], "load_ready": ratio["ready"]})
         return club, rows
 
@@ -405,6 +420,7 @@ def install(app, h):
                               "status": row["status"], "factors": row["worse"]})
             if row["load_band"] in ("above", "well_above"):
                 facts.append({"kind": "load_spike", "athlete_id": row["athlete_id"], "name": row["name"],
+                              "acute_load": row["load_acute"], "chronic_weekly_load": round(row["load_chronic"]),
                               "ratio": round(row["load_ratio"], 2), "band": row["load_band"]})
         order = {"below_usual": 0, "load_spike": 1, "missing_checkin": 2}
         return sorted(facts, key=lambda fact: order[fact["kind"]])
