@@ -261,6 +261,26 @@ def check():
         assert page.locator('.record-hero .flight-glyph').count() >= 2
         assert page.locator('.club-table tbody tr').count() >= 1
         assert page.get_by_text('Скокове с предупреждение, които не се броят: 1', exact=True).is_visible()
+        # SPEC 9.3: field-test bests on the records page and the per-athlete field tests view.
+        assert page.get_by_role('heading', name='Полеви тестове', exact=True).is_visible()
+        assert page.get_by_text('Най-дълъг баланс · Ляв', exact=True).is_visible()
+        page.locator('.subnav').get_by_role('button', name='Полеви тестове', exact=True).click()
+        page.locator('.ft-table').first.wait_for()
+        assert page.locator('.ft-table').count() == 4
+        assert page.locator('.ft-mirror').count() == 3
+        assert page.get_by_role('cell', name='Сгъване в коляното', exact=False).first.is_visible()
+        assert page.get_by_text('±10° · не е проверено спрямо еталон', exact=True).first.is_visible()
+        for theme in ['dark', 'light']:
+            page.evaluate(f'document.documentElement.dataset.theme = "{theme}"')
+            for language in ['bg', 'en']:
+                page.locator('#language').select_option(language)
+                for width in [1280, 390]:
+                    page.set_viewport_size({'width': width, 'height': 960})
+                    screenshot(f'coach-fieldtests-{language}-{width}-{theme}', full_page=True)
+        page.locator('#language').select_option('bg')
+        page.set_viewport_size({'width': 1280, 'height': 960})
+        page.locator('.subnav').get_by_role('button', name='Рекорди', exact=True).click()
+        page.locator('.record-status').wait_for()
         for theme in ['dark', 'light']:
             page.evaluate(f'document.documentElement.dataset.theme = "{theme}"')
             for language in ['bg', 'en']:

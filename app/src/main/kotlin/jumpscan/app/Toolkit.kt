@@ -13,12 +13,16 @@ internal fun toolGroups(): List<Pair<Int, List<Tool>>> = listOf(
         Tool("jump_history", R.string.tool_jump_history, R.string.tool_jump_history_note, "history") { history() },
         Tool("form", R.string.ui_technique, R.string.tool_form_note, "form", local = true) { formHome() },
         Tool("form_history", R.string.tool_form_history, R.string.tool_form_history_note, "history") { techniqueHistory() },
+        Tool("rom", R.string.ft_rom, R.string.tool_rom_note, "hinge", local = true) { romSetup() },
+        Tool("balance", R.string.ft_balance, R.string.tool_balance_note, "core", local = true) { balanceSetup() },
+        Tool("speed", R.string.ft_speed, R.string.tool_speed_note, "conditioning", local = true) { speedSetup() },
         Tool("timer", R.string.timer_title, R.string.tool_timer_note, "timer", local = true) { intervalTimer() },
         Tool("diagnostics", R.string.diagnostics, R.string.tool_diagnostics_note, "diagnostics", local = true) { diagnostics() }),
     R.string.tools_train to listOf(
         Tool("workout", R.string.workout_title, R.string.tool_workout_note, "training") { workoutStart() },
         Tool("plans", R.string.tool_plans, R.string.tool_plans_note, "index") { trainingHome() },
         Tool("calculators", R.string.calc_title, R.string.tool_calc_note, "plates", local = true) { calculators() },
+        Tool("cardio", R.string.ft_cardio, R.string.tool_cardio_note, "route", local = true) { cardioHome() },
         Tool("records", R.string.records_title, R.string.tool_records_note, "insights") { records() }),
     R.string.tools_fuel to listOf(
         Tool("nutrition", R.string.nutrition_title, R.string.tool_nutrition_note, "food") { nutritionHome() },

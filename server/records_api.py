@@ -93,6 +93,23 @@ def compute_records(db, athlete_id, catalogue):
         add("form_hold", "ms", "form_set", rows, lambda row: row["hold_ms"], exercise=exercise,
             name_bg=entry["name_bg"], name_en=entry["name_en"])
 
+    # Field tests (SPEC 9.3): longest single-leg stance per leg, fastest sprint per distance and start (a beep start
+    # includes reaction time, a line start does not) and fastest agility per test.
+    tests = {}
+    for row in db.execute("SELECT id, created_at, kind, data FROM measurements WHERE athlete_id = ? "
+                          "AND kind IN ('balance', 'sprint', 'agility') ORDER BY created_at, id", (athlete_id,)):
+        data = json.loads(row["data"])
+        measure, extra = {"balance": ("balance_stance", {"leg": data.get("leg")}),
+                          "sprint": ("sprint_time", {"distance_m": data.get("distance_m"), "start": data.get("start")}),
+                          "agility": ("agility_time", {"test": data.get("test")})}[row["kind"]]
+        value = data["stance_ms"] if row["kind"] == "balance" else data["time_ms"]
+        tests.setdefault((measure, tuple(extra.items())), []).append({"id": row["id"], "date": row["created_at"],
+                                                                        "value": value})
+    for (measure, extra), rows in sorted(tests.items(), key=lambda item: (item[0][0], str(item[0][1]))):
+        faster = measure != "balance_stance"
+        add(measure, "ms", "measurement", rows, lambda row: row["value"],
+            rank=(lambda row: -row["value"]) if faster else None, **dict(extra))
+
     sets = {}
     for row in db.execute(
             "SELECT set_logs.id, day AS date, exercise_id, exercises.name, reps, load_kg FROM set_logs "

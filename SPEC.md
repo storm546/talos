@@ -778,3 +778,71 @@ enough data, explains what shaped it, and is framed as information for athlete a
 - Balance test (single-leg stance time and sway).
 - Sprint and reaction timing with the camera (start and finish line crossing), and a 5-0-5 / T-test timer.
 - Outdoor cardio with GPS (distance, pace, splits; route stays on the phone, summary synced).
+
+### 9.3 Wave 3 contract (added 2026-11-23)
+
+Four on-phone tools. The phone keeps every image, landmark, audio sample and GPS fix; only the numbers
+below are uploaded. Same rules as 6.1/6.2: athlete writes need recorded consent, staff read their club
+(cross-club 404), admins read all, unknown fields are rejected, every new row is audited and published.
+
+**Core (`jumpscan.core`, pure functions, JUnit with hand-checked numbers)**
+- `RangeOfMotion`: joints `knee_flexion` (180 minus image hip-knee-ankle angle), `hip_flexion` (180 minus image
+  shoulder-hip-knee angle), `shoulder_flexion` and `shoulder_abduction` (image hip-shoulder-elbow angle); x is
+  multiplied by the image aspect as in section 2. Knee, hip and shoulder flexion need a side view
+  (`FormStream.cameraView`), shoulder abduction a front view; otherwise the tool abstains with `wrong_view`.
+  A frame counts only when the three joints have visibility of at least 0.5. The held value of one side is the
+  median of the still window with the largest median: a window of at least 1000 ms and 5 frames whose angles
+  span at most 5 degrees. No still window gives null for that side. The reported error is the measured
+  side-view knee image error from `core/VALIDATION.md`: 10 degrees (pooled RMSE 10.4, bias -4.8). Hip and
+  shoulder angles have no reference measurement; they report the same 10 degrees and the warning `not_validated`.
+  A left/right difference smaller than the error is shown as "within the measuring error".
+- `Balance`: front view, standing on one leg. The lifted foot is the ankle higher than the other by more than
+  8% of the stance leg length (hip to ankle, image plane, aspect-corrected) while the stance knee is bent
+  less than 30 degrees (a squat shortens the leg and must not start a stance); the stance starts after 300 ms of
+  that and ends at the first frame of a 200 ms run below 4% (`touch_down`), when the hip midpoint moves more than
+  25% of leg length from its position over the first 500 ms (`sway`), after 300 ms without the hips and ankles
+  visible (`lost_tracking`), at 60 s (`time_limit`) or when stopped (`stopped`). Stance time is end minus start
+  from frame timestamps. Sway is the RMS distance of the hip midpoint from its mean over the stance, in percent
+  of leg length. Pose jitter adds to sway, so compare an athlete with themselves on the same phone.
+- `LineCrossing`: the camera is still and the timing line is the vertical centre band (8% of the frame width).
+  Activity is the fraction of band pixels whose luminance changed by more than 24 levels since the previous
+  frame. A crossing is the timestamp of the first frame with activity at least 0.12 after at least 300 ms
+  below 0.04. Precision is one median frame interval, shown with every time. A start is a crossing or the
+  audio cue; the cue time is when the tone is requested, so cue-started times also contain the phone's
+  unmeasured audio output delay and the athlete's reaction. Reaction: a tone after a random 2–5 s delay; the
+  reaction time is the first whole-frame activity of at least 0.03 after the cue minus the cue time; activity
+  before the cue is a false start and is not saved; above 1500 ms is not saved.
+- `GpsTrack`: fixes with horizontal accuracy above 25 m are dropped; a fix closer than 5 m to the last accepted
+  fix is held back (standing still); a step implying more than 12 m/s (25 m/s when cycling) is dropped. Distance is the haversine sum
+  (R = 6 371 000 m) of accepted steps. Splits are the times at which the distance passes each whole kilometre,
+  linearly interpolated within the step; each split is that kilometre's time in seconds. Average pace is
+  duration divided by kilometres (null below 10 m).
+
+**Server**: `measurements(id, athlete_id, created_at, kind, data, client_id)`, unique per (athlete, client_id),
+created by the idempotent startup migration.
+- `POST /api/measurements` `{client_id, kind, ...}` (athlete, consent required): 201 `{id, created_at}`, a repeat
+  `client_id` 200 with the original. Audit `measurement_logged` (detail `{kind}`), event `measurement`, record event
+  as section 8. Fields per kind (numbers finite):
+  - `rom`: `joint` (above), `view` (`front`|`side`), `left_deg`, `right_deg` (0–180 or null, not both null),
+    `error_deg` (0–45), `quality` (0–1), `warnings` (subset of `low_visibility`, `not_validated`).
+  - `balance`: `leg` (`L`|`R`), `stance_ms` (0–60000), `sway_pct` (0–100 or null), `ended_by` (above), `fps` (1–480),
+    `quality` (0–1).
+  - `sprint`: `distance_m` (1–400), `time_ms` (100–120000), `start` (`cue`|`crossing`), `precision_ms` (0–1000), `fps`.
+  - `reaction`: `time_ms` (50–1500), `precision_ms`, `fps`.
+  - `agility`: `test` (`505`|`t_test`), `time_ms` (500–60000), `precision_ms`, `fps`.
+  - `cardio`: `activity` (`run`|`walk`|`cycle`), `distance_m` (0–500000), `duration_s` (1–86400),
+    `avg_pace_s_per_km` (null or 60–3600 for run/walk, any positive for cycle), `splits_s` (up to 500 numbers > 0).
+- `GET /api/measurements?athlete_id=&kind=&limit=100&offset=0`: newest first, `{...fields, id, athlete_id, kind,
+  created_at, client_id}`; scope as `GET /api/form`. Athlete export includes `measurements`; delete removes them.
+- Records (section 8) add `balance_stance` per `leg` (longest, ms), `sprint_time` per `distance_m` and `start` (a beep start includes reaction time) and `agility_time`
+  per `test` (fastest, ms; the earlier result keeps a tie).
+
+**Dashboard**: the athlete page gains a "Field tests" panel: latest range of motion per joint (left, right, error),
+balance per leg (best and latest stance, sway), sprint/agility/reaction bests and latest, and cardio summaries.
+
+**App**: Tools gains Measure → Range of motion, Balance, Sprint and reaction; Train → Outdoor cardio. Each camera
+tool has a setup screen (choice, placement drawing, what is measured and its limits), a live camera screen with
+the skeleton (pose tools) or the timing band (timing tools), and a result screen that queues the result in the
+offline queue (`FeatureWrite.MEASUREMENT`). Cardio records with a location foreground service (framework
+`FUSED_PROVIDER`, GPS provider below API 31); the route is kept only in the service's memory for the result
+screen and is never written to the queue.

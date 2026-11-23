@@ -137,6 +137,8 @@ function records(content) {
     content.append(hero);
     const strength = strengthTable(data.records);
     if (strength) content.append(node('h2', t('recStrength')), node('p', t('recEstimateNote'), 'muted'), strength);
+    const field = fieldRecords(data.records);
+    if (field) content.append(node('h2', t('ftFieldRecords')), field);
   }
   if (data) content.append(node('p', t('recExcluded') + format(data.excluded_jumps), 'muted'));
 }

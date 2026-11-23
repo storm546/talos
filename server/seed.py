@@ -37,7 +37,7 @@ def clear_demo_rows(db, users, athletes, club_ids):
         raise ValueError("A non-demo comment references a demo jump; no demo data was reset.")
     db.execute(f"DELETE FROM comments WHERE athlete_id IN ({athlete_marks}) AND author_id IN ({user_marks})", (*athletes, *users))
     for table in ("jumps", "form_sets", "checkins", "training_sessions", "set_logs", "workouts", "nutrition_day_complete",
-                  "food_logs", "weights", "nutrition_targets", "coaching_programs"):
+                  "food_logs", "weights", "nutrition_targets", "coaching_programs", "measurements"):
         db.execute(f"DELETE FROM {table} WHERE athlete_id IN ({athlete_marks})", athletes)
     for table in ("tokens", "group_members", "assistant_proposals", "assistant_requests", "assistant_conversations"):
         db.execute(f"DELETE FROM {table} WHERE user_id IN ({user_marks})", users)
@@ -128,6 +128,7 @@ def seed(path=None, *, reset=False, readiness=True):
                            (athlete_ids[account], created_at, metrics.model_dump_json()))
             if reset:
                 seed_form(db, athlete_ids[account], now, rng)
+            seed_measurements(db, athlete_ids[account], now, random.Random(variant * 31))
 
         groups = {}
         for group_name, members in DEMO_GROUPS.items():
@@ -344,6 +345,38 @@ def seed_form(db, athlete_id, now, rng):
         created_at = (now - timedelta(days=days_ago, minutes=rng.randint(0, 150))).isoformat()
         db.execute("INSERT INTO form_sets(athlete_id, created_at, metrics) VALUES (?, ?, ?)",
                    (athlete_id, created_at, metrics.model_dump_json()))
+
+
+def seed_measurements(db, athlete_id, now, rng):
+    """Synthetic field tests (SPEC 9.3): range of motion, balance per leg, sprints, agility, reaction and runs."""
+    rows = []
+    for days_ago in (20, 6):
+        rows += [
+            (days_ago, "rom", {"joint": "knee_flexion", "view": "side", "left_deg": rng.uniform(128, 140),
+                               "right_deg": rng.uniform(122, 138), "error_deg": 10.0, "quality": .9, "warnings": []}),
+            (days_ago, "rom", {"joint": "hip_flexion", "view": "side", "left_deg": rng.uniform(95, 115),
+                               "right_deg": rng.uniform(95, 115), "error_deg": 10.0, "quality": .88, "warnings": ["not_validated"]}),
+            (days_ago, "rom", {"joint": "shoulder_abduction", "view": "front", "left_deg": rng.uniform(160, 175),
+                               "right_deg": rng.uniform(150, 175), "error_deg": 10.0, "quality": .92, "warnings": ["not_validated"]}),
+        ]
+        for leg in ("L", "R"):
+            rows.append((days_ago, "balance", {"leg": leg, "stance_ms": rng.randrange(9000, 42000, 40),
+                         "sway_pct": round(rng.uniform(1.5, 5), 1), "ended_by": rng.choice(("touch_down", "sway", "time_limit")),
+                         "fps": 15.0, "quality": .9}))
+        rows += [
+            (days_ago, "sprint", {"distance_m": 20.0, "time_ms": rng.randrange(3150, 3700, 33), "start": "cue",
+                                  "precision_ms": 33.3, "fps": 30.0}),
+            (days_ago, "agility", {"test": "505", "time_ms": rng.randrange(2400, 2900, 17), "precision_ms": 16.7, "fps": 60.0}),
+            (days_ago, "reaction", {"time_ms": rng.randrange(180, 320, 33), "precision_ms": 33.3, "fps": 30.0}),
+        ]
+        splits = [round(rng.uniform(300, 360), 1) for _ in range(5)]
+        rows.append((days_ago - 1, "cardio", {"activity": "run", "distance_m": 5000 + rng.uniform(10, 300),
+                     "duration_s": int(sum(splits) + 40), "avg_pace_s_per_km": round((sum(splits) + 40) / 5.1, 1),
+                     "splits_s": splits}))
+    for index, (days_ago, kind, data) in enumerate(rows):
+        created_at = (now - timedelta(days=days_ago, minutes=index)).isoformat()
+        db.execute("INSERT OR IGNORE INTO measurements(athlete_id, created_at, kind, data, client_id) VALUES (?, ?, ?, ?, ?)",
+                   (athlete_id, created_at, kind, json.dumps(data), f"seed-{athlete_id}-{index}"))
 
 
 EXERCISES = (  # name, kind, lower body
