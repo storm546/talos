@@ -584,7 +584,7 @@ function today(content) {
   for (const f of (r?.factors || []).filter(f => f.value != null).slice(0, 4)) {
     const state_ = {better:'rdBetter', worse:'rdWorse'}[f.state];
     readiness.append(line(t('rd_' + f.key), (f.key === 'hrv' ? formatNumber(Math.exp(f.value)) + ' ms' : formatNumber(f.value) +
-      ({points:'', bpm:' bpm', cm:' cm', score:''}[f.unit] ?? '')) + (state_ ? ' · ' + t(state_).replace(/: $/, '') : '')));
+      ({points:'', bpm:state.language==='bg'?' уд/мин':' bpm', cm:state.language==='bg'?' см':' cm', score:''}[f.unit] ?? '')) + (state_ ? ' · ' + t(state_).replace(/: $/, '') : '')));
   }
   const p = data.plan;
   const plan = overviewCard(t('todayPlan'), p?.items.length ? p.items[0].plan : null, p?.items.length ? '' : t('todayRest'), 'history', 'card-subject');
