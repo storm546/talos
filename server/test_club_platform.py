@@ -429,7 +429,7 @@ def test_internal_error_security_headers(api, auth, monkeypatch):
 def test_openapi_describes_new_endpoints(api):
     client, _ = api
     schema = client.get('/openapi.json').json()
-    assert schema['info']['title'] == 'JumpScan Club Platform'
+    assert schema['info']['title'] == 'Talos Club Platform'
     assert schema['info']['version'] == '2.0.0' and schema['info']['description']
     for _, endpoint, _ in PRIVATE:
         assert endpoint.replace('/users/1', '/users/{target_id}').replace('/athletes/1', '/athletes/{athlete_id}') in schema['paths']

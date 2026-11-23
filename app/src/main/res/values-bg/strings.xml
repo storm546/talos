@@ -27,8 +27,8 @@
     <string name="form_mute_technique">Изключете насоките, без да спирате броенето</string>
     <string name="form_provisional_count">Предварителен брой до края на серията · %1$s</string>
     <string name="suggested_edges">Тези кадри за отскока и приземяването са предложение. Потвърдете ги, преди да ги приложите.</string>
-    <string name="app_name">JumpScan</string>
-    <string name="brand">JUMPSCAN</string>
+    <string name="app_name">Talos</string>
+    <string name="brand">TALOS</string>
     <string name="sign_in">Вход</string>
     <string name="login_intro">Влезте, за да изпращате резултати и да виждате историята си. Анализът на видео работи и без интернет.</string>
     <string name="server_url">Адрес на сървъра</string>
@@ -52,7 +52,7 @@
     <string name="sign_out">Изход</string>
     <string name="signing_out">Излизане…</string>
     <string name="coach_note">Обсъдете резултатите с треньор. Дълбочината, оценена с една камера, е приблизителна. Сравнявайте собствените си скокове във времето.</string>
-    <string name="no_video_app">Няма приложение за това действие. Изберете видео или отворете видео с JumpScan.</string>
+    <string name="no_video_app">Няма приложение за това действие. Изберете видео или отворете видео с Talos.</string>
     <string name="no_video_returned">Не е получено видео. Опитайте „Избор на видео“.</string>
     <string name="local_video">Отворете видео от камерата или файловете на устройството.</string>
     <string name="analysing">Анализ на видеото…</string>
@@ -334,7 +334,7 @@
     <string name="nutr_updating">Оценката е обновена според завършените дни и тенденцията на теглото.</string>
     <string name="nutr_holding">Запазена е предишната оценка.</string>
     <string name="assistant_title">Помощник с изкуствен интелект</string>
-    <string name="assistant_intro">Питайте за данните си в JumpScan. Предложените промени се запазват само ако ги потвърдите.</string>
+    <string name="assistant_intro">Питайте за данните си в Talos. Предложените промени се запазват само ако ги потвърдите.</string>
     <string name="assistant_you">Вие</string>
     <string name="assistant_message">Вашето съобщение</string>
     <string name="assistant_send">Изпратете</string>

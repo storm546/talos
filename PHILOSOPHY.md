@@ -1,18 +1,19 @@
-# JumpScan: design and development philosophy
+# Talos: design and development philosophy
 
-This document says how JumpScan is designed and built, and why. `SPEC.md` holds the contracts (what each
+This document says how Talos is designed and built, and why. `SPEC.md` holds the contracts (what each
 part must do); this file holds the principles that decide everything the contracts do not. Every person and
 every AI worker that touches the repo reads it first. When a rule here and a habit disagree, the rule wins.
 When a rule here and `SPEC.md` disagree, `SPEC.md` wins for that feature and this file gets fixed.
 
-## 1. What JumpScan is
+## 1. What Talos is
 
 The one app an athlete and their coach run their whole training life from, the way the owner's Hermes
 Companion became the one app he manages his homelab and day with. One phone, one club server, one coach
 dashboard. Jump scanning is the flagship tool; around it sit form tracking, workouts, timers, calculators,
 nutrition, readiness and load, records, field tests (range of motion, balance, sprint and reaction, GPS
 cardio) and an assistant, with more to come. The goal is that nothing fitness-related makes the user open a
-second app. (The product will get a new name that fits this wider scope; until then it is called JumpScan.)
+second app. The product is called Talos, after the bronze automaton that ran three laps around Crete every day; internal
+identifiers keep the old name JumpScan.
 
 Borrowing is encouraged: study the best trackers and health apps, take their ideas, behaviours, formulas
 and UX patterns, and reuse open-source code whose licence is compatible with GPL-3.0-or-later, with
@@ -28,7 +29,7 @@ Three promises hold for every tool:
 3. **The coach sees what matters.** Anything an athlete measures can reach the coach, with consent, without
    extra work from the athlete.
 
-What JumpScan is not: a medical device, a diagnosis, an injury-risk screen, a social network or an
+What Talos is not: a medical device, a diagnosis, an injury-risk screen, a social network or an
 engagement machine. We never write "diagnosis", "injury risk" or "screening". We write "landing
 mechanics", "change against your own baseline" and "numbers to discuss with a coach".
 
@@ -54,7 +55,7 @@ mechanics", "change against your own baseline" and "numbers to discuss with a co
 
 ### 3.1 Identity: an instrument, not an app template
 
-JumpScan looks like a precise piece of sports equipment: a timing gate, a force plate readout, a lab
+Talos looks like a precise piece of sports equipment: a timing gate, a force plate readout, a lab
 notebook. The identity comes from the subject itself, the skeleton replay, the flight arc, the height
 ruler, the timing strip and the live joints, and never from decoration.
 
@@ -214,7 +215,7 @@ server/  Python FastAPI + SQLite, coach dashboard             -> stores numbers,
 
 ### 4.8 Working with AI workers
 
-JumpScan is built by an orchestrator and bounded workers. The rules that keep that safe:
+Talos is built by an orchestrator and bounded workers. The rules that keep that safe:
 
 - A worker task names the objective, the allowed files or directory, the validation command, the commit
   instruction and the stop condition. Workers stay in their worktree and their files.

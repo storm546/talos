@@ -1,4 +1,4 @@
-# JumpScan: spec and contracts
+# Talos (formerly JumpScan): spec and contracts
 
 Three parts in one repo. Each worker touches only its own directory.
 Design and development principles: `PHILOSOPHY.md` (read it first).
@@ -846,3 +846,66 @@ the skeleton (pose tools) or the timing band (timing tools), and a result screen
 offline queue (`FeatureWrite.MEASUREMENT`). Cardio records with a location foreground service (framework
 `FUSED_PROVIDER`, GPS provider below API 31); the route is kept only in the service's memory for the result
 screen and is never written to the queue.
+
+## 10. Talos: the personal all-in-one app (direction set by the owner 2026-11-23)
+
+The product is renamed **Talos** (Bulgarian "Талос"), after the bronze automaton of Greek myth that ran three laps
+around Crete every day. The owner's direction: one app that elevates every aspect of a person's training, diet
+and everyday fitness, the way Hermes Companion became his one app for everything. Personal use comes first; the
+club and coach side stays, but no tool may require a club or a coach to be useful. Ideas come from
+`logs/research/competitors-report.md` (ranked list in its section 4) and follow `PHILOSOPHY.md`.
+
+### 10.1 Rename (user-visible only)
+
+App label, launcher name, every user-facing string in both languages, the dashboard title and wordmark, the
+documents and the README say Talos / Талос. Internal identifiers stay: the application id and Kotlin package
+`jumpscan.app`, the `jumpscan.core` package, `JUMPSCAN_*` environment variables, `/var/lib/jumpscan`, the
+systemd unit, the repository name. "Jump test" stays as the name of the jump tool.
+
+### 10.2 Wave 4: Today home and phone integration
+
+**Server: `GET /api/me/today?day=YYYY-MM-DD`** (any signed-in user; `day` defaults to the caller's today and may
+be at most one day from the server's UTC date). One scoped aggregate built from the existing functions, so its
+scope and numbers always equal what the separate routes return. Each section is independent: a section that
+fails or has no data is `null` and the rest still return. Sections:
+- `readiness`: status, the factor list and "still learning" exactly as `GET /api/athletes/{id}/readiness` for
+  that day (athletes only; staff get null);
+- `checkin`: whether today's check-in exists and its wellbeing sum;
+- `plan`: today's planned items (title, sets x reps or minutes) and whether a workout was already logged today;
+- `training`: today's sessions with their sRPE load, the day's total, and the acute:chronic ratio with its
+  "still learning" state from the load route;
+- `nutrition`: today's kcal, protein, carbs and fat against the current targets, and the number of food logs;
+- `weight`: the latest weigh-in and the trend value from the weight trend;
+- `records`: records set in the last 7 days (measure, value, unit, date);
+- `next_session`: the next visible club session, or null;
+- `unread`: unread comment count.
+No new tables. Bounded: at most 20 plan items, 10 sessions, 10 records. Tests cover each section, the
+independence of a failing section, and that an athlete never sees another athlete's data.
+
+**App: Today screen** (replaces the current jump-centred home; the jump test moves to a card and stays one tap
+away):
+- A header with the date and a greeting, then cards in this default order: Readiness, Today's plan (Start
+  workout), Check-in, Nutrition (ring of kcal plus protein bar, Scan food and Add food actions), Training load,
+  Weight, New records, Next session, Messages, Jump test. Each card opens its tool in one tap.
+- The user can hide cards and change their order (stored on the phone); hidden cards are listed at the bottom
+  under "Hidden cards".
+- Signed out or offline the screen still works: phone-only tools (timers, calculators, jump test, workout) are
+  shown, and the last successful `today` response is cached with its time ("updated 10:42").
+- Live: `checkin`, `jump`, `form`, `comment`, `record` and `measurement` events refresh the card concerned.
+- Instrument design: hero card for readiness, digit roll on numbers that change, `arrive` on cards, no idle motion.
+
+**App: phone integration**
+- Static launcher shortcuts: Check in, Start workout, Scan food, Interval timer, Jump test.
+- Deep links `talos://tool/<key>` for every tool key of the tools hub (the shortcuts use them); unknown keys
+  open the hub.
+- A home-screen widget "Today": readiness status, check-in done or not, kcal eaten of target; tap opens Today,
+  the check-in button opens the check-in. Updated after each sync and at most every 30 minutes.
+- Voice cues in the interval timer and the rest timer through the phone's TextToSpeech in the app language
+  ("round 3 of 8", "10 seconds", "rest over"), on by default, with a switch; beeps and vibration stay.
+
+**Dashboard:** the athlete's own page starts with the same Today cards (same endpoint), so the web works as a
+personal dashboard too.
+
+**Done when:** server tests pass under the memory cap; the app builds on the kit; AppChecks gain Today checks
+(cards render from a fixture, hide and reorder persist, deep link opens the right tool, widget renders); Today
+screenshots in dark/light x bg/en, signed in and signed out; the dashboard check passes.

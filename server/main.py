@@ -954,7 +954,7 @@ def create_app(db_path=None):
         init_db(app.state.db_path)
         yield
 
-    app = FastAPI(title="JumpScan Club Platform", version="2.0.0",
+    app = FastAPI(title="Talos Club Platform", version="2.0.0",
                   description="Club landing mechanics, consent, personal baselines and coach discussions. No video is stored.",
                   lifespan=lifespan, debug=False)
     app.state.db_path = db_path if db_path is not None else database_path()
@@ -1636,7 +1636,7 @@ def create_app(db_path=None):
         dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
         def lines():
-            yield from ("BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//JumpScan//Club Platform//EN")
+            yield from ("BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Talos//Club Platform//EN")
             for session in sessions:
                 try:
                     start = datetime.fromisoformat(session["starts_at"].replace("Z", "+00:00"))

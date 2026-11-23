@@ -19,7 +19,7 @@ CATALOG_ID = re.compile(r"(usda_sr_legacy|usda_foundation|usda_fndds):([0-9]{1,1
 TOKEN = re.compile(r"[^\W_]+")
 OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
 OFF_FIELDS = "code,product_name,brands,nutriments,serving_size"
-USER_AGENT = "JumpScan/1.2 (school project)"
+USER_AGENT = "Talos/1.3 (school project)"
 FOOD_URL = "https://fdc.nal.usda.gov/fdc-app.html#/food-details/{}/nutrients"
 
 # Detailed per-100 g nutrients (key, English name, Bulgarian name, unit); a missing key means unknown, never zero.

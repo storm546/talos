@@ -42,7 +42,7 @@
     <string name="diag_recorded">Recorded form</string>
     <string name="diag_live">Live form</string>
     <string name="diag_replayed">Live replay</string>
-    <string name="diag_summary_title">JumpScan diagnostics — %1$s, Android %2$s</string>
+    <string name="diag_summary_title">Talos diagnostics — %1$s, Android %2$s</string>
     <string name="diag_summary_trials">Guided test: %1$d/20 jump clips analysed at the selected frame rate (%2$d with flight detected); %3$d/3 squat sets with both counts.</string>
     <string name="diag_summary_runs">%1$s: runs %2$d, failed or cancelled %3$d; mean wall time %4$.2f s.</string>
     <string name="diag_summary_live">Mean %1$.1f fps; %2$d dropped frames in total.</string>

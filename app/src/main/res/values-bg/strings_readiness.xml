@@ -12,7 +12,7 @@
     <string name="rd_summary_good">Поне един показател е по-добър от обичайното и нито един не е под него.</string>
     <string name="rd_summary_normal">Близо до обичайното за Вас.</string>
     <string name="rd_summary_take_care">Два или повече показателя са по-неблагоприятни от обичайното. Обсъдете днешната тренировка с треньора.</string>
-    <string name="rd_summary_still_learning">JumpScan има нужда от поне 7 дни с Ваши стойности, преди да сравнява.</string>
+    <string name="rd_summary_still_learning">Talos има нужда от поне 7 дни с Ваши стойности, преди да сравнява.</string>
     <string name="rd_summary_no_data">Направете отчета или сутрешен скок, за да видите днешната готовност.</string>
     <string name="rd_wellbeing">Самочувствие</string>
     <string name="rd_resting_hr">Пулс в покой</string>

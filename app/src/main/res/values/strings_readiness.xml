@@ -12,7 +12,7 @@
     <string name="rd_summary_good">Better than your usual in at least one measure and nothing below it.</string>
     <string name="rd_summary_normal">Close to your usual.</string>
     <string name="rd_summary_take_care">Two or more measures are less favourable than your usual. Talk with your coach about today\'s session.</string>
-    <string name="rd_summary_still_learning">JumpScan needs at least 7 days of your own values before it compares.</string>
+    <string name="rd_summary_still_learning">Talos needs at least 7 days of your own values before it compares.</string>
     <string name="rd_summary_no_data">Do the check-in or a morning jump to see today\'s readiness.</string>
     <string name="rd_wellbeing">Wellbeing</string>
     <string name="rd_resting_hr">Resting heart rate</string>

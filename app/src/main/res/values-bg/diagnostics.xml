@@ -42,7 +42,7 @@
     <string name="diag_recorded">Техника на запис</string>
     <string name="diag_live">Техника на живо</string>
     <string name="diag_replayed">Тест на живо</string>
-    <string name="diag_summary_title">Диагностика на JumpScan — %1$s, Android %2$s</string>
+    <string name="diag_summary_title">Диагностика на Talos — %1$s, Android %2$s</string>
     <string name="diag_summary_trials">Тест: %1$d от 20 записа на скокове са анализирани с избраната честота (%2$d с открит полет); %3$d от 3 серии клекове с въведен и отчетен брой.</string>
     <string name="diag_summary_runs">%1$s: брой анализи %2$d, неуспешни или прекъснати %3$d; средно време %4$.2f сек.</string>
     <string name="diag_summary_live">Средно %1$.1f кадъра/сек; общо %2$d пропуснати кадъра.</string>

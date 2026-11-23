@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 330" font-family="Liberation Sans, Arial, sans-serif" font-size="13" fill="#1d2b25">
-  <!-- Figure 1 of the documentation: the distributed parts of JumpScan and what crosses the network. -->
+  <!-- Figure 1 of the documentation: the distributed parts of Talos and what crosses the network. -->
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M0 0 L10 5 L0 10 z" fill="#176148"/>

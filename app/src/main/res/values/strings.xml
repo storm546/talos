@@ -27,8 +27,8 @@
     <string name="form_mute_technique">Mute technique cues (keep counts)</string>
     <string name="form_provisional_count">Provisional until set ends · %1$s</string>
     <string name="suggested_edges">These take-off and landing frames are a suggestion. Confirm them before applying.</string>
-    <string name="app_name">JumpScan</string>
-    <string name="brand">JUMPSCAN</string>
+    <string name="app_name">Talos</string>
+    <string name="brand">TALOS</string>
     <string name="sign_in">Sign in</string>
     <string name="login_intro">Sign in to upload numbers and see your history. Video analysis works offline.</string>
     <string name="server_url">Server URL</string>
@@ -52,7 +52,7 @@
     <string name="sign_out">Sign out</string>
     <string name="signing_out">Signing out…</string>
     <string name="coach_note">Numbers to discuss with a coach. Single-camera depth is an estimate; compare your own jumps over time.</string>
-    <string name="no_video_app">No app can open this action. Use Pick video or open a video with JumpScan.</string>
+    <string name="no_video_app">No app can open this action. Use Pick video or open a video with Talos.</string>
     <string name="no_video_returned">No video returned. Try Pick video.</string>
     <string name="local_video">Open a local video from your camera or files.</string>
     <string name="analysing">Analysing video…</string>
@@ -334,7 +334,7 @@
     <string name="nutr_updating">Updated from complete diary days and the weight trend.</string>
     <string name="nutr_holding">Holding the previous estimate.</string>
     <string name="assistant_title">AI assistant</string>
-    <string name="assistant_intro">Ask about your JumpScan data. Proposed changes are not saved unless you confirm them.</string>
+    <string name="assistant_intro">Ask about your Talos data. Proposed changes are not saved unless you confirm them.</string>
     <string name="assistant_you">You</string>
     <string name="assistant_message">Your message</string>
     <string name="assistant_send">Send</string>

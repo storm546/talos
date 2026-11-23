@@ -166,7 +166,7 @@ def test_barcode_from_open_food_facts_saved_once_as_club_food(api, auth, monkeyp
     assert food["servings"] == [{"label": "100 g", "grams": 100.0}, {"label": "40 g", "grams": 40.0}]
     request = seen[0]
     assert request.url.path == f"/api/v2/product/{code}.json" and request.url.host == "world.openfoodfacts.org"
-    assert request.headers["user-agent"] == "JumpScan/1.2 (school project)" and "nutriments" in request.url.params["fields"]
+    assert request.headers["user-agent"] == "Talos/1.3 (school project)" and "nutriments" in request.url.params["fields"]
     assert client.get(f"/api/foods/barcode/{code}", headers=auth("athlete2")).status_code == 200  # local now
     assert client.get(f"/api/foods/barcode/{code}", headers=auth("coach")).json()["id"] == food["id"]
     assert len(seen) == 1

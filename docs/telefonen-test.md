@@ -1,4 +1,4 @@
-# Първи тест на JumpScan със Samsung Galaxy A54
+# Първи тест на Talos със Samsung Galaxy A54
 
 ## Подготовка
 

@@ -201,7 +201,7 @@ Object.assign(dictionary.bg, {
   dashboardIntro:'Проследявайте скоковете, техниката и тренировките на едно място.', theme:'Сменете темата',
   themeDark:'Тъмна тема', themeLight:'Светла тема', holdTime:'Време на задържане (сек)', inBand:'Време в диапазона (сек)',
   sourceLive:'На живо', sourceVideo:'Запис', sideLeft:'Ляво', sideRight:'Дясно',
-  noTargetShort:'Няма зададена цел', openAppCheckin:'Отбележете как се чувствате в приложението JumpScan.',
+  noTargetShort:'Няма зададена цел', openAppCheckin:'Отбележете как се чувствате в приложението Talos.',
   mealBreakdown:'Подробности за храненията', kcalUnit:'ккал', gramUnit:'г', descentMs:'Спускане (мс)', ascentMs:'Изправяне (мс)',
   checkinToday:'Как сте днес?', checkinTotal:'Общо за сън, свежест, мускулен комфорт, спокойствие и настроение.',
   attemptsOf:' от ', effortShort:'усилие'
@@ -217,7 +217,7 @@ Object.assign(dictionary.en, {
   dashboardIntro:'Track jumps, technique and training in one place.', theme:'Switch theme',
   themeDark:'Dark theme', themeLight:'Light theme', holdTime:'Hold time (s)', inBand:'Time in range (s)',
   sourceLive:'Live', sourceVideo:'Video', sideLeft:'Left', sideRight:'Right',
-  noTargetShort:'No target set', openAppCheckin:'Use the JumpScan app to check in.',
+  noTargetShort:'No target set', openAppCheckin:'Use the Talos app to check in.',
   mealBreakdown:'Meal breakdown', kcalUnit:'kcal', gramUnit:'g', descentMs:'Descent (ms)', ascentMs:'Ascent (ms)',
   checkinToday:'How you feel today', checkinTotal:'Total for sleep, freshness, muscle comfort, calm and mood.',
   attemptsOf:' of ', effortShort:'effort'
@@ -770,7 +770,7 @@ function history(content) {
   const own=state.user.role==='athlete';const athlete=own?state.user:state.selected;
   if(!own)content.append(button('back',()=>load('team'),'secondary back'));
   const head=heading(athlete.name,t('history')+' · '+format(state.summary.jump_count)+' · '+t('firstJump')+': '+date(state.summary.first_jump_at));
-  const actions=node('div',null,'actions');actions.append(own?button('export',()=>download('/api/me/export','jumpscan-data.json')):button('csv',()=>download('/api/athletes/'+athlete.id+'/export.csv','athlete-'+athlete.id+'.csv')));
+  const actions=node('div',null,'actions');actions.append(own?button('export',()=>download('/api/me/export','talos-data.json')):button('csv',()=>download('/api/athletes/'+athlete.id+'/export.csv','athlete-'+athlete.id+'.csv')));
   head.append(actions);content.append(head);athleteSubnav(content,'history');content.append(node('p',t('chartNote'),'muted'));
   if(!state.summary.baseline_complete)content.append(node('p',t('provisional'),'warning'));
   if(state.jumps.length){
@@ -942,7 +942,7 @@ function sessions(content) {
   if (past.length) { content.append(node('h2', t('pastSession'))); content.append(sessionTable(past, staff)); }
 
   const tools = node('div', null, 'actions');
-  const calendar = button('calendar', () => download('/api/me/calendar.ics', 'jumpscan.ics')); calendar.id = 'calendar-download';
+  const calendar = button('calendar', () => download('/api/me/calendar.ics', 'talos.ics')); calendar.id = 'calendar-download';
   tools.append(calendar);
   content.append(tools);
 
@@ -1019,7 +1019,7 @@ function sessionsMine(content) {
     tr.append(node('td', String(session.jump_count || 0), 'num'));
     grid.body.append(tr);
   }
-  content.append(grid.wrap, (() => { const b = button('calendar', () => download('/api/me/calendar.ics', 'jumpscan.ics')); return b; })());
+  content.append(grid.wrap, (() => { const b = button('calendar', () => download('/api/me/calendar.ics', 'talos.ics')); return b; })());
 }
 function wellbeing(content) {
   content.append(heading(t('wellbeingView')));
@@ -1796,14 +1796,14 @@ function renderAssistant() {
   panel.append(body); host.append(panel);
 }
 function render(focusSelector=null) {
-  document.documentElement.lang=state.language;document.title='JumpScan · '+t('title');$('language-label').textContent=t('language');$('language').value=state.language;
+  document.documentElement.lang=state.language;document.title='Talos · '+t('title');$('language-label').textContent=t('language');$('language').value=state.language;
   updateThemeLabel();
   const content=$('content');content.replaceChildren();$('session').replaceChildren();$('guide').replaceChildren(node('h2',t('guideTitle')),node('p',t('guide')));
   $('workspace').hidden = !state.user;
   document.body.classList.toggle('authenticated', Boolean(state.user));
   $('assistant')?.replaceChildren();
   if(!state.user){
-    content.append(overviewHero('JumpScan',t('title'),t('dashboardIntro')));const panel=node('section',null,'login');panel.append(node('h2',t('signIn')));
+    content.append(overviewHero('Talos',t('title'),t('dashboardIntro')));const panel=node('section',null,'login');panel.append(node('h2',t('signIn')));
     const form=node('form');form.id='login-form';const email=field(form,'email','email','email');email.id='email';email.autocomplete='username';const password=field(form,'password','password','password');password.id='password';password.minLength=1;password.autocomplete='current-password';
     submit(form,'signIn',async data=>{message('loading');const result=await api('/api/auth/login',{method:'POST',body:JSON.stringify(Object.fromEntries(data))});password.value='';state.token=result.token;state.user=result.user;state.offset=0;streamLive();try{await load(state.user.role==='athlete'?'today':'team');}catch(error){signedOut();throw error;}});panel.append(form);content.append(panel);return;
   }

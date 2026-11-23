@@ -1,12 +1,12 @@
-# JumpScan
+# Talos
 
-**Накратко (BG).** JumpScan дава на спортен клуб тестване на механиката на приземяване без лаборатория.
+**Накратко (BG).** Talos дава на спортен клуб тестване на механиката на приземяване без лаборатория.
 Спортистът заснема скок с телефона си; приложението намира позата на тялото и изчислява числата на самото
 устройство, а към сървъра на клуба отиват само числата. Видеото никога не напуска телефона. Треньорът
 вижда историята на всеки спортист и как тя се променя спрямо собствените му базови стойности. Числата
 са за проследяване на промяна и за разговор с треньор, не са медицинско измерване.
 
-JumpScan gives a sports club landing-mechanics testing without a lab. An athlete films a jump with a
+Talos gives a sports club landing-mechanics testing without a lab. An athlete films a jump with a
 phone; the phone finds the body pose and computes the numbers on the device; only the numbers go to the
 club's server. The coach sees every athlete's history and how each one changes against their own
 baseline. The video never leaves the phone. The project is honest about accuracy: it publishes its own
@@ -63,7 +63,7 @@ server/.venv/bin/pip install -r server/requirements.txt
 server/.venv/bin/uvicorn server.main:app --port 8000 --no-server-header
 ```
 
-The dashboard is at `http://127.0.0.1:8000/`. The database path comes from `JUMPSCAN_DB` and defaults to
+The dashboard is at `http://127.0.0.1:8000/`. The database path comes from `TALOS_DB` and defaults to
 `server/jumpscan.db`.
 
 Synthetic demo accounts (club "Демо клуб", password `demo1234` for all): `admin@demo.test`,
@@ -182,7 +182,7 @@ with `adb`; that export does not exist in release builds.
 
 ## Licence
 
-JumpScan is licensed under the GNU General Public License, version 3 or later (GPL-3.0-or-later).
+Talos is licensed under the GNU General Public License, version 3 or later (GPL-3.0-or-later).
 The full text is in `LICENSE`; it is also available at <https://www.gnu.org/licenses/gpl-3.0.txt>.
 
 Third-party components keep their own licences: MediaPipe Tasks Vision and the bundled
