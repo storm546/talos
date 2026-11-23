@@ -7,7 +7,11 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.hardware.camera2.CameraCharacteristics
+import android.media.AudioAttributes
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTimestamp
+import android.media.AudioTrack
 import android.media.MediaMetadataRetriever
 import android.media.ToneGenerator
 import android.os.Build
@@ -42,7 +46,54 @@ import jumpscan.core.RangeOfMotion
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import org.json.JSONObject
+import kotlin.concurrent.thread
+import kotlin.math.PI
+import kotlin.math.roundToLong
+import kotlin.math.sin
 import kotlin.random.Random
+
+/**
+ * Plays the start tone (1 kHz) on its own AudioTrack and reports when its first sample reached the audio output, in
+ * ms on the camera clock: elapsedRealtime when [boottime], else System.nanoTime. The time comes from
+ * AudioTrack.getTimestamp; when no timestamp arrives within a second, the request time is reported instead and
+ * [onPresented]'s second argument is false. Runs on its own thread; the callback runs there too.
+ */
+internal fun playCueTone(ms: Int, boottime: Boolean, onPresented: (Long, Boolean) -> Unit) = thread(name = "cue-tone") {
+    fun offsetNs() = if (boottime) SystemClock.elapsedRealtimeNanos() - System.nanoTime() else 0L
+    val requestedMs = (System.nanoTime() + offsetNs()) / 1_000_000
+    val rate = AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC).takeIf { it > 0 } ?: 48_000
+    val count = rate * ms / 1000
+    val fade = rate / 200 // 5 ms ramps avoid clicks
+    val samples = ShortArray(count) { i ->
+        (sin(2 * PI * 1000 * i / rate) * 0.8 * minOf(1.0, i / fade.toDouble(), (count - i) / fade.toDouble()) * Short.MAX_VALUE).toInt().toShort()
+    }
+    val track = try {
+        AudioTrack.Builder()
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+            .setTransferMode(AudioTrack.MODE_STREAM).setBufferSizeInBytes(maxOf(count * 2,
+                AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT))).build()
+    } catch (_: Exception) { return@thread onPresented(requestedMs, false) }
+    try {
+        // The whole tone fits in the buffer, so frame 0 of the track is the tone's first sample.
+        track.write(samples, 0, count, AudioTrack.WRITE_BLOCKING)
+        track.play()
+        val stamp = AudioTimestamp()
+        val deadline = SystemClock.elapsedRealtime() + 1000
+        var presented: Long? = null
+        while (presented == null && SystemClock.elapsedRealtime() < deadline) {
+            if (track.getTimestamp(stamp) && stamp.framePosition > 0) {
+                presented = LineCrossing.tonePresentedNs(stamp.framePosition, stamp.nanoTime, 0, rate, offsetNs()) / 1_000_000
+            } else Thread.sleep(5)
+        }
+        onPresented(presented ?: requestedMs, presented != null)
+        while (track.playbackHeadPosition < count && SystemClock.elapsedRealtime() < deadline + ms) Thread.sleep(10)
+    } catch (_: Exception) { onPresented(requestedMs, false) }
+    finally { runCatching { track.stop() }; track.release() }
+}
 
 /** The timing line: a vertical band at the frame centre, filled as the band activity rises. */
 internal class TimingBand(context: android.content.Context) : View(context) {
@@ -108,6 +159,8 @@ class CameraToolActivity : ComponentActivity() {
     private val stamps = ArrayList<Long>()
     private val motion = ArrayList<Pair<Long, Double>>()
     @Volatile private var cueMs = -1L
+    @Volatile private var cueFinal = false   // cueMs is the presented time (or its fallback), not the request time
+    @Volatile private var cueFromAudio = false
     @Volatile private var ignoreBeforeMs = Long.MAX_VALUE
     @Volatile private var firstCrossing = -1L
     @Volatile private var runStarted = 0L // elapsedRealtime of Start, for the live clock only
@@ -390,7 +443,17 @@ class CameraToolActivity : ComponentActivity() {
 
     private fun finishBalance(result: Balance.Result) {
         beep(ToneGenerator.TONE_PROP_BEEP2, 400)
-        done(result.toJson())
+        done(result.toJson(), JSONObject().put("sway_velocity_pct", result.swayVelocityPct ?: JSONObject.NULL)
+            .put("noise_floor_pct", result.noiseFloorPct ?: JSONObject.NULL))
+    }
+
+    /** Plays the cue tone; the cue time becomes final when the tone's output timestamp (or its fallback) arrives. */
+    private fun cue(ms: Int) {
+        cueFinal = false; cueFromAudio = false
+        cueMs = clockMs() // provisional, so motion before the tone is still a false start
+        runStarted = SystemClock.elapsedRealtime()
+        say(R.string.ft_go, good = true)
+        playCueTone(ms, realtimeStamps) { at, audio -> if (active) { cueMs = at; cueFromAudio = audio; cueFinal = true } }
     }
 
     // --- timing tools (luminance on the worker thread) ---
@@ -424,10 +487,11 @@ class CameraToolActivity : ComponentActivity() {
             if (!active) return
             stamps += t
             if (mode == "reaction") return reactionFrame(t, wholeActivity)
-            val crossing = detector.feed(t, bandActivity) ?: return
+            detector.feed(t, bandActivity) ?: return
             if (t < ignoreBeforeMs) return
+            val crossing = detector.crossingMs.roundToLong() // interpolated between the quiet and the busy frame
             if (mode == "sprint" && startKind == "cue") {
-                if (cueMs < 0 || crossing <= cueMs) return
+                if (cueMs < 0 || !cueFinal || crossing <= cueMs) return
                 timed(crossing - cueMs)
             } else if (firstCrossing < 0) {
                 firstCrossing = crossing
@@ -446,6 +510,7 @@ class CameraToolActivity : ComponentActivity() {
             if (activity >= LineCrossing.MOTION) runOnUiThread { abortTiming(R.string.ft_false_start) }
             return
         }
+        if (!cueFinal) return // decide once the tone's real start time is known
         when (val result = LineCrossing.reaction(cue, motion)) {
             is LineCrossing.Reaction.Time -> timed(result.ms)
             LineCrossing.Reaction.FalseStart -> runOnUiThread { abortTiming(R.string.ft_false_start) }
@@ -463,7 +528,8 @@ class CameraToolActivity : ComponentActivity() {
         }
         val json = LineCrossing.json(mode, ms, precision, fps, extra)
         active = false
-        runOnUiThread { beep(ToneGenerator.TONE_PROP_BEEP2, 400); done(json) }
+        val local = if (mode == "reaction" || startKind == "cue" && mode == "sprint") JSONObject().put("cue_clock", if (cueFromAudio) "audio" else "request") else null
+        runOnUiThread { beep(ToneGenerator.TONE_PROP_BEEP2, 400); done(json, local) }
     }
 
     private fun abortTiming(reason: Int) {
@@ -498,12 +564,12 @@ class CameraToolActivity : ComponentActivity() {
             mode == "reaction" -> {
                 say(R.string.ft_reaction_wait)
                 val delay = Random.nextLong(2000, 5000)
-                readout.postDelayed({ if (active) { cueMs = clockMs(); beep(ToneGenerator.TONE_DTMF_0, 300); runStarted = SystemClock.elapsedRealtime(); say(R.string.ft_go, good = true) } }, delay)
+                readout.postDelayed({ if (active) cue(300) }, delay)
             }
             mode == "sprint" && startKind == "cue" -> {
                 say(R.string.ft_marks); beep()
                 readout.postDelayed({ if (active) { say(R.string.ft_set); beep() } }, 2000)
-                readout.postDelayed({ if (active) { cueMs = clockMs(); beep(ToneGenerator.TONE_DTMF_0, 400); runStarted = SystemClock.elapsedRealtime(); say(R.string.ft_go, good = true) } },
+                readout.postDelayed({ if (active) cue(400) },
                     3000 + Random.nextLong(500, 2000))
             }
             else -> say(R.string.ft_wait_crossing)
@@ -530,9 +596,9 @@ class CameraToolActivity : ComponentActivity() {
         }
     }
 
-    private fun done(json: String) {
+    private fun done(json: String, local: JSONObject? = null) {
         active = false
-        setResult(RESULT_OK, Intent().putExtra("measurement", json).putExtra("realtime", realtimeStamps))
+        setResult(RESULT_OK, Intent().putExtra("measurement", json).putExtra("realtime", realtimeStamps).putExtra("local", local?.toString()))
         finish()
     }
 

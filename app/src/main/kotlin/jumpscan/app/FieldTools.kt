@@ -17,9 +17,12 @@ import java.util.UUID
 
 internal const val FIELD_TOOL_REQUEST = 50
 
-/** One field result waiting on the result screen; [status] follows the queue like a form set. */
+/**
+ * One field result waiting on the result screen; [status] follows the queue like a form set. [local] holds phone-only
+ * details (sway velocity and noise floor, how the cue time was taken) that are shown but never uploaded.
+ */
 internal class FieldRun(val body: JSONObject, val clientId: String = UUID.randomUUID().toString(), var status: Int? = null,
-                        val realtime: Boolean = true)
+                        val realtime: Boolean = true, val local: JSONObject = JSONObject())
 
 /** A top-down placement drawing: the phone, its view cone and the athlete (side/front) or the timing line. */
 internal class PlacementSketch(context: Context, private val kind: String) : View(context) {
@@ -194,6 +197,11 @@ internal fun MainActivity.fieldResult(run: FieldRun, error: String? = null) {
                 "touch_down" -> R.string.ft_end_touch; "sway" -> R.string.ft_end_sway; "time_limit" -> R.string.ft_end_limit
                 "lost_tracking" -> R.string.ft_end_lost; else -> R.string.ft_end_stopped })))
             if (!body.isNull("sway_pct")) caption(getString(R.string.ft_sway_line, String.format(locale, "%.1f", body.getDouble("sway_pct"))))
+            val velocity = run.local.optDouble("sway_velocity_pct").takeIf { it.isFinite() }
+            val floor = run.local.optDouble("noise_floor_pct").takeIf { it.isFinite() }
+            if (velocity != null) caption(if (floor != null) getString(R.string.ft_sway_speed_line,
+                String.format(locale, "%.1f", (velocity - floor).coerceAtLeast(0.0)), String.format(locale, "%.1f", floor))
+                else getString(R.string.ft_sway_speed_no_floor, String.format(locale, "%.1f", velocity)))
             text(getString(R.string.ft_balance_limits), 13)
             text(getString(R.string.ft_balance_other_leg), 14, getColor(R.color.ink))
         }
@@ -208,7 +216,8 @@ internal fun MainActivity.fieldResult(run: FieldRun, error: String? = null) {
             big(seconds(body.getLong("time_ms"), if (kind == "reaction") 3 else 2), getString(R.string.ui_seconds))
             caption(getString(R.string.ft_precision_line, String.format(locale, "%.0f", body.getDouble("precision_ms")),
                 String.format(locale, "%.0f", body.getDouble("fps"))))
-            if (kind == "reaction" || body.optString("start") == "cue") notice(getString(R.string.ft_cue_note), caution = true)
+            if (kind == "reaction" || body.optString("start") == "cue") notice(getString(
+                if (run.local.optString("cue_clock") == "audio") R.string.ft_cue_note_audio else R.string.ft_cue_note), caution = true)
             if (!run.realtime) text(getString(R.string.ft_clock_note), 13)
         }
     }
@@ -232,5 +241,6 @@ internal fun MainActivity.fieldResult(run: FieldRun, error: String? = null) {
 /** Result of [CameraToolActivity]: show it with a save button. */
 internal fun MainActivity.cameraToolResult(data: Intent?) {
     val json = data?.getStringExtra("measurement") ?: return toolsHub()
-    fieldResult(FieldRun(JSONObject(json), realtime = data?.getBooleanExtra("realtime", true) ?: true))
+    fieldResult(FieldRun(JSONObject(json), realtime = data?.getBooleanExtra("realtime", true) ?: true,
+        local = data?.getStringExtra("local")?.let(::JSONObject) ?: JSONObject()))
 }

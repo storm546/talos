@@ -77,7 +77,7 @@ class AppChecks : Instrumentation() {
                 queueChecks()
                 featureChecks()
                 toolkitChecks(this)
-                fieldChecks(this)
+                output.putString("parity", fieldChecks(this))
                 previewChecks()
                 videoPreviewCheck()
                 videoCutoffCheck()
