@@ -350,6 +350,7 @@ class CameraToolActivity : ComponentActivity() {
         }
         val sides = romSides()
         if (phase == 2 && firstHold != null && sides.size == 1 && firstHold!!.let { (if (sides[0] == 0) it.leftDeg else it.rightDeg) != null }) {
+            frames.clear() // still the first side: start the second side's window afresh once the athlete turns
             say(R.string.ft_other_side, warn = true); return
         }
         val samples = sides.map { side -> frames.mapNotNull { f -> RangeOfMotion.angle(f, aspect, joint, side)?.let { f.tMs to it } } }
