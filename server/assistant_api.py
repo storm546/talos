@@ -35,8 +35,9 @@ concrete, with numbers and units. Never invent data: read it with a tool first. 
 What the tools cover:
 - Jumps (list_jumps, athlete_summary): jump height in cm and flight time in ms; jumps with warnings are uncertain.
 - Readiness (readiness): today's status good / normal / take care / still learning, with the factors behind it.
-- Training load (training_load, list_training_sessions): session RPE x minutes per day, weekly monotony and strain,
-  acute:chronic ratio; it is information, not a risk score.
+- Training load (training_load, list_training_sessions): session RPE x minutes per day; acute load (the last 7 days'
+  total) and chronic load (the usual week over 28 days) come first, weekly monotony and strain, and the acute:chronic
+  ratio as secondary information, not a risk score.
 - Strength and workouts (list_workouts, list_set_logs, training_summary, list_plans, get_plan, list_templates,
   list_exercises).
 - Nutrition (nutrition_summary, list_food_logs, nutrition_target, nutrition_program, nutrition_expenditure,
@@ -63,6 +64,39 @@ WINDOW = 600
 TOOL_ROUNDS = 6
 CALLS_PER_ROUND = 4
 RESULT_BYTES = 8192
+TEMPERATURE = 0.2
+# Intent router (SPEC 10.4): word stems in Bulgarian and English choose a smaller tool set; a message that matches no
+# intent gets every tool. Staff always get the athlete list so they can name an athlete.
+INTENTS = {
+    "food": (r"food|ate\b|eat|meal|breakfast|lunch|dinner|snack|calorie|kcal|protein|carb|\bfat\b|gram|yog|chicken|"
+             r"rice|banana|oat|potato|egg|храна|хран|ядох|изядох|ям\b|закуск|обяд|вечер|междинн|калори|ккал|протеин|"
+             r"белтък|въглехидрат|мазнин|грам|\d+ ?г\b|кисело|мляко|ориз|яйц|орех|пъстърв|weigh|тежа|тегло|кантар",
+             ("list_foods", "log_food", "list_food_logs", "nutrition_summary", "nutrition_target", "nutrition_estimate",
+              "nutrition_expenditure", "nutrition_program", "list_weights", "log_weight", "set_nutrition_target",
+              "set_nutrition_program")),
+    "training": (r"\bsets?\b|reps?\b|squat|bench|press|deadlift|pull-?up|workout|exercise|plan\b|session|practice|"
+                 r"match|gym|rpe|train|load|серия|серии|повторен|клякане|лежанк|набиран|тяга|преса|упражнен|тренир|план|"
+                 r"мач|фитнес|натоварван|сесия",
+                 ("list_exercises", "log_set", "list_set_logs", "training_summary", "list_plans", "get_plan",
+                  "list_templates", "list_workouts", "get_workout", "log_training_session", "list_training_sessions",
+                  "training_load", "assign_plan", "edit_plan")),
+    "checkin": (r"check-?in|sleep|fatigue|soreness|stress|mood|readiness|hrv|heart|чек-?ин|отчет|сън|умора|треска|"
+                r"стрес|настроение|готовност|пулс|вариабилност",
+                ("save_checkin", "list_checkins", "team_checkins", "readiness", "training_load")),
+    "reading": (r"jump|flight|record|best|leaderboard|rank|sprint|balance|reaction|agility|range of motion|form|"
+                r"скок|полет|рекорд|най-|класаци|спринт|баланс|реакци|ловкост|подвижност|форма",
+                ("list_jumps", "athlete_summary", "athlete_records", "leaderboard", "list_measurements",
+                 "list_sessions", "session_report", "list_form_sets", "readiness")),
+}
+
+
+def route_tools(texts, role):
+    """Tool names for the intents found in `texts` (this message and the previous user turn), None for all tools."""
+    text = " ".join(texts).casefold()
+    names = {name for pattern, tools in INTENTS.values() if re.search(pattern, text) for name in tools}
+    if not names:
+        return None
+    return names | ({"team_summaries"} if role != "athlete" else set())
 
 
 def init_schema(db):
@@ -118,26 +152,54 @@ def model_unavailable():
     return HTTPException(503, "Assistant model unavailable. Check the server model configuration or try again later.")
 
 
+class ModelBusy(HTTPException):
+    """A timeout, a connection failure, 429 or 5xx: the next model in the fallback chain is tried."""
+
+    def __init__(self):
+        super().__init__(503, "Assistant model unavailable. Check the server model configuration or try again later.")
+
+
+def endpoint(url, model, key_file):
+    url, model = url.strip().rstrip("/"), model.strip()
+    headers = {}
+    if key_file:
+        headers["Authorization"] = "Bearer " + Path(key_file).read_text(encoding="utf-8").strip()
+    return url + "/chat/completions", model, headers
+
+
 def model_client():
-    url = os.environ.get("JUMPSCAN_LLM_URL", "").strip().rstrip("/")
+    url = os.environ.get("JUMPSCAN_LLM_URL", "").strip()
     model = os.environ.get("JUMPSCAN_LLM_MODEL", "").strip()
     if not url or not model:
         raise HTTPException(503, "Assistant model is not configured.")
-    headers = {}
-    if key_file := os.environ.get("JUMPSCAN_LLM_KEY_FILE"):
-        try:
-            headers["Authorization"] = "Bearer " + Path(key_file).read_text(encoding="utf-8").strip()
-        except (OSError, ValueError):
-            raise model_unavailable() from None
-    return url + "/chat/completions", model, headers
+    try:
+        return endpoint(url, model, os.environ.get("JUMPSCAN_LLM_KEY_FILE"))
+    except (OSError, ValueError):
+        raise model_unavailable() from None
+
+
+def model_chain():
+    """The configured model, then the `JUMPSCAN_LLM_FALLBACK` models (comma-separated `url|model|keyfile`, key file
+    optional) in order. Malformed entries and unreadable key files are skipped."""
+    chain = [model_client()]
+    for entry in os.environ.get("JUMPSCAN_LLM_FALLBACK", "").split(","):
+        parts = [part.strip() for part in entry.split("|")]
+        if len(parts) in (2, 3) and parts[0] and parts[1]:
+            try:
+                chain.append(endpoint(parts[0], parts[1], parts[2] if len(parts) == 3 else None))
+            except (OSError, ValueError):
+                continue
+    return chain
 
 
 def call_model(client, url, model, headers, messages, tools, *, allow_tools):
     try:
         with client.stream("POST", url, headers=headers, json={
-            "model": model, "messages": messages, "tools": tools,
+            "model": model, "messages": messages, "tools": tools, "temperature": TEMPERATURE,
             "tool_choice": "auto" if allow_tools else "none", "max_tokens": 4096,
         }) as response:
+            if response.status_code == 429 or response.status_code >= 500:
+                raise ModelBusy()
             response.raise_for_status()
             body = bytearray()
             for chunk in response.iter_bytes(chunk_size=8192):
@@ -145,8 +207,21 @@ def call_model(client, url, model, headers, messages, tools, *, allow_tools):
                 if len(body) > 128 * 1024:
                     raise model_unavailable()
         return json.loads(body)["choices"][0]["message"]
+    except httpx.TransportError:
+        raise ModelBusy() from None
     except (httpx.HTTPError, httpx.InvalidURL, ValueError, KeyError, IndexError, TypeError, RecursionError):
         raise model_unavailable() from None
+
+
+def call_chain(client, chain, start, messages, tools, *, allow_tools):
+    """Try the models from `start` on; returns (message, index of the model that answered)."""
+    for index in range(start, len(chain)):
+        try:
+            return call_model(client, *chain[index], messages, tools, allow_tools=allow_tools), index
+        except ModelBusy:
+            if index == len(chain) - 1:
+                raise
+    raise model_unavailable()
 
 
 def text_tool_calls(text, round_no):
@@ -464,7 +539,9 @@ def install(app, h, operations):
             if body.conversation_id is not None:
                 conversation(db, user_id, conversation_id)
                 history = turns(db, conversation_id, 6)
-        url, model, headers = model_client()
+        chain, active = model_chain(), 0
+        names = route_tools([body.message] + [turn["message"] for turn in history[:1]], user["role"])
+        offered = [d for d in definitions if names is None or d["function"]["name"] in names]
         today = date.today()
         messages = [{"role": "system", "content": SYSTEM_PROMPT + SKILLS + f"\nToday is {today.isoformat()} "
                      f"({today.strftime('%A')}). Authenticated caller: " + json.dumps(
@@ -477,7 +554,8 @@ def install(app, h, operations):
         with httpx.Client(timeout=httpx.Timeout(float(os.environ.get("JUMPSCAN_LLM_TIMEOUT", 60)), connect=2.0),
                           trust_env=False) as client:
             for round_no in range(TOOL_ROUNDS + 1):
-                response = call_model(client, url, model, headers, messages, definitions, allow_tools=round_no < TOOL_ROUNDS)
+                response, active = call_chain(client, chain, active, messages, offered,
+                                              allow_tools=round_no < TOOL_ROUNDS)
                 if not isinstance(response, dict):
                     raise model_unavailable()
                 calls = response.get("tool_calls")

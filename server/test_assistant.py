@@ -497,6 +497,7 @@ def test_model_http_contract_or_failure(api, auth, monkeypatch, tmp_path, result
         assert request.headers["Authorization"] == "Bearer offline-test-key"
         payload = json.loads(request.content)
         assert payload["model"] == "configured-model" and payload["tool_choice"] == "auto"
+        assert payload["temperature"] == 0.2
         assert "offline-test-key" not in str(payload)
         assert any(tool["function"]["name"] == "log_food" for tool in payload["tools"])
         if result == "timeout":
@@ -504,9 +505,129 @@ def test_model_http_contract_or_failure(api, auth, monkeypatch, tmp_path, result
         return httpx.Response(result, json={"choices": [{"message": {"role": "assistant", "content": "Hello."}}]})
 
     monkeypatch.setattr(assistant_api.httpx, "Client", lambda **kwargs: actual_client(transport=httpx.MockTransport(transport), **kwargs))
-    response = chat(client, auth("athlete4"))
+    response = chat(client, auth("athlete4"), "Hello.")  # no intent: every tool is offered
     assert response.status_code == (200 if result == 200 else 503)
     assert "offline-test-key" not in response.text
+
+
+REAL_CLIENT = httpx.Client
+
+
+def fallback_setup(monkeypatch, tmp_path, primary):
+    """Primary model at host a, fallback models at hosts b and c; `primary` decides the primary's answer."""
+    monkeypatch.setenv("JUMPSCAN_LLM_URL", "http://a.test/v1")
+    monkeypatch.setenv("JUMPSCAN_LLM_MODEL", "primary")
+    monkeypatch.delenv("JUMPSCAN_LLM_KEY_FILE", raising=False)
+    key_file = tmp_path / "fallback.key"
+    key_file.write_text("fallback-key\n", encoding="utf-8")
+    monkeypatch.setenv("JUMPSCAN_LLM_FALLBACK", f" broken-entry , http://b.test/v1|second|{tmp_path / 'missing.key'}, "
+                                                f"http://c.test/v1/|third|{key_file}")
+    seen = []
+
+    def transport(request):
+        payload = json.loads(request.content)
+        seen.append((request.url.host, payload["model"], request.headers.get("Authorization")))
+        if request.url.host == "a.test":
+            if primary == "timeout":
+                raise httpx.ConnectTimeout("simulated", request=request)
+            if primary == "refused":
+                raise httpx.ConnectError("simulated", request=request)
+            if isinstance(primary, int) and primary != 200:
+                return httpx.Response(primary, json={"error": "busy"})
+        rounds = sum(1 for message in payload["messages"] if message["role"] == "tool")
+        if rounds == 0 and request.url.host == "c.test" and primary != 200:
+            message = {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "list_jumps", "arguments": "{}"}}]}
+        else:
+            message = {"role": "assistant", "content": f"Answer from {payload['model']}."}
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    monkeypatch.setattr(assistant_api.httpx, "Client",
+                        lambda **kwargs: REAL_CLIENT(transport=httpx.MockTransport(transport), **kwargs))
+    return seen
+
+
+@pytest.mark.parametrize("primary", [429, 500, 503, "timeout", "refused"])
+def test_fallback_chain_on_timeout_429_and_5xx(api, auth, monkeypatch, tmp_path, primary):
+    client, _ = api
+    seen = fallback_setup(monkeypatch, tmp_path, primary)
+    response = chat(client, auth("athlete4"), "Show my jumps.")
+    assert response.status_code == 200, response.text
+    assert response.json()["reply"] == "Answer from third."
+    # The malformed entry and the entry with an unreadable key file are skipped; once the fallback answered, the
+    # second round goes straight to it.
+    assert [(host, model) for host, model, _ in seen] == [("a.test", "primary"), ("c.test", "third"), ("c.test", "third")]
+    assert seen[1][2] == "Bearer fallback-key" and seen[0][2] is None
+    assert "fallback-key" not in response.text
+
+
+def test_primary_answer_and_non_retryable_errors_do_not_fall_back(api, auth, monkeypatch, tmp_path):
+    client, _ = api
+    seen = fallback_setup(monkeypatch, tmp_path, 200)
+    assert chat(client, auth("athlete4"), "Hello.").json()["reply"] == "Answer from primary."
+    assert [host for host, _, _ in seen] == ["a.test"]
+    seen = fallback_setup(monkeypatch, tmp_path, 400)
+    assert chat(client, auth("athlete4"), "Hello.").status_code == 503
+    assert [host for host, _, _ in seen] == ["a.test"]
+
+
+def test_every_model_failing_is_503(api, auth, monkeypatch, tmp_path):
+    client, _ = api
+    fallback_setup(monkeypatch, tmp_path, 429)
+    monkeypatch.setenv("JUMPSCAN_LLM_FALLBACK", "")
+    response = chat(client, auth("athlete4"), "Hello.")
+    assert response.status_code == 503 and "unavailable" in response.json()["detail"]
+
+
+def test_model_chain_parsing(monkeypatch, tmp_path):
+    key = tmp_path / "k"
+    key.write_text(" secret \n", encoding="utf-8")
+    monkeypatch.setenv("JUMPSCAN_LLM_URL", "http://a/v1/")
+    monkeypatch.setenv("JUMPSCAN_LLM_MODEL", "m1")
+    monkeypatch.delenv("JUMPSCAN_LLM_KEY_FILE", raising=False)
+    monkeypatch.setenv("JUMPSCAN_LLM_FALLBACK", f"http://b/v1|m2,|,http://c/v1|m3|{key},http://d|,x|y|z|w")
+    assert assistant_api.model_chain() == [
+        ("http://a/v1/chat/completions", "m1", {}), ("http://b/v1/chat/completions", "m2", {}),
+        ("http://c/v1/chat/completions", "m3", {"Authorization": "Bearer secret"})]
+    monkeypatch.delenv("JUMPSCAN_LLM_FALLBACK")
+    assert len(assistant_api.model_chain()) == 1
+
+
+@pytest.mark.parametrize("message,role,expected", [
+    ("Log 200 g of Greek yogurt for breakfast today.", "athlete", {"log_food", "list_foods"}),
+    ("Запиши 250 г кисело мляко за закуска днес.", "athlete", {"log_food", "list_foods"}),
+    ("I weigh 71.4 kg this morning.", "athlete", {"log_weight"}),
+    ("Днес тежа 70,8 кг.", "athlete", {"log_weight"}),
+    ("Log a set of barbell squats: 5 reps at 100 kg, RPE 8.", "athlete", {"log_set", "list_exercises"}),
+    ("Направих 12 повторения на лег преса със 120 кг.", "athlete", {"log_set", "list_exercises"}),
+    ("Запиши мач днес, 60 минути, RPE 8.", "athlete", {"log_training_session"}),
+    ("Save my check-in for today: sleep 4, fatigue 3.", "athlete", {"save_checkin"}),
+    ("Каква е готовността ми днес?", "athlete", {"readiness"}),
+    ("Кой е най-високият ми скок?", "athlete", {"athlete_records", "list_jumps"}),
+    ("What is my acute:chronic workload ratio?", "athlete", {"training_load"}),
+    ("How is Maria's sleep?", "coach", {"readiness", "team_summaries"}),
+])
+def test_intent_router_offers_the_needed_tools(message, role, expected):
+    names = assistant_api.route_tools([message], role)
+    assert names is not None and expected <= names and len(names) < 30
+
+
+def test_intent_router_offers_every_tool_when_unsure(api, auth, fake_model):
+    client, _ = api
+    assert assistant_api.route_tools(["Hello, what can you do?"], "athlete") is None
+    assert assistant_api.route_tools(["да"], "coach") is None
+    observed = fake_model("Hi.")
+    chat(client, auth("athlete1"), "Hello, what can you do?")
+    everything = {tool["function"]["name"] for tool in observed[0][1]}
+    assert len(everything) >= 40 and {"write_coach_note", "log_food", "list_jumps"} <= everything
+    observed = fake_model("Hi.")
+    response = chat(client, auth("athlete1"), "Log 80 g oats for breakfast.")
+    offered = {tool["function"]["name"] for tool in observed[0][1]}
+    assert {"list_foods", "log_food"} <= offered < everything and "write_coach_note" not in offered
+    # A short follow-up keeps the previous turn's intent.
+    observed = fake_model("Done.")
+    chat(client, auth("athlete1"), "yes", conversation_id=response.json()["conversation_id"])
+    assert {tool["function"]["name"] for tool in observed[0][1]} == offered
 
 
 def test_optional_local_model_smoke(api, auth):
