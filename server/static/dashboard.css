@@ -134,8 +134,6 @@ body:not(.authenticated) .overview-hero {min-height:300px}
   .overview-hero {padding:19px;min-height:137px;border-radius:17px}
   .overview-hero::before {right:-225px;top:-244px}
   .overview-grid:not(.team-overview),.charts,body:not(.authenticated) #content {grid-template-columns:minmax(0,1fr)}
-  .overview-grid.today-grid {grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
-  .today-grid>:nth-child(n+3) {grid-column:1/-1}
   .overview-card {padding:13px}
   body:not(.authenticated) .overview-hero {min-height:180px}
   svg text {font-size:16px}
@@ -227,3 +225,7 @@ svg polyline {stroke-linecap:round;stroke-linejoin:round}
 .ft-mirror .ft-right {fill:var(--right)}
 .ft-table td {white-space:nowrap}
 .ft-table td:first-child {white-space:normal;min-width:150px}
+.today-grid>.today-hero {grid-column:1/-1;background:linear-gradient(#2c292a,var(--hero));color:var(--hero-muted)}
+.today-hero h2,.today-hero .card-glyph {color:var(--signal)}
+.today-hero .card-subject {color:var(--hero-ink);font-size:1.6rem}
+.today-hero .muted,.today-hero .stat-line {color:var(--hero-muted);border-color:#ffffff24}

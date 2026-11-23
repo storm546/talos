@@ -43,11 +43,16 @@ def check():
 
         for role, account in [('coach', 'coach'), ('athlete', 'athlete1'), ('admin', 'admin')]:
             login(account)
-            assert page.locator('.overview-card').count() == 4
-            assert all(value.replace('\u00a0', '').replace('/', '').replace(' ', '').isdigit()
+            # The athlete's own page starts with the phone's Today cards from /api/me/today (SPEC 10.2).
+            assert page.locator('.overview-card').count() == (10 if role == 'athlete' else 4)
+            assert all(value.replace('\u00a0', '').replace('/', '').replace(' ', '').replace(',', '').replace('.', '').isdigit()
                        for value in page.locator('.overview-card .big-value').all_text_contents())
             if role == 'athlete':
                 assert page.locator('progress').count() == 4
+                assert page.locator('.today-hero .card-subject').inner_text() in ('Добре', 'Нормално', 'Внимание', 'Още се учи', 'Няма данни')
+                for title in ('Днешен план', 'Тегло', 'Нови рекорди (7 дни)', 'Следваща тренировка', 'Съобщения', 'Последен скок'):
+                    expect(page.get_by_role('heading', name=title, exact=True)).to_be_visible()
+                screenshot('athlete-today-full-bg', full_page=True)
             for theme in ['light', 'dark']:
                 page.evaluate('delete document.documentElement.dataset.theme')
                 page.emulate_media(color_scheme=theme, reduced_motion='reduce')
