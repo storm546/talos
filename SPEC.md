@@ -382,8 +382,10 @@ a new one returns 201. The same applies to check-ins through their natural key `
 Same rules as sections 3 and 5: roles and club scope on every read and write, consent before athlete data
 is stored, strict validation, audit of every change, Bulgarian and English, no medical or diet-prescription
 wording (no diagnosis, treatment, "cure", "fat-loss plan"; numbers are for discussion with the coach).
-Nothing in this section may use code, data, names or designs taken from another product; methods are the
-published, general ones named below, apart from the owner's own weight-trend model in 6.3.
+Methods are the published, general ones named below, apart from the owner's own weight-trend model in 6.3.
+Borrowing follows `PHILOSOPHY.md`: ideas and behaviour from other apps are welcome; code only from open-source
+projects with a GPL-3.0-or-later compatible licence, with attribution in `LICENSES-AUDIT.md`; no code, assets,
+names or text from proprietary products.
 
 ### 6.1 Form tracker (on-device analysis; server stores numbers only)
 
