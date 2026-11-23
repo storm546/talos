@@ -132,7 +132,7 @@ def parse_week(value):
 
 def week_facts(c, monday):
     sunday = monday + timedelta(days=6)
-    last = min(sunday, datetime.now(timezone.utc).date() + timedelta(days=1))
+    last = min(sunday, datetime.now(timezone.utc).date())  # the same end day as Today's consistency
     span = dict(from_=monday.isoformat(), to=sunday.isoformat())
     sessions = c.get("/api/training-sessions")(athlete_id=None, **span, user=c.user, db=c.db)
     previous = c.get("/api/training-sessions")(athlete_id=None, from_=(monday - timedelta(days=7)).isoformat(),
@@ -170,7 +170,7 @@ def week_facts(c, monday):
                      "load": sum(s["load"] for s in sessions), "load_previous_week": sum(s["load"] for s in previous),
                      "sets": len(sets), "volume_kg": round(sum(e["volume_kg"] for e in by_exercise.values()), 1),
                      "top_exercises": [{**e, "volume_kg": round(e["volume_kg"], 1)} for e in top]},
-        "records": [{k: r.get(k) for k in ("measure", "value", "unit", "date", "reps", "exercise", "name_bg", "name_en")}
+        "records": [{k: r.get(k) for k in ("measure", "value", "unit", "date", "reps", "exercise", "name_bg", "name_en", "previous")}
                     for r in records],
         "checkins": {"days": len(checkins),
                      "wellbeing_avg": round(sum(wellbeing) / len(wellbeing), 1) if wellbeing else None},
