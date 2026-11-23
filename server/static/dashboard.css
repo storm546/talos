@@ -174,7 +174,7 @@ svg polyline {stroke-linecap:round;stroke-linejoin:round}
 .icon-home { --symbol:-120px }
 .icon-more { --symbol:-140px }
 .brand {font-size:0;gap:0}
-.brand .brand-mark {width:126px;height:24px;background:var(--ink);mask:url(wordmark.svg) center/contain no-repeat;border-radius:0}
+.brand .brand-mark {width:102px;height:24px;background:var(--ink);mask:url(wordmark.svg) center/contain no-repeat;border-radius:0}
 .brand-mark::before {display:none}
 .flight-board {margin:20px 0 0;color:var(--hero-ink);--accent:var(--signal);--muted:var(--hero-muted);--ink:var(--hero-ink);--line:#595552;--hover:#353234}
 .overview-hero .flight-board h2 {color:var(--hero-muted);font:600 .92rem Space,sans-serif;margin:0 0 5px}

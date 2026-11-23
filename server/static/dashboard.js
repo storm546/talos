@@ -1798,7 +1798,7 @@ function renderAssistant() {
 function render(focusSelector=null) {
   document.documentElement.lang=state.language;document.title='Talos · '+t('title');$('language-label').textContent=t('language');$('language').value=state.language;
   updateThemeLabel();
-  const content=$('content');content.replaceChildren();$('session').replaceChildren();$('guide').replaceChildren(node('h2',t('guideTitle')),node('p',t('guide')));
+  const content=$('content');content.replaceChildren();$('session').replaceChildren();const jumpView=['today','team','history','sessions','sessionsMine','records','leaderboard'].includes(state.view);$('guide').hidden=!jumpView;$('guide').replaceChildren(...(jumpView?[node('h2',t('guideTitle')),node('p',t('guide'))]:[]));
   $('workspace').hidden = !state.user;
   document.body.classList.toggle('authenticated', Boolean(state.user));
   $('assistant')?.replaceChildren();

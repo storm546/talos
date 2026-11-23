@@ -173,3 +173,5 @@ def install(app, h):
             "AND (? != 'coach' OR users.club_id = ?) "
             "ORDER BY measurements.created_at DESC, measurements.id DESC LIMIT ? OFFSET ?",
             (athlete_id, athlete_id, kind, kind, user["role"], user["club_id"], limit, offset))]
+
+    return {"list_measurements": list_measurements}

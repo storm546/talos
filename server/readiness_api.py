@@ -261,27 +261,33 @@ def install(app, h):
             "SELECT * FROM training_sessions WHERE athlete_id = ? AND (? IS NULL OR day >= ?) AND (? IS NULL OR day <= ?) "
             "ORDER BY day DESC, id DESC LIMIT 500", (athlete["id"], from_, from_, to, to))]
 
+    def log_training_session(body: SessionBody, user, db, emit):
+        """Validate (emit None, the assistant's proposal check) or store one session for the caller."""
+        h.require_role(user, "athlete")
+        if not user["consent_recorded"]:
+            raise HTTPException(403, "Consent must be recorded by a coach or admin before recording sessions")
+        day = parse_day(body.day, earliest=30)
+        if emit is None:
+            return
+        if body.client_id is not None:
+            previous = db.execute("SELECT * FROM training_sessions WHERE athlete_id = ? AND client_id = ?",
+                                  (user["id"], body.client_id)).fetchone()
+            if previous is not None:
+                return JSONResponse(status_code=200, content=session_row(previous))
+        now = h.now_iso()
+        cursor = db.execute(
+            "INSERT INTO training_sessions(athlete_id, day, kind, minutes, rpe, source, notes, client_id, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], day.isoformat(), body.kind, body.minutes, body.rpe,
+                                                  body.source, body.notes.strip(), body.client_id, now))
+        h.audit(db, user["id"], "training_session_logged", cursor.lastrowid, {"day": day.isoformat()})
+        emit(h.athlete_viewers(db, user), {"type": "training_session", "id": cursor.lastrowid,
+                                           "athlete_id": user["id"], "club_id": user["club_id"], "at": now})
+        return session_row(db.execute("SELECT * FROM training_sessions WHERE id = ?", (cursor.lastrowid,)).fetchone())
+
     @app.post("/api/training-sessions", status_code=201, dependencies=[Depends(current_user)])
     def add_session(body: SessionBody, request: Request, db=Depends(get_db)):
         with h.authorized_write(db, request) as (user, emit):
-            h.require_role(user, "athlete")
-            if not user["consent_recorded"]:
-                raise HTTPException(403, "Consent must be recorded by a coach or admin before recording sessions")
-            day = parse_day(body.day, earliest=30)
-            if body.client_id is not None:
-                previous = db.execute("SELECT * FROM training_sessions WHERE athlete_id = ? AND client_id = ?",
-                                      (user["id"], body.client_id)).fetchone()
-                if previous is not None:
-                    return JSONResponse(status_code=200, content=session_row(previous))
-            now = h.now_iso()
-            cursor = db.execute(
-                "INSERT INTO training_sessions(athlete_id, day, kind, minutes, rpe, source, notes, client_id, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (user["id"], day.isoformat(), body.kind, body.minutes, body.rpe,
-                                                      body.source, body.notes.strip(), body.client_id, now))
-            h.audit(db, user["id"], "training_session_logged", cursor.lastrowid, {"day": day.isoformat()})
-            emit(h.athlete_viewers(db, user), {"type": "training_session", "id": cursor.lastrowid,
-                                               "athlete_id": user["id"], "club_id": user["club_id"], "at": now})
-            return session_row(db.execute("SELECT * FROM training_sessions WHERE id = ?", (cursor.lastrowid,)).fetchone())
+            return log_training_session(body, user, db, emit)
 
     @app.delete("/api/training-sessions/{session_id}", status_code=204, dependencies=[Depends(current_user)])
     def delete_session(session_id: SqlitePath, request: Request, db=Depends(get_db)):
@@ -445,3 +451,6 @@ def install(app, h):
                 digest_cache[key] = text
             result["text"], result["phrased_by"] = digest_cache[key], "local_model"
         return result
+
+    return {"list_training_sessions": list_sessions, "readiness": readiness, "training_load": load,
+            "log_training_session": log_training_session}

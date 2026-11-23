@@ -526,3 +526,46 @@ def test_optional_local_model_smoke(api, auth):
     assert response.status_code == 200
     body = response.json()
     assert body["reply"] and body["conversation_id"] and body["proposal"] is None
+
+
+def test_prompt_has_today_and_text_tool_calls_run_like_rest(api, auth, fake_model):
+    client, path = api
+    athlete = auth("athlete1")
+    athlete_id = user_id(path, "athlete1")
+    text_call = (f"<tool_call>\n<function=readiness>\n<parameter=athlete_id>\n{athlete_id}\n</parameter>\n"
+                 "<parameter=days>\n3\n</parameter>\n</function>\n</tool_call>\n")
+    observed = fake_model(text_call, calls(("training_load", {"athlete_id": athlete_id}),
+                                           ("athlete_records", {"athlete_id": athlete_id}),
+                                           ("list_measurements", {"kind": "balance"})), "Готово.")
+    response = chat(client, athlete, "Как съм днес?")
+    assert response.status_code == 200, response.text
+    assert response.json()["reply"] == "Готово."
+    assert f"Today is {today()}" in observed[0][0][0]["content"]
+    readiness, = results(observed, 1)
+    assert readiness["data"] == client.get(f"/api/athletes/{athlete_id}/readiness?days=3", headers=athlete).json()
+    load, records, balance = (result["data"] for result in results(observed, 2)[1:])
+    assert load == client.get(f"/api/athletes/{athlete_id}/load", headers=athlete).json()
+    assert records == client.get(f"/api/athletes/{athlete_id}/records", headers=athlete).json()
+    assert balance == client.get("/api/measurements?kind=balance", headers=athlete).json()
+
+
+def test_training_session_and_quick_food_are_proposed_then_confirmed(api, auth, fake_model):
+    client, path = api
+    athlete = auth("athlete4")
+    athlete_id = user_id(path, "athlete4")
+    session = {"day": today(), "kind": "practice", "minutes": 90, "rpe": 8, "notes": "football"}
+    snack = {"day": today(), "meal": "breakfast", "label": "Ham and cheese sandwich", "kcal": 450}
+    fake_model(calls(("log_training_session", session), ("log_food", snack)), "Потвърди, моля.")
+    proposal = chat(client, athlete, "Запиши тренировката и сандвича.").json()["proposal"]
+    assert [action["human_summary"] for action in proposal["actions"]] == [
+        f"Log a practice session on {today()}: 90 min at RPE 8.",
+        f"Log Ham and cheese sandwich (450 kcal) for breakfast on {today()}."]
+    with main.database(path) as db:
+        assert db.execute("SELECT COUNT(*) FROM training_sessions WHERE athlete_id = ? AND notes = 'football'",
+                          (athlete_id,)).fetchone()[0] == 0
+    assert confirm(client, athlete, proposal["proposal_id"]).json()["applied"] == 2
+    with main.database(path) as db:
+        assert db.execute("SELECT minutes * rpe FROM training_sessions WHERE athlete_id = ? AND notes = 'football'",
+                          (athlete_id,)).fetchone()[0] == 720
+        assert db.execute("SELECT kcal FROM food_logs WHERE athlete_id = ? AND label = 'Ham and cheese sandwich'",
+                          (athlete_id,)).fetchone()[0] == 450

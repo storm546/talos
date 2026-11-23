@@ -9,13 +9,13 @@ from pathlib import Path
 import re
 import secrets
 import time
-from typing import Annotated, Callable
+from typing import Annotated, Callable, Literal
 
 import httpx
 from fastapi import Depends, Header, HTTPException, Query
 from pydantic import AfterValidator, Field, StringConstraints, ValidationError, create_model
 
-from . import training_nutrition_api as tn
+from . import readiness_api as rd, training_nutrition_api as tn
 from .response_data import json_chunks
 
 
@@ -27,9 +27,40 @@ SYSTEM_PROMPT = (
     "Write tools only prepare proposals. Never say a write happened without confirmation; "
     "ask the user to review and confirm the server's proposal. Use scoped tools rather than guessing records."
 )
+SKILLS = """
+You are the assistant inside Talos, a personal fitness app (training, nutrition, body, readiness, field tests) with an
+optional club and coach. Reply in the language of the user's latest message (Bulgarian for Cyrillic), short and
+concrete, with numbers and units. Never invent data: read it with a tool first. Never show raw tool syntax.
+
+What the tools cover:
+- Jumps (list_jumps, athlete_summary): jump height in cm and flight time in ms; jumps with warnings are uncertain.
+- Readiness (readiness): today's status good / normal / take care / still learning, with the factors behind it.
+- Training load (training_load, list_training_sessions): session RPE x minutes per day, weekly monotony and strain,
+  acute:chronic ratio; it is information, not a risk score.
+- Strength and workouts (list_workouts, list_set_logs, training_summary, list_plans, get_plan, list_templates,
+  list_exercises).
+- Nutrition (nutrition_summary, list_food_logs, nutrition_target, nutrition_program, nutrition_expenditure,
+  list_weights).
+- Records and leaderboard (athlete_records, leaderboard); field tests (list_measurements: range of motion, balance,
+  sprint, reaction, agility, GPS cardio).
+- Check-ins (list_checkins, save_checkin): five 1-5 items where 5 is best.
+
+Workflows:
+- Logging food: first find the food with list_foods (search in the user's language, then in English if nothing is
+  found; catalogue names are English, so translate, e.g. "chicken breast raw"), pick the best match, then call log_food with its food_id (or its
+  catalog_id when it has no food_id), grams, meal (закуска = breakfast, обяд = lunch, вечеря = dinner, else snack)
+  and day. If nothing matches, offer a quick add with
+  label and kcal instead of guessing an id.
+- Logging a set: find the exercise id with list_exercises first, then log_set.
+- Logging a practice, match, gym or conditioning session: log_training_session with minutes and RPE 0-10.
+- "Today" and dates the user leaves out mean the date given below; never use another year.
+- For your own data as an athlete, leave athlete_id empty or use the caller id. Staff must name the athlete.
+- Only squat repetition counts and plank hold times are validated form results; other form numbers are
+  experimental. Hip and shoulder range of motion have no reference measurement.
+"""
 RETENTION = 30 * 86400
 WINDOW = 600
-TOOL_ROUNDS = 4
+TOOL_ROUNDS = 6
 CALLS_PER_ROUND = 4
 RESULT_BYTES = 8192
 
@@ -116,6 +147,33 @@ def call_model(client, url, model, headers, messages, tools, *, allow_tools):
         return json.loads(body)["choices"][0]["message"]
     except (httpx.HTTPError, httpx.InvalidURL, ValueError, KeyError, IndexError, TypeError, RecursionError):
         raise model_unavailable() from None
+
+
+def text_tool_calls(text, round_no):
+    """Some models write tool calls as text instead of the tool_calls field: Hermes-style JSON or
+    <function=name><parameter=key>value</parameter></function> inside <tool_call> blocks. Returns (calls, rest)."""
+    calls = []
+    for index, block in enumerate(re.findall(r"<tool_call>(.*?)(?:</tool_call>|$)", text, re.S)[:CALLS_PER_ROUND + 1]):
+        block = block.strip()
+        try:
+            if block.startswith("{"):
+                data = json.loads(block)
+                name, args = data["name"], data.get("arguments", {})
+            else:
+                name = re.search(r"<function=([A-Za-z0-9_-]{1,64})>", block).group(1)
+                args = {}
+                for key, value in re.findall(r"<parameter=([A-Za-z0-9_]{1,64})>(.*?)</parameter>", block, re.S):
+                    value = value.strip()
+                    try:
+                        args[key] = json.loads(value)
+                    except ValueError:
+                        args[key] = value
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+        calls.append({"id": f"text_{round_no}_{index}", "type": "function",
+                      "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)}})
+    rest = re.sub(r"<tool_call>.*?(?:</tool_call>|$)", "", text, flags=re.S).strip()
+    return calls, rest or None
 
 
 def utf8_text(value):
@@ -241,12 +299,35 @@ def build_tools(h, operations):
     read("nutrition_expenditure", "nutrition_expenditure", "Read adaptive expenditure and its history.", **target)
     read("nutrition_program", "get_program", "Read the current nutrition program.", **target)
 
+    window = {"days": (Annotated[int, Field(ge=1, le=28)], 7), "day": (day | None, None)}
+    read("readiness", "readiness", "Read daily readiness (status and factors) for the last days.", **target, **window)
+    read("training_load", "training_load", "Read session-RPE load, monotony, strain and acute:chronic ratio.",
+         **target, days=(Annotated[int, Field(ge=7, le=90)], 28), day=(day | None, None))
+    read("list_training_sessions", "list_training_sessions", "List practice, gym, match and conditioning sessions.",
+         **optional_target, **days)
+    read("list_workouts", "list_workouts", "List logged workouts with sets and volume.", **optional_target, **days,
+         **paging)
+    read("get_workout", "get_workout", "Read one workout with its sets.", workout_id=(record_id, ...))
+    read("list_templates", "list_templates", "List workout templates you can start from.")
+    read("athlete_records", "athlete_records", "Read personal records (jumps, form, strength, field tests).", **target)
+    read("leaderboard", "leaderboard", "Read the club jump leaderboard (opted-in athletes only).",
+         measure=(Literal["jump_height", "flight_time"], "jump_height"), period=(Literal["30", "90", "all"], "all"))
+    read("list_measurements", "list_measurements", "Read field tests: range of motion, balance, sprint, reaction, "
+         "agility and GPS cardio.", **optional_target,
+         kind=(Literal["rom", "balance", "sprint", "reaction", "agility", "cardio"] | None, None), **paging)
+
     set_body = create_model("AssistantSetLog", __base__=tn.SetLog, client_id=(None, None))
-    food_body = create_model("AssistantFoodLog", __base__=tn.FoodLog, client_id=(None, None))
+    food_body = create_model("AssistantFoodLog", __base__=tn.FoodEntry, client_id=(None, None))
     write("log_set", "log_set", set_body, "Propose logging a set for yourself (athlete only).",
           "Log set {set_no} of exercise #{exercise_id}: {reps} reps on {day} (load in kg: {load_kg}, RPE: {rpe}).")
-    write("log_food", "log_food", food_body, "Propose logging food for yourself (athlete only).",
-          "Log {grams:g} g of food #{food_id} for {meal} on {day}.")
+    write("log_food", "log_food", food_body, "Propose logging food for yourself (athlete only): a stored food "
+          "(food_id) or a catalogue food (catalog_id from list_foods) with grams, or a quick add (label and kcal).",
+          "Log food for {meal} on {day}.")
+    session_body = create_model("AssistantTrainingSession", __base__=rd.SessionBody, client_id=(None, None),
+                                source=(Literal["manual"], "manual"))
+    write("log_training_session", "log_training_session", session_body,
+          "Propose logging a practice, gym, match, conditioning or other session for yourself (athlete only).",
+          "Log a {kind} session on {day}: {minutes} min at RPE {rpe}.")
     write("log_weight", "save_weight", tn.Weight, "Propose saving your weight (athlete only).",
           "Log {kg:g} kg on {day}.", day=(day, ...))
     write("save_checkin", "save_checkin", h.Checkin, "Propose saving your check-in (athlete only).",
@@ -274,6 +355,12 @@ def build_tools(h, operations):
 
 def describe_action(name, tool, args):
     summary = tool.summary.format(**args)
+    if name == "log_food":
+        what = (f"{args['label']} ({args['kcal']:g} kcal)" if args["label"] is not None else
+                f"food #{args['food_id']}" if args["food_id"] is not None else f"catalogue food {args['catalog_id']}")
+        amount = f"{args['grams']:g} g" if args["grams"] is not None else (
+            f"{args['quantity'] or 1:g} x {args['serving_label']}" if args["serving_label"] is not None else "")
+        return f"Log {(amount + ' of ') if amount else ''}{what} for {args['meal']} on {args['day']}."
     if name in ("create_session", "edit_session"):
         audience = "whole club" if args["group_id"] is None else f"group #{args['group_id']}"
         summary += (f" Audience: {audience}; test: {args['test']}; trials: {args['trials']}; "
@@ -377,20 +464,25 @@ def install(app, h, operations):
                 conversation(db, user_id, conversation_id)
                 history = turns(db, conversation_id, 6)
         url, model, headers = model_client()
-        messages = [{"role": "system", "content": SYSTEM_PROMPT + "\nAuthenticated caller: " + json.dumps(
-            {key: user[key] for key in ("id", "role", "club_id")})}]
+        today = date.today()
+        messages = [{"role": "system", "content": SYSTEM_PROMPT + SKILLS + f"\nToday is {today.isoformat()} "
+                     f"({today.strftime('%A')}). Authenticated caller: " + json.dumps(
+                         {key: user[key] for key in ("id", "role", "club_id")})}]
         for turn in reversed(history):
             messages.extend(({"role": "user", "content": turn["message"]},
                              {"role": "assistant", "content": turn["reply"]}))
         messages.append({"role": "user", "content": body.message})
         actions = []
-        with httpx.Client(timeout=httpx.Timeout(8.0, connect=2.0), trust_env=False) as client:
+        with httpx.Client(timeout=httpx.Timeout(float(os.environ.get("JUMPSCAN_LLM_TIMEOUT", 60)), connect=2.0),
+                          trust_env=False) as client:
             for round_no in range(TOOL_ROUNDS + 1):
                 response = call_model(client, url, model, headers, messages, definitions, allow_tools=round_no < TOOL_ROUNDS)
                 if not isinstance(response, dict):
                     raise model_unavailable()
                 calls = response.get("tool_calls")
                 reply = response.get("content")
+                if not calls and isinstance(reply, str) and "<tool_call>" in reply:
+                    calls, reply = text_tool_calls(reply, round_no)
                 try:
                     if reply is not None and (not isinstance(reply, str) or len(reply.encode("utf-8")) > 16384):
                         raise model_unavailable()

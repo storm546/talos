@@ -164,7 +164,7 @@ class MainActivity : Activity() {
 
     private fun wordmark(parent: LinearLayout) = parent.addView(ImageView(this).apply {
         setImageResource(R.drawable.flight_wordmark); contentDescription = getString(R.string.brand)
-    }, LinearLayout.LayoutParams(dp(112), dp(26)))
+    }, LinearLayout.LayoutParams(dp(91), dp(26)))
 
     internal fun stage(height: Int) = LinearLayout.LayoutParams(-1, dp(height)).apply { marginStart = -dp(18); marginEnd = -dp(18) }
 
