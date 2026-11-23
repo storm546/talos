@@ -22,6 +22,10 @@ internal enum class FeatureWrite(val method: String, val keys: Set<String>, val 
     SET("POST", setOf("day", "exercise_id", "set_no", "reps", "load_kg", "rpe", "plan_id"), setOf("workout_client_id")),
     WORKOUT("POST", setOf("started_at", "ended_at", "title", "template_id", "notes")),
     SESSION("POST", setOf("day", "kind", "minutes", "rpe")),
+    // A field-test result (SPEC 9.3); the server checks the fields of each kind.
+    MEASUREMENT("POST", setOf("kind"), setOf("joint", "view", "left_deg", "right_deg", "error_deg", "quality", "warnings",
+        "leg", "stance_ms", "sway_pct", "ended_by", "fps", "distance_m", "time_ms", "start", "precision_ms", "test",
+        "activity", "duration_s", "avg_pace_s_per_km", "splits_s")),
     COMPLETE("PUT", emptySet());
 
     fun path(day: String): String = when (this) {
@@ -31,6 +35,7 @@ internal enum class FeatureWrite(val method: String, val keys: Set<String>, val 
         SET -> "/api/set-logs"
         WORKOUT -> "/api/workouts"
         SESSION -> "/api/training-sessions"
+        MEASUREMENT -> "/api/measurements"
         WEIGHT -> "/api/me/weights/${LocalDate.parse(day)}"
         COMPLETE -> "/api/me/nutrition/days/${LocalDate.parse(day)}/complete"
     }

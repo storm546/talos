@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Outdoor cardio records distance while running (SPEC 9.3); the route stays on the phone. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -25,6 +30,7 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Workout rest timer and interval timer that keep counting and signal the end of each phase with sound and vibration while the screen is off" />
         </service>
+        <service android:name=".CardioService" android:exported="false" android:foregroundServiceType="location" />
         <receiver android:name=".ReminderReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -32,6 +38,8 @@
             </intent-filter>
         </receiver>
         <activity android:name=".LiveFormActivity" android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity android:name=".CameraToolActivity" android:exported="false"
             android:screenOrientation="portrait" />
         <activity android:name=".JumpCaptureActivity" android:exported="false"
             android:screenOrientation="portrait" />

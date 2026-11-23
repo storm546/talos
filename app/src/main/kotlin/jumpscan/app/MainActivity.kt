@@ -47,6 +47,7 @@ class MainActivity : Activity() {
     internal var formChoice = FormChoice("squat", null)
     internal var showExperimental = false
     internal var lastForm: FormResult? = null
+    internal var lastField: FieldRun? = null
     private var pendingTrial: PhoneTrial? = null
     private var guiding = false
     internal var assistantChat = AssistantChat()
@@ -724,6 +725,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 40) return barcodeResult(resultCode, data?.getStringExtra("code"))
+        if (requestCode == FIELD_TOOL_REQUEST) return if (resultCode == RESULT_OK) cameraToolResult(data) else Unit
         if (requestCode == 10 && resultCode == RESULT_FIRST_USER) pickJumpVideo()
         if (requestCode == 10 && resultCode == RESULT_OK) {
             val name = data?.getStringExtra("clip")?.takeIf { it.matches(Regex("jump-[0-9]+\\.mp4")) }
@@ -1145,6 +1147,10 @@ class MainActivity : Activity() {
 
     private fun applyUploadReceipts(sent: Map<String, Long>) {
         queuedId?.let { name -> sent[name]?.let { uploadedId = it; queuedId = null } }
+        lastField?.let { run ->
+            if (sent.keys.any { it.endsWith("-${run.clientId}.json") }) run.status = R.string.feature_saved
+            else if (run.status == R.string.saved_pending && pending().featureRejected(run.clientId)) run.status = R.string.feature_rejected
+        }
         lastForm?.let { form ->
             if (sent.keys.any { it.endsWith("-${form.clientId}.json") }) form.status = R.string.feature_saved
             else if (form.status == R.string.saved_pending && pending().featureRejected(form.clientId))
@@ -1161,6 +1167,7 @@ class MainActivity : Activity() {
         queueSending = true
         if (screen == "result") result() else if (screen == "home") home() else if (screen == "profile") profile()
         else if (screen == "form_result") lastForm?.let { formResult(it.metrics, it) }
+        else if (screen == "field_result") lastField?.let { fieldResult(it) }
         executor.submit {
             var error: Exception? = null
             val sent = linkedMapOf<String, Long>()
@@ -1179,6 +1186,7 @@ class MainActivity : Activity() {
                     } else {
                         if (screen == "result") result() else if (screen == "home") home() else if (screen == "profile") profile()
                         else if (screen == "form_result") lastForm?.let { formResult(it.metrics, it) }
+                        else if (screen == "field_result") lastField?.let { fieldResult(it) }
                         if (error != null && error !is InterruptedException) {
                             snack(errorMessage(error!!))
                         } else if (!automatic) snack(getString(R.string.pending_sent))
@@ -1466,6 +1474,7 @@ class MainActivity : Activity() {
             "workout_pick" -> workoutActive()
             "workout", "workout_start", "workout_summary", "calculators", "interval_timer" -> toolsHub()
             "records", "leaderboard" -> toolsHub()
+            "field_rom", "field_balance", "field_speed", "cardio", "field_result" -> toolsHub()
             "food_log" -> foods()
             "recipe_edit" -> recipes()
             "goal_form" -> insights()

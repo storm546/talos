@@ -24,6 +24,8 @@ internal fun MainActivity.recordValue(record: JSONObject, point: JSONObject = re
         "jump_height" -> metricNumber(value, "jump_height_cm", locale) + " " + getString(R.string.ui_cm)
         "flight_time" -> getString(R.string.records_ms, metricNumber(value, "flight_time_ms", locale))
         "form_hold" -> getString(R.string.records_seconds, metricNumber(value / 1000, "hold_s", locale))
+        "balance_stance" -> getString(R.string.records_seconds, String.format(locale, "%.1f", value / 1000))
+        "sprint_time", "agility_time" -> getString(R.string.records_seconds, String.format(locale, "%.2f", value / 1000))
         "heaviest_set" -> getString(R.string.records_set, getString(R.string.feature_kg, metricNumber(value, "load_kg", locale)), point.getInt("reps"))
         else -> getString(R.string.feature_kg, metricNumber(value, "load_kg", locale))
     }
@@ -73,6 +75,20 @@ private fun MainActivity.recordsScreen(data: JSONObject) {
             if (index > 0) divider(group, inset = false)
             val label = if (record.getString("measure") == "flight_time") getString(R.string.records_flight)
                 else getString(R.string.records_hold, record.getString(if (locale.language == "bg") "name_bg" else "name_en"))
+            recordRow(label, record, group)
+        }
+    }
+    val field = all.filter { it.getString("source") == "measurement" }
+    if (field.isNotEmpty()) {
+        section(R.string.ft_records).setPadding(0, dp(22), 0, dp(4))
+        val group = settingsGroup()
+        field.forEachIndexed { index, record ->
+            if (index > 0) divider(group, inset = false)
+            val label = when (record.getString("measure")) {
+                "balance_stance" -> getString(R.string.ft_record_balance, getString(if (record.getString("leg") == "L") R.string.ft_left else R.string.ft_right))
+                "sprint_time" -> getString(R.string.ft_sprint_named, String.format(locale, "%.0f", record.getDouble("distance_m")))
+                else -> getString(if (record.getString("test") == "t_test") R.string.ft_t_test else R.string.ft_505)
+            }
             recordRow(label, record, group)
         }
     }

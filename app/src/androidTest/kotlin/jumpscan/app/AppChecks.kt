@@ -61,6 +61,9 @@ class AppChecks : Instrumentation() {
             } else if (only == "readiness") {
                 targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
                 ReadinessStudio(this).screens(requireNotNull(fixtureServer))
+            } else if (only == "field") {
+                targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
+                FieldStudio(this, requireNotNull(fixtureServer)).screens()
             } else if (only == "capture-parity") output.putString("parity", capture.parity())
             else if (only == "capture-visual") capture.visual()
             else if (only == "cutoff") videoCutoffCheck()
@@ -71,6 +74,7 @@ class AppChecks : Instrumentation() {
                 queueChecks()
                 featureChecks()
                 toolkitChecks(this)
+                fieldChecks(this)
                 previewChecks()
                 videoPreviewCheck()
                 videoCutoffCheck()
