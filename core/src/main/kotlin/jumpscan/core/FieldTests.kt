@@ -124,10 +124,29 @@ object Balance {
     const val LOST_MS = 300L
     const val LIMIT_MS = 60_000L
     const val STANCE_KNEE_MAX = 30.0 // the stance starts only on a nearly straight standing leg (a squat shortens the leg)
+    const val NOISE_MS = 1000L       // two-footed still window that measures the pose jitter (noise floor)
+    const val NOISE_RADIUS = 0.03    // the hips stay within this fraction of leg length of the window's first position
 
-    data class Result(val leg: String, val stanceMs: Long, val swayPct: Double?, val endedBy: String, val fps: Double, val quality: Double) {
+    /**
+     * [swayVelocityPct] is the hip midpoint's path length per second over the stance, in % of leg length per second;
+     * [noiseFloorPct] is the same speed over the first still two-footed second before the lift (pose jitter alone).
+     * Both stay on the phone: the server's balance fields are only those of [toJson].
+     */
+    data class Result(val leg: String, val stanceMs: Long, val swayPct: Double?, val endedBy: String, val fps: Double, val quality: Double,
+                      val swayVelocityPct: Double? = null, val noiseFloorPct: Double? = null) {
         fun toJson() = fieldJson(listOf("kind" to "balance", "leg" to leg, "stance_ms" to stanceMs, "sway_pct" to swayPct,
             "ended_by" to endedBy, "fps" to fps, "quality" to quality))
+
+        /** Sway velocity above the measured noise floor (never below zero); null without both measurements. */
+        val swayAboveNoisePct: Double? get() = if (swayVelocityPct == null || noiseFloorPct == null) null
+            else (swayVelocityPct - noiseFloorPct).coerceAtLeast(0.0)
+    }
+
+    /** Path length per second of (t, x, y) points, in % of [leg]; null for fewer than two points or no elapsed time. */
+    fun speedPct(path: List<Triple<Long, Double, Double>>, leg: Double): Double? {
+        if (path.size < 2 || path.last().first <= path.first().first || leg <= 1e-9) return null
+        val length = path.zipWithNext { a, b -> hypot(b.second - a.second, b.third - a.third) }.sum()
+        return length / leg * 100 / ((path.last().first - path.first().first) / 1000.0)
     }
 
     /** Feed frames in time order; [result] is set once the stance ends. */
@@ -144,6 +163,10 @@ object Balance {
         var result: Result? = null; private set
         /** Latest lift of the raised foot as a fraction of leg length (for the live readout). */
         var lift = 0.0; private set
+        private val still = mutableListOf<Triple<Long, Double, Double>>() // current two-footed still run before the lift
+        private val stillLegs = mutableListOf<Double>()
+        /** Hip speed over the first still two-footed second, % of leg length per second; null until measured. */
+        var noiseFloorPct: Double? = null; private set
 
         val running get() = startMs != null && result == null
 
@@ -155,7 +178,7 @@ object Balance {
             if (joints.any { !it.seen() }) {
                 val seen = lastSeen
                 if (startMs != null && seen != null && frame.tMs - seen > LOST_MS) end(seen, "lost_tracking")
-                if (startMs == null) liftSince = null
+                if (startMs == null) { liftSince = null; still.clear(); stillLegs.clear() }
                 return result
             }
             lastSeen = frame.tMs
@@ -164,6 +187,7 @@ object Balance {
                 val raised = if (p[27].y < p[28].y) 0 else 1
                 val length = leg(1 - raised)
                 lift = if (length > 1e-6) abs(p[27].y - p[28].y) / length else 0.0
+                if (noiseFloorPct == null) noise(frame.tMs, (p[23].x + p[24].x) * aspect / 2.0, (p[23].y + p[24].y) / 2.0, length)
                 val knee = RangeOfMotion.angle(frame, aspect, RangeOfMotion.Joint.KNEE_FLEXION, 1 - raised)
                 if (lift <= LIFT || knee == null || knee > STANCE_KNEE_MAX) { liftSince = null; return null }
                 if (liftSince == null || raised != liftedSide) { liftSince = frame.tMs; liftedSide = raised }
@@ -192,6 +216,17 @@ object Balance {
             return null
         }
 
+        /** Feeds the first still two-footed window; any frame with a lifted foot or moved hips restarts it. */
+        private fun noise(t: Long, x: Double, y: Double, length: Double) {
+            val first = still.firstOrNull()
+            if (lift >= TOUCH || length <= 1e-6 || (first != null && hypot(x - first.second, y - first.third) > NOISE_RADIUS * length)) {
+                still.clear(); stillLegs.clear()
+                if (lift >= TOUCH || length <= 1e-6) return
+            }
+            still += Triple(t, x, y); stillLegs += length
+            if (still.size >= 5 && t - still.first().first >= NOISE_MS) noiseFloorPct = speedPct(still, JumpAnalyzer.median(stillLegs))
+        }
+
         /** Ends a running stance at the last frame; null when no stance started. */
         fun stop(): Result? = result ?: if (startMs == null) null else end(stance.lastOrNull()?.first ?: startMs!!, "stopped")
 
@@ -205,7 +240,8 @@ object Balance {
             }
             val fps = if (times.size < 2 || times.last() == times.first()) 0.0 else (times.size - 1) * 1000.0 / (times.last() - times.first())
             return Result(if (liftedSide == 1) "L" else "R", (at - start).coerceIn(0, LIMIT_MS), sway?.coerceIn(0.0, 100.0),
-                reason, fps, if (visibility.isEmpty()) 0.0 else visibility.average().coerceIn(0.0, 1.0)).also { result = it }
+                reason, fps, if (visibility.isEmpty()) 0.0 else visibility.average().coerceIn(0.0, 1.0),
+                if (path.size < 2) null else speedPct(path, JumpAnalyzer.median(legs)), noiseFloorPct).also { result = it }
         }
     }
 }
@@ -227,19 +263,45 @@ object LineCrossing {
         return changed.toDouble() / current.size
     }
 
-    /** Fires once per passage: the first busy frame after a quiet stretch. */
+    /**
+     * Fires once per passage: the first busy frame after a quiet stretch. [crossingMs] is then the sub-frame estimate:
+     * activity is interpolated linearly between the previous frame and the busy frame to where it reaches [TRIGGER].
+     */
     class Detector {
         private var quietSince: Long? = null
+        private var previous: Pair<Long, Double>? = null
         var armed = false; private set
+        /** Interpolated time of the last crossing (between the previous and the busy frame); NaN before the first. */
+        var crossingMs = Double.NaN; private set
 
         fun feed(tMs: Long, activity: Double): Long? {
+            val before = previous
+            previous = tMs to activity
             if (activity < QUIET) {
                 if (quietSince == null) quietSince = tMs
                 if (tMs - quietSince!! >= QUIET_MS) armed = true
             } else quietSince = null
-            if (armed && activity >= TRIGGER) { armed = false; return tMs }
+            if (armed && activity >= TRIGGER) {
+                armed = false
+                crossingMs = if (before == null) tMs.toDouble() else interpolate(before.first, before.second, tMs, activity, TRIGGER)
+                return tMs
+            }
             return null
         }
+    }
+
+    /** Time at which a quantity rising from [a0] at [t0] to [a1] at [t1] reaches [level], clamped to the interval. */
+    fun interpolate(t0: Long, a0: Double, t1: Long, a1: Double, level: Double): Double =
+        if (a1 <= a0) t1.toDouble() else t0 + (t1 - t0) * ((level - a0) / (a1 - a0)).coerceIn(0.0, 1.0)
+
+    /**
+     * When the first sample of the tone reached the output, in ns on the timestamp's clock plus [clockOffsetNs]:
+     * an AudioTrack timestamp says frame [framePosition] was presented at [presentedNs]; the tone starts at frame
+     * [toneFrame]. Frames before or after the timestamp move the time by 1 / [sampleRate] each.
+     */
+    fun tonePresentedNs(framePosition: Long, presentedNs: Long, toneFrame: Long, sampleRate: Int, clockOffsetNs: Long = 0): Long {
+        require(sampleRate > 0)
+        return presentedNs + Math.round((toneFrame - framePosition) * 1e9 / sampleRate) + clockOffsetNs
     }
 
     /** Timing resolution: the median frame interval in ms. */
