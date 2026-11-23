@@ -43,7 +43,9 @@ internal fun MainActivity.records() {
 }
 
 private fun MainActivity.newChip(record: JSONObject, parent: LinearLayout) {
-    if (record.optBoolean("new")) statusChip(getString(R.string.records_new), R.color.signal, R.color.hero, parent)
+    if (!record.optBoolean("new")) return
+    statusChip(getString(R.string.records_new), R.color.signal, R.color.hero, parent)
+    shareButton(record, parent)
 }
 
 /** A readout row with the record's date, the record it replaced and a "new record" mark. */

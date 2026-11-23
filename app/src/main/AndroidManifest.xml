@@ -74,6 +74,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="video/*" />
             </intent-filter>
+            <!-- Text shared from another app opens the assistant with it as a draft (SPEC 10.3). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>
