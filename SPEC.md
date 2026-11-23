@@ -913,3 +913,43 @@ personal dashboard too.
 **Done when:** server tests pass under the memory cap; the app builds on the kit; AppChecks gain Today checks
 (cards render from a fixture, hide and reorder persist, deep link opens the right tool, widget renders); Today
 screenshots in dark/light x bg/en, signed in and signed out; the dashboard check passes.
+
+### 10.3 Wave 5: the personal loop (added 2026-11-23)
+
+Personal first; nothing here needs a club or a coach. Ideas from `logs/research/competitors-report.md` section 4
+(items 8, 9, 10, 12, 24).
+
+**Consistency score (core + server).** Loop Habit Tracker's habit strength (uhabits-core `Score.compute`,
+GPL-3.0-or-later, ported with attribution in the file header and in `LICENSES-AUDIT.md`): each day
+`score = previous * m + done * (1 - m)` with `m = 0.5 ^ (sqrt(frequency) / 13)`, starting at 0 on the athlete's
+first day with any data. Two habits: daily check-in (frequency 1) and training days (frequency = planned days per
+week / 7 when a plan applies, else 3/7; a day counts when any set, workout or training session is logged).
+Shown as a percentage with the plain fact beside it ("12 of the last 14 days"). Pure function in `core`
+(`Consistency.kt`) with tests against hand-computed values; the server uses the same formula in Python with the same
+test values.
+
+**Weekly report.** `GET /api/me/week?week=YYYY-Www` (athlete; default the current ISO week, at most 52 weeks back):
+`{week, from, to, training: {days, sessions, minutes, load, load_previous_week, sets, volume_kg, top_exercises[≤5]},
+records[≤10], checkins: {days, wellbeing_avg}, readiness: {good, normal, take_care, still_learning},
+nutrition: {days_logged, kcal_avg, protein_avg, kcal_target, protein_target}, weight: {start_trend, end_trend},
+consistency: {checkin, training}, text}`. Facts come from the existing functions (same scope and numbers); `text` is
+two or three sentences phrased by the assistant model from those facts only (prompt forbids new numbers and medical
+advice), cached per athlete and week until the facts change, and `null` when no model is configured. App: a "This
+week" card on Today (opens a week screen with previous/next week); dashboard: a Week section on the athlete's own page.
+
+**"Not feeling 100%".** The athlete flags today with a reason (`ill`, `aches`, `tired`, `busy`) and a choice of
+"rest today" or "lighter today". `PUT /api/me/days/{day}/adjustment` `{reason, mode}` and `DELETE` (today and
+yesterday only; athlete; audited without free text). When set, Today's plan shows the lighter version (one set fewer
+per item, minimum 1, and planned load x 0.9 rounded to 2.5 kg) or "Rest day" instead, and readiness lists the flag as
+a factor. Staff see a neutral "not 100%" mark on the team board. No medical wording.
+
+**Share into the assistant.** The app accepts Android `ACTION_SEND` with `text/plain` and opens the assistant with
+the text as a draft message (never sent without the user tapping Send). Proposals still need confirmation.
+
+**Record share card.** On a new record (Today records card and the Records screen) a Share action renders an
+Instrument-style image on the phone (wordmark, record name, value with unit, previous best, date, flight arc for
+jumps) and opens the Android share sheet. The image is never uploaded.
+
+**Done when:** core and server tests pass (server under the memory cap); the app builds on the kit; AppChecks cover
+the week screen, the adjustment flow, the share intent and the card renderer; screenshots dark/light x bg/en of
+Today with the week card, the week screen, the adjustment sheet and a rendered share card; dashboard check passes.
