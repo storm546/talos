@@ -2,9 +2,9 @@
 // Personal records and the club leaderboard (SPEC 8). Loaded after dashboard.js and built from its helpers.
 Object.assign(dictionary.bg, {
   recTitle:'Рекорди', recBoard:'Класация', recClubBoard:'Клубна класация',
-  recIntro:'Най-добрите резултати от вече записаните скокове, серии и задържания. Нов рекорд при скок се брои само ако подобрява предишния с повече от грешката на измерването, и само спрямо скокове от същия изглед и със същата честота на кадрите. Скокове с предупреждение не се броят; страничният изглед сам по себе си не е предупреждение.',
+  recIntro:'Най-добрите резултати от вече записаните скокове, серии и задържания. Нов рекорд при скок се брои само ако подобрява предишния с повече от най-малката откриваема промяна, и само спрямо скокове от същия изглед и със същата честота на кадрите. Скокове с предупреждение не се броят; страничният изглед сам по себе си не е предупреждение.',
   recFront:'отпред', recSide:'отстрани', recFps:'кадъра/с', recMargin:'За нов рекорд: над ', recView:'Изглед',
-  recBoardNote:'Класирането е отделно за всяка честота на кадрите. Разлика под грешката на измерването (около {ms} мс време във въздуха) не е реална разлика.',
+  recBoardNote:'Класирането е отделно за всяка честота на кадрите. Разлика под най-малката откриваема промяна за този изглед ({v}) не е реална разлика.',
   recHeight:'Височина на скока', recFlight:'Време във въздуха', recHeaviest:'Най-тежка серия',
   recEstimate:'Изчислен максимум за 1 повторение', recEstimateNote:'По формулата на Епли, само от серии до 10 повторения.',
   recHold:'Най-дълго задържане', recPrevious:'Предишен рекорд', recNew:'Нов рекорд', recFirst:'Първи резултат',
@@ -21,9 +21,9 @@ Object.assign(dictionary.bg, {
 });
 Object.assign(dictionary.en, {
   recTitle:'Records', recBoard:'Leaderboard', recClubBoard:'Club leaderboard',
-  recIntro:'Best results from the jumps, sets and holds already recorded. A jump counts as a new record only when it beats the previous best by more than the measurement error, and only against jumps from the same camera view and frame rate. Jumps with a warning do not count; the side view on its own is not a warning.',
+  recIntro:'Best results from the jumps, sets and holds already recorded. A jump counts as a new record only when it beats the previous best by more than the smallest detectable change, and only against jumps from the same camera view and frame rate. Jumps with a warning do not count; the side view on its own is not a warning.',
   recFront:'front', recSide:'side', recFps:'fps', recMargin:'New record needs more than ', recView:'View',
-  recBoardNote:'Ranked separately for each frame rate. A difference smaller than the measurement error (about {ms} ms of flight time) is not a real difference.',
+  recBoardNote:'Ranked separately for each frame rate. A difference smaller than the smallest detectable change for this view ({v}) is not a real difference.',
   recHeight:'Jump height', recFlight:'Flight time', recHeaviest:'Heaviest set',
   recEstimate:'Estimated one-rep max', recEstimateNote:'Epley formula, from sets of at most 10 reps only.',
   recHold:'Longest hold', recPrevious:'Previous best', recNew:'New record', recFirst:'First result',
@@ -216,7 +216,7 @@ function leaderboard(content) {
         node('td', date(row.date)));
       grid.body.append(tr);
     }
-    content.append(grid.wrap, node('p', t('recBoardNote').replace('{ms}', format(data.error_ms)), 'muted'));
+    content.append(grid.wrap, node('p', t('recBoardNote').replace('{v}', recValue({value:data.smallest_change, unit:data.unit, measure:data.measure})), 'muted'));
   }
   if (!own) content.append(node('p', t('recNotShown') + format(data.not_shown), 'muted board-hidden'));
 }

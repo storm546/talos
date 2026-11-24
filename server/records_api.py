@@ -6,7 +6,7 @@ main module (auth, scope and audit helpers are reused).
 
 from datetime import datetime, timedelta, timezone
 import json
-from math import log, sqrt
+from math import log
 from typing import Annotated, Literal
 
 from fastapi import Depends, HTTPException, Query
@@ -18,14 +18,12 @@ from .input_bounds import SQLITE_MAX, SqlitePath
 JUMP_MEASURES = {"jump_height": ("jump_height_cm", "cm", 1), "flight_time": ("flight_time_ms", "ms", 0)}
 EPLEY_MAX_REPS = 10
 NEW_RECORD_DAYS = 7
-# Flight-time measurement error per view (ms): the one table that decides when a jump beats a record. Front: mean
-# absolute error of the shipped rules on nine Twente subjects at 33 fps (docs/validacia.md 4.8, 32.1 ms). Side: the
-# "correct" bound of the shipped learned side policy, two 33 fps frames (core/VALIDATION.md, 60.6 ms). No faster
-# capture has a measured error yet, so every frame-rate class uses these numbers. Wave 6B's repeatability analysis
-# (smallest detectable change per view) replaces this table when it exists.
-FLIGHT_ERROR_MS = {"front": 32.1, "side": 60.6}
+# Smallest detectable change (MDC95 = 1.96 x sqrt 2 x typical error) per view and measure: the one table that decides
+# when a jump beats a record. From the Wave 6B repeatability analysis of the app's automatic results on nine Twente
+# subjects at 33 fps (core/VALIDATION.md, experiment 5). No faster capture has been measured, so every frame-rate class
+# uses these numbers. The front height value is large partly because a few matched jumps had big timing errors.
+SMALLEST_CHANGE = {"front": {"jump_height": 11.3, "flight_time": 96.6}, "side": {"jump_height": 5.1, "flight_time": 58.2}}
 FPS_CLASSES = (30, 60, 120, 240, 480)
-G = 9.81
 
 
 def init_schema(db):
@@ -68,14 +66,9 @@ def valid_jumps(db, athlete_id, since=None):
     return rows, excluded
 
 
-def jump_margin(measure, view, value):
-    """How much a jump must beat `value` by to count: the view's flight-time error, as ms or as the height it adds
-    to a jump of this height (h = g t^2 / 8)."""
-    error = FLIGHT_ERROR_MS[view]
-    if measure == "flight_time":
-        return error
-    flight = sqrt(8 * value / 100 / G)
-    return G * (flight + error / 1000) ** 2 / 8 * 100 - value
+def jump_margin(measure, view, value=None):
+    """How much a jump must beat the record by to count: the view's smallest detectable change for the measure."""
+    return SMALLEST_CHANGE[view][measure]
 
 
 def jump_groups(jumps, measure):
@@ -242,7 +235,7 @@ def install(app, h):
             tied = index > first and row["value"] == rows[index - 1]["value"]
             row["rank"] = rows[index - 1]["rank"] if tied else index - first + 1
         result = {"measure": measure, "unit": unit, "period": period, "group_id": group_id, "view": view,
-                  "error_ms": FLIGHT_ERROR_MS[view], "rows": rows}
+                  "smallest_change": SMALLEST_CHANGE[view][measure], "rows": rows}
         if user["role"] == "athlete":
             result["me"] = leaderboard_state(user)
         else:

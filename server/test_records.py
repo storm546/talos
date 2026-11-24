@@ -45,28 +45,26 @@ def test_jump_records_exclude_uncertain_results_and_keep_the_previous_best(api, 
     athlete, headers = make_athlete(client, auth)
     first = jump(client, headers, 30)
     jump(client, headers, 45, ["uncertain_timing"])
-    jump(client, headers, 33)  # better, but within the measurement error: not a record
-    best = jump(client, headers, 35)
-    jump(client, headers, 35)  # a tie does not replace the earlier record
+    jump(client, headers, 41, flight=390)  # better, but within the smallest detectable change: not a record
+    best = jump(client, headers, 42, flight=400)
+    jump(client, headers, 42, flight=400)  # a tie does not replace the earlier record
     jump(client, headers, 50, ["low_visibility"])
     records = client.get(f"/api/athletes/{athlete}/records", headers=headers).json()
     assert records["excluded_jumps"] == 2
     height = by_measure(records, "jump_height")
-    assert (height["value"], height["source_id"], height["unit"], height["new"]) == (35, best, "cm", True)
-    assert (height["view"], height["fps_class"]) == ("front", 60)
-    assert height["margin"] == round(records_api.jump_margin("jump_height", "front", 35), 2)
+    assert (height["value"], height["source_id"], height["unit"], height["new"]) == (42, best, "cm", True)
+    assert (height["view"], height["fps_class"], height["margin"]) == ("front", 60, 11.3)
     assert (height["previous"]["value"], height["previous"]["source_id"]) == (30, first)
-    flight = by_measure(records, "flight_time")
-    assert (flight["value"], flight["previous"]["value"], flight["margin"]) == (350, 300, 32.1)
+    flight = by_measure(records, "flight_time")  # 390 is within 96.6 ms of 300; 400 is beyond it
+    assert (flight["value"], flight["previous"]["value"], flight["margin"]) == (400, 300, 96.6)
 
 
 def test_measurement_error_table_and_frame_rate_classes():
-    assert records_api.FLIGHT_ERROR_MS == {"front": 32.1, "side": 60.6}
-    assert records_api.jump_margin("flight_time", "side", 30) == 60.6
-    # h = g t^2 / 8: a 30 cm jump (0.495 s) gains about 4 cm from 32.1 ms more flight; a higher jump gains more.
-    assert records_api.jump_margin("jump_height", "front", 30) == pytest.approx(4.02, abs=0.01)
-    assert records_api.jump_margin("jump_height", "front", 50) > records_api.jump_margin("jump_height", "front", 30)
-    assert records_api.jump_margin("jump_height", "side", 30) == pytest.approx(7.80, abs=0.01)
+    # MDC95 from core/VALIDATION.md, Wave 6B experiment 5 (app automatic results, nine Twente subjects)
+    assert records_api.SMALLEST_CHANGE == {"front": {"jump_height": 11.3, "flight_time": 96.6},
+                                          "side": {"jump_height": 5.1, "flight_time": 58.2}}
+    assert records_api.jump_margin("flight_time", "side") == 58.2
+    assert records_api.jump_margin("jump_height", "front", 30) == 11.3
     assert [records_api.fps_class(f) for f in (10, 29.97, 33, 42, 43, 59.94, 100, 120, 200, 240, 400, 480)] == [
         30, 30, 30, 30, 60, 60, 120, 120, 240, 240, 480, 480]
     assert records_api.jump_view({"warnings": ["single_leg_view"]}) == "side"
@@ -115,7 +113,7 @@ def test_leaderboard_uses_the_record_rule_view_and_frame_rate_class(api, auth):
     # Boris is first in the 120 fps class, not second behind Ana's 60 fps jump.
     assert (rows["Boris K."]["value"], rows["Boris K."]["fps_class"], rows["Boris K."]["rank"]) == (85, 120, 1)
     side = board(client, people[0], view="side")
-    assert side["view"] == "side" and side["error_ms"] == 60.6
+    assert side["view"] == "side" and side["smallest_change"] == 5.1
     assert [(row["name"], row["value"]) for row in side["rows"]] == [("Boris K.", 70)]
 
 
@@ -186,9 +184,9 @@ def test_record_event_only_when_a_previous_best_is_beaten(api, auth):
     jump(client, headers, 30)
     jump(client, headers, 28)
     jump(client, headers, 40, ["low_visibility"])
-    jump(client, headers, 33)  # within the measurement error of 30 cm
+    jump(client, headers, 40, flight=380)  # within the smallest detectable change of 30 cm and 300 ms
     assert [e["type"] for e in events] == ["jump", "jump", "jump", "jump"]
-    beat = jump(client, headers, 35)
+    beat = jump(client, headers, 42)
     record = events[-1]
     assert record == {"type": "record", "id": beat, "athlete_id": athlete, "club_id": record["club_id"],
                       "at": record["at"]}
@@ -205,7 +203,7 @@ def test_leaderboard_shows_opted_in_athletes_with_short_names(api, auth):
     assert [row["name"] for row in sorted(coach["rows"], key=lambda r: r["name"])] == ["Александра И.", "Даниел С."]
     assert coach["not_shown"] == 4 and "me" not in coach and coach["unit"] == "cm"
     assert all(set(row) == {"rank", "name", "value", "date", "fps_class", "you"} for row in coach["rows"])
-    assert (coach["view"], coach["error_ms"]) == ("front", 32.1)
+    assert (coach["view"], coach["smallest_change"]) == ("front", 11.3)
     mine = board(client, auth("athlete1"))
     assert "not_shown" not in mine and [row["you"] for row in mine["rows"]].count(True) == 1
     assert mine["me"] == {"leaderboard_opt_in": True, "leaderboard_allowed": False, "under_18": False, "shown": True}
