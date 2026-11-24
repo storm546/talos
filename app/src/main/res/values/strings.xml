@@ -335,7 +335,7 @@
     <string name="nutr_updating">Updated from complete diary days and the weight trend.</string>
     <string name="nutr_holding">Holding the previous estimate.</string>
     <string name="assistant_title">AI assistant</string>
-    <string name="assistant_intro">Ask about your Talos data. Proposed changes are not saved unless you confirm them. Your messages and the data needed to answer go to the club's language model, which may be a cloud service; never video. Under 18, the assistant works only with a model run by the club itself.</string>
+    <string name="assistant_intro">Ask about your Talos data. Proposed changes are not saved unless you confirm them. Your messages and the data needed to answer go to the club\'s language model, which may be a cloud service; never video. Under 18, the assistant works only with a model run by the club itself.</string>
     <string name="assistant_you">You</string>
     <string name="assistant_message">Your message</string>
     <string name="assistant_send">Send</string>
