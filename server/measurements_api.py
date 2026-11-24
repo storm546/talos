@@ -6,6 +6,7 @@ module (auth, scope, consent, audit and event helpers are reused).
 """
 
 import json
+import math
 from typing import Annotated, Literal, Union
 
 from fastapi import Depends, HTTPException, Query, Request
@@ -14,7 +15,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .input_bounds import SQLITE_MAX
 
-KINDS = ("rom", "balance", "sprint", "reaction", "agility", "cardio")
+KINDS = ("rom", "balance", "sprint", "reaction", "agility", "cardio", "body")
+# Hodgdon and Beckett 1984 (Naval Health Research Center reports 84-11 and 84-29), metric form; the standard errors
+# are theirs against underwater weighing. A tape estimate, not a scan: one person's error can be larger.
+NAVY_ERROR_PCT = {"male": 3.5, "female": 3.7}
+NAVY_METHOD = "US Navy circumference formula (Hodgdon and Beckett 1984)"
 
 
 def init_schema(db):
@@ -133,7 +138,45 @@ class Cardio(Base):
         return value
 
 
-Measurement = Annotated[Union[Rom, Balance, Sprint, Reaction, Agility, Cardio], Field(discriminator="kind")]
+Cm = Annotated[float, Field(ge=10, le=250)]
+
+
+class Body(Base):
+    """Tape measurements (SPEC 10.7); height and sex are only needed for the body-fat estimate."""
+    kind: Literal["body"]
+    waist_cm: Cm | None = None
+    neck_cm: Cm | None = None
+    hip_cm: Cm | None = None
+    chest_cm: Cm | None = None
+    arm_cm: Cm | None = None
+    thigh_cm: Cm | None = None
+    height_cm: float | None = Field(default=None, ge=100, le=250)
+    sex: Literal["male", "female"] | None = None
+
+    @model_validator(mode="after")
+    def one_girth(self):
+        if all(v is None for v in (self.waist_cm, self.neck_cm, self.hip_cm, self.chest_cm, self.arm_cm, self.thigh_cm)):
+            raise ValueError("At least one measurement is needed")
+        return self
+
+
+def navy_body_fat(m):
+    """Body fat % from the Navy formula, or None when a needed value is missing or the result is implausible."""
+    waist, neck, hip, height, sex = (m.get(k) for k in ("waist_cm", "neck_cm", "hip_cm", "height_cm", "sex"))
+    if waist is None or neck is None or height is None or sex is None or (sex == "female" and hip is None):
+        return None
+    girth = waist - neck if sex == "male" else waist + hip - neck
+    if girth <= 0:
+        return None
+    if sex == "male":
+        density = 1.0324 - 0.19077 * math.log10(girth) + 0.15456 * math.log10(height)
+    else:
+        density = 1.29579 - 0.35004 * math.log10(girth) + 0.22100 * math.log10(height)
+    value = 495 / density - 450
+    return round(value, 1) if 2 <= value <= 60 else None
+
+
+Measurement = Annotated[Union[Rom, Balance, Sprint, Reaction, Agility, Cardio, Body], Field(discriminator="kind")]
 
 
 def install(app, h):
@@ -151,6 +194,10 @@ def install(app, h):
                 return JSONResponse(status_code=200, content=dict(previous))
             created_at = h.now_iso()
             data = body.model_dump(exclude={"client_id", "kind"})
+            if body.kind == "body":
+                fat = navy_body_fat(data)
+                data.update(body_fat_pct=fat, body_fat_error_pct=None if fat is None else NAVY_ERROR_PCT[body.sex],
+                            body_fat_method=None if fat is None else NAVY_METHOD)
             row_id = db.execute(
                 "INSERT INTO measurements(athlete_id, created_at, kind, data, client_id) VALUES (?, ?, ?, ?, ?)",
                 (athlete["id"], created_at, body.kind, json.dumps(data), body.client_id)).lastrowid

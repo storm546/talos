@@ -278,6 +278,7 @@ private fun MainActivity.insightPage(day: String, days: Int, data: Insight, mess
         if (value == null || value !in 20.0..400.0) kg.error = getString(R.string.nutr_invalid_weight)
         else saveFeature(FeatureWrite.WEIGHT, JSONObject().put("kg", value), day) { _, result -> insights(day, days, result) }
     }
+    button(getString(R.string.body_open)) { body() }
     // Goal progress.
     section(R.string.insight_goal).setPadding(0, dp(22), 0, 0)
     val goal = data.goal?.optJSONObject("goal")

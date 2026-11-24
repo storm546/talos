@@ -429,8 +429,8 @@ def build_tools(h, operations):
          "frame-rate class within one camera view.", measure=(Literal["jump_height", "flight_time"], "jump_height"),
          period=(Literal["30", "90", "all"], "all"), view=(Literal["front", "side"], "front"))
     read("list_measurements", "list_measurements", "Read field tests: range of motion, balance, sprint, reaction, "
-         "agility and GPS cardio.", **optional_target,
-         kind=(Literal["rom", "balance", "sprint", "reaction", "agility", "cardio"] | None, None), **paging)
+         "agility, GPS cardio and tape body measurements with the Navy body-fat estimate.", **optional_target,
+         kind=(Literal["rom", "balance", "sprint", "reaction", "agility", "cardio", "body"] | None, None), **paging)
 
     set_body = create_model("AssistantSetLog", __base__=tn.SetLog, client_id=(None, None))
     food_body = create_model("AssistantFoodLog", __base__=tn.FoodEntry, client_id=(None, None))

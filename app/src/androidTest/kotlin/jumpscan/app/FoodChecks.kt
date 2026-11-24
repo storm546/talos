@@ -140,6 +140,31 @@ internal class FoodStudio(private val test: Instrumentation, private val server:
             scrollTo(first); shot("recipes")
             test.foodClick(host, host.getString(R.string.cook_save))
             test.foodWait("saved notice") { texts(host.page).any { it.startsWith(host.getString(R.string.cook_saved, "").trim()) } }
+
+            // Body (SPEC 10.7): tape entry -> the server's Navy estimate; a progress photo saved only on the phone.
+            host.progressPhotos().deleteRecursively()
+            test.runOnMainSync { host.body() }
+            check(test.screenOf(host, "body") == "body")
+            test.runOnMainSync {
+                foodViews(host.page, android.widget.RadioButton::class.java).first { it.text == host.getString(R.string.body_male) }.isChecked = true
+                val fields = foodViews(host.page, android.widget.EditText::class.java)
+                for ((index, value) in listOf("178", "85", "38").withIndex()) fields[index].setText(value)  // height, waist, neck
+            }
+            test.foodClick(host, host.getString(R.string.body_save))
+            test.foodWait("body-fat estimate") { texts(host.page).any { it.startsWith("16") && "±" in it } }
+            test.runOnMainSync { host.saveProgressPhoto(testJpeg(1200, 1600)) }
+            check(host.progressPhotos().listFiles().orEmpty().size == 1)
+            test.runOnMainSync { host.body() }
+            check(test.screenOf(host, "body") == "body")
+            shot("body")
+            var photo: View? = null
+            test.foodWait("progress photo") {
+                photo = foodViews(host.page, android.widget.ImageView::class.java).firstOrNull { it.drawable != null && it.contentDescription != null }
+                photo != null && host.getString(R.string.body_photos_note) in texts(host.page)
+            }
+            scrollTo(checkNotNull(photo))
+            shot("body-photos")
+            host.progressPhotos().deleteRecursively()
         } finally {
             test.runOnMainSync { host.finish() }
             context.getSharedPreferences("food", 0).edit().clear().commit()

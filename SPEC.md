@@ -778,7 +778,7 @@ enough data, explains what shaped it, and is framed as information for athlete a
   missing check-ins, load spikes); the local LLM only phrases them; with no LLM a plain list is shown.
 - **App:** readiness card on the hub, readiness jump test entry, check-in fields for RHR/HRV/sleep times,
   sessions list per day, load chart, reminder notifications at the athlete's chosen time.
-- Kept from the first draft for later: body measurements (Navy formula), progress photos on the phone only,
+- Kept from the first draft for later (done in 10.7 and 10.5): body measurements (Navy formula), progress photos on the phone only,
   Health Connect import.
 
 **Wave 3 — more camera tools from the same pose engine**
@@ -1170,3 +1170,20 @@ Clarifications from the implementation (2026-11-24):
 Done when: server tests pass under the memory cap; the app builds; AppChecks cover the photo review flow, pantry ->
 recipe flow and stores list with a fixture server (model and Overpass mocked server-side via a test switch); one
 real end-to-end check against the live vision model from openclaw with a public-domain food photo is recorded.
+
+### 10.7 Body measurements and progress photos (added 2026-11-24)
+
+- **Measurements** are one more kind of the field-test measurement (`kind: "body"`, same route, consent, scope,
+  idempotent `client_id`, offline queue, export and delete). Fields, all optional but at least one girth:
+  `waist_cm`, `neck_cm`, `hip_cm`, `chest_cm`, `arm_cm`, `thigh_cm` (10–250 cm), `height_cm` (100–250) and
+  `sex` (`male`/`female`). Height and sex are remembered on the phone only, to prefill the next entry.
+- **Body fat** is computed by the server, never accepted from the client: the US Navy circumference formula
+  (Hodgdon and Beckett 1984, metric form; men use waist minus neck, women waist plus hips minus neck). It is
+  stored with `body_fat_error_pct` (3.5 men, 3.7 women: the published standard error against underwater
+  weighing) and `body_fat_method`, or null when a needed value is missing or the result is outside 2–60 %.
+  The app shows it as "16.4 % ± 3.5", explains that one person's error can be larger, and shows the change
+  since the first estimate in percentage points.
+- **Progress photos** stay on the phone: shrunk to 1600 px, EXIF removed, saved in app-private storage per
+  signed-in athlete (app backup is off). Never uploaded, never sent to a model. The screen shows the first
+  and the latest side by side; the latest can be deleted.
+- Reached from Nutrition › Insights under the weight log ("Body measurements and photos").

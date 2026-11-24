@@ -174,3 +174,26 @@ def test_migration_creates_the_table_on_an_existing_database(monkeypatch):
             columns = [row["name"] for row in db.execute("PRAGMA table_info(measurements)")]
             assert columns == ["id", "athlete_id", "created_at", "kind", "data", "client_id"]
             assert db.execute("SELECT name FROM clubs").fetchone()["name"] == "Old club"
+
+
+BODY = {"kind": "body", "waist_cm": 85, "neck_cm": 38, "height_cm": 178, "sex": "male"}
+
+
+def test_body_measurements_store_the_navy_estimate_only_when_complete(api, auth):
+    client, _ = api
+    headers = auth("athlete1")
+    # Hand-checked: men 495 / (1.0324 - 0.19077 log10(47) + 0.15456 log10(178)) - 450 = 16.4;
+    # women 495 / (1.29579 - 0.35004 log10(72 + 98 - 33) + 0.221 log10(165)) - 450 = 26.9.
+    post(client, headers, BODY, "b1")
+    post(client, headers, {"kind": "body", "waist_cm": 72, "hip_cm": 98, "neck_cm": 33, "height_cm": 165, "sex": "female"}, "b2")
+    post(client, headers, {"kind": "body", "waist_cm": 72, "neck_cm": 33, "height_cm": 165, "sex": "female"}, "b3")  # no hip
+    post(client, headers, {"kind": "body", "arm_cm": 36.5}, "b4")
+    rows = {row["client_id"]: row for row in client.get("/api/measurements", params={"kind": "body"}, headers=headers).json()}
+    assert (rows["b1"]["body_fat_pct"], rows["b1"]["body_fat_error_pct"]) == (16.4, 3.5)
+    assert (rows["b2"]["body_fat_pct"], rows["b2"]["body_fat_error_pct"]) == (26.9, 3.7)
+    assert rows["b2"]["body_fat_method"].startswith("US Navy")
+    assert rows["b3"]["body_fat_pct"] is None and rows["b4"]["body_fat_pct"] is None and rows["b4"]["arm_cm"] == 36.5
+    assert measurements_api.navy_body_fat({**BODY, "neck_cm": 90}) is None  # neck wider than waist
+    post(client, headers, {"kind": "body", "height_cm": 178, "sex": "male"}, "none", status=422)
+    post(client, headers, {**BODY, "waist_cm": 9}, "small", status=422)
+    post(client, headers, {**BODY, "body_fat_pct": 10}, "forged", status=422)  # the server computes it

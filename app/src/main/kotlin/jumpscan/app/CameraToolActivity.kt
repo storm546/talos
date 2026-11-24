@@ -352,7 +352,7 @@ class CameraToolActivity : ComponentActivity() {
             val position = ((now - start) / 66 * 66) % duration
             try {
                 if (cameraFeed.isReady()) {
-                    val bitmap = video.getScaledFrameAtTime(position * 1000, MediaMetadataRetriever.OPTION_CLOSEST,
+                    val bitmap = video.scaledFrame(position * 1000,
                         (width * scale).toInt(), (height * scale).toInt())?.copy(Bitmap.Config.ARGB_8888, false)
                     if (bitmap != null) cameraFeed.submit(bitmap, now, null)
                 }
@@ -635,3 +635,8 @@ internal fun romLabel(key: String) = when (key) {
     "shoulder_abduction" -> R.string.ft_shoulder_abduction
     else -> R.string.ft_knee_flexion
 }
+
+/** getScaledFrameAtTime exists from API 27; the app supports 26, where the full frame is scaled here instead. */
+internal fun MediaMetadataRetriever.scaledFrame(timeUs: Long, width: Int, height: Int): Bitmap? =
+    if (android.os.Build.VERSION.SDK_INT >= 27) getScaledFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST, width, height)
+    else getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)?.let { Bitmap.createScaledBitmap(it, width, height, true) }

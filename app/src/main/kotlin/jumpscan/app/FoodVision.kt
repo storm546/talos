@@ -39,7 +39,7 @@ private const val MODEL_TIMEOUT_MS = 120_000
 private class CookState(val ingredients: MutableList<String> = mutableListOf(), var goal: String = "any",
                         var stores: List<JSONObject>? = null, var recipes: List<JSONObject>? = null)
 private var cookState = CookState()
-private var photoFor = "meal"
+internal var photoFor = "meal"
 
 /** At most [max] px on the long side, upright, re-encoded as JPEG so no EXIF (location, device, time) survives. */
 internal fun foodJpeg(input: ByteArray, max: Int = 1024): ByteArray {
@@ -96,11 +96,11 @@ internal fun MainActivity.foodPhoto(day: String = diaryDay, message: String? = n
 }
 
 private fun MainActivity.photoButtons() = toolRow(UiTile(R.string.food_photo_camera, "camera") { takeFoodPhoto() },
-    UiTile(R.string.food_photo_gallery, "food") { pickFoodPhoto() })
+    UiTile(R.string.food_photo_gallery, "gallery") { pickFoodPhoto() })
 
 private fun MainActivity.cameraFile() = File(cacheDir, "food-photo/photo.jpg")
 
-private fun MainActivity.takeFoodPhoto() {
+internal fun MainActivity.takeFoodPhoto() {
     if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
         requestPermissions(arrayOf(Manifest.permission.CAMERA), 66)
         return snack(getString(R.string.food_camera_needed))
@@ -111,16 +111,20 @@ private fun MainActivity.takeFoodPhoto() {
         .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION), FOOD_CAMERA)
 }
 
-private fun MainActivity.pickFoodPhoto() {
+internal fun MainActivity.pickFoodPhoto() {
     val pick = if (Build.VERSION.SDK_INT >= 33) Intent(MediaStore.ACTION_PICK_IMAGES)
         else Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE)
     launchVideo(pick.setType("image/*"), FOOD_GALLERY)
 }
 
 internal fun MainActivity.foodPhotoResult(request: Int, result: Int, uri: Uri?) {
-    val back = { if (photoFor == "meal") foodPhoto(diaryDay) else cook(diaryDay) }
+    val back = { if (photoFor == "meal") foodPhoto(diaryDay) else if (photoFor == "progress") body() else cook(diaryDay) }
     if (result != android.app.Activity.RESULT_OK) return back()
     val file = cameraFile()
+    if (photoFor == "progress") return work(getString(R.string.feature_saving), {
+        saveProgressPhoto(if (request == FOOD_CAMERA) file.readBytes().also { file.delete() }
+            else contentResolver.openInputStream(checkNotNull(uri))!!.use { it.readBytes() })
+    }, { body(getString(R.string.body_photo_saved)) }, { body(it) })
     analyseFoodPhoto(diaryDay) {
         if (request == FOOD_CAMERA) file.readBytes().also { file.delete() }
         else contentResolver.openInputStream(checkNotNull(uri))!!.use { stream ->
@@ -247,7 +251,7 @@ internal fun MainActivity.cook(day: String = diaryDay, message: String? = null) 
     if (message != null) notice(message)
     text(getString(R.string.cook_note), 14)
     toolRow(UiTile(R.string.food_photo_camera, "camera") { if (photoNoticeSeen()) takeFoodPhoto() else photoNotice { cook(day) } },
-        UiTile(R.string.food_photo_gallery, "food") { if (photoNoticeSeen()) pickFoodPhoto() else photoNotice { cook(day) } })
+        UiTile(R.string.food_photo_gallery, "gallery") { if (photoNoticeSeen()) pickFoodPhoto() else photoNotice { cook(day) } })
     section(R.string.cook_ingredients).setPadding(0, dp(18), 0, dp(2))
     if (state.ingredients.isEmpty()) text(getString(R.string.cook_no_ingredients), 14)
     state.ingredients.chunked(3).forEach { names ->

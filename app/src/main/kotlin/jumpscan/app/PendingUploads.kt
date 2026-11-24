@@ -25,7 +25,8 @@ internal enum class FeatureWrite(val method: String, val keys: Set<String>, val 
     // A field-test result (SPEC 9.3); the server checks the fields of each kind.
     MEASUREMENT("POST", setOf("kind"), setOf("joint", "view", "left_deg", "right_deg", "error_deg", "quality", "warnings",
         "leg", "stance_ms", "sway_pct", "ended_by", "fps", "distance_m", "time_ms", "start", "precision_ms", "test",
-        "activity", "duration_s", "avg_pace_s_per_km", "splits_s")),
+        "activity", "duration_s", "avg_pace_s_per_km", "splits_s",
+        "waist_cm", "neck_cm", "hip_cm", "chest_cm", "arm_cm", "thigh_cm", "height_cm", "sex")),
     COMPLETE("PUT", emptySet());
 
     fun path(day: String): String = when (this) {

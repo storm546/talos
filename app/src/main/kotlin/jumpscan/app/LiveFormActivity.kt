@@ -331,7 +331,7 @@ class LiveFormActivity : ComponentActivity() {
                 if ((!previewed || start != 0L) && position != lastVideoMs && cameraFeed.isReady()) {
                     // MediaPipe accepts only ARGB_8888; the retriever may return RGB_565.
                     val started = SystemClock.elapsedRealtimeNanos()
-                    val bitmap = video.getScaledFrameAtTime(position * 1000, MediaMetadataRetriever.OPTION_CLOSEST,
+                    val bitmap = video.scaledFrame(position * 1000,
                         (width * scale).toInt(), (height * scale).toInt())?.copy(Bitmap.Config.ARGB_8888, false)
                     if (bitmap != null) run?.decoded(SystemClock.elapsedRealtimeNanos() - started)
                     if (bitmap != null && cameraFeed.submit(bitmap, now, run)) {

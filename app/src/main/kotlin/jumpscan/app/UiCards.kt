@@ -449,6 +449,7 @@ internal fun Context.lineIcon(name: String, tint: Int) = getDrawable(when (name)
     "signout" -> R.drawable.ic_signout
     "scan" -> R.drawable.ic_scan
     "camera" -> R.drawable.ic_camera
+    "gallery" -> R.drawable.ic_gallery
     "plus" -> R.drawable.ic_plus
     "recipe" -> R.drawable.ic_recipe
     "insights" -> R.drawable.ic_insights
