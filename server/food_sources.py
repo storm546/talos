@@ -272,21 +272,25 @@ def off_food(product, code):
             "source_url": f"https://world.openfoodfacts.org/product/{code}"}
 
 
-def open_food_facts(code):
-    """The product for a barcode: a normalised food, None when unknown or incomplete; Unavailable on failure."""
-    try:
-        # Open Food Facts often answers in 6-15 s from here; the app waits 30 s, so allow 25 s.
-        with httpx.Client(timeout=httpx.Timeout(25.0, connect=5.0), trust_env=False, headers={"User-Agent": USER_AGENT,
-                                                                "Accept": "application/json"}) as client:
-            response = client.get(OFF_URL.format(code=code), params={"fields": OFF_FIELDS})
-            if response.status_code == 404:
-                return None
-            response.raise_for_status()
-            if len(response.content) > 256 * 1024:
-                raise Unavailable("Response too large")
-            result = response.json()
-    except (httpx.HTTPError, ValueError) as error:
-        raise Unavailable(str(error)) from None
+def open_food_facts(code, attempts=2):
+    """The product for a barcode: a normalised food, None when unknown or incomplete; Unavailable on failure.
+    Open Food Facts sometimes stalls on one request while the next answers at once, so a timed-out or failed
+    request is retried once; two 12 s attempts stay within the app's 30 s wait."""
+    for attempt in range(attempts):
+        try:
+            with httpx.Client(timeout=httpx.Timeout(12.0, connect=5.0), trust_env=False,
+                              headers={"User-Agent": USER_AGENT, "Accept": "application/json"}) as client:
+                response = client.get(OFF_URL.format(code=code), params={"fields": OFF_FIELDS})
+                if response.status_code == 404:
+                    return None
+                response.raise_for_status()
+                if len(response.content) > 256 * 1024:
+                    raise Unavailable("Response too large")
+                result = response.json()
+            break
+        except (httpx.HTTPError, ValueError) as error:
+            if attempt == attempts - 1:
+                raise Unavailable(str(error)) from None
     if not isinstance(result, dict) or result.get("status") != 1:
         return None
     return off_food(result.get("product"), code)

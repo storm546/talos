@@ -206,6 +206,21 @@ def test_barcode_network_failure_is_503_and_saves_nothing(api, auth, monkeypatch
     assert count(path, "SELECT COUNT(*) FROM foods") == before
 
 
+
+def test_barcode_lookup_retries_once_when_open_food_facts_stalls(api, auth, monkeypatch):
+    client, _ = api
+    attempts = []
+
+    def handler(request):
+        attempts.append(request)
+        if len(attempts) == 1:
+            raise httpx.ReadTimeout("stalled")
+        return httpx.Response(200, json=OFF_PRODUCT)
+
+    mock_http(monkeypatch, handler)
+    response = client.get("/api/foods/barcode/5901234123457", headers=auth("athlete1"))
+    assert response.status_code == 201 and len(attempts) == 2
+
 # --- micronutrients ---
 
 def test_nutrient_definitions_and_daily_totals_report_missing_as_missing(api, auth):
