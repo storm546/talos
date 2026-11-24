@@ -1041,3 +1041,147 @@ test sets. Training scores and the before, candidate and final held-out reports 
 The final engine reproduced the frozen push-up candidate exactly. All other held-out batch outputs, including
 squat and plank, matched the round-start engine byte-for-byte. Server pytest passed (506 passed, 1 skipped).
 The locked kit build passed `:core:test` (73 passed, 1 skipped) and `:app:assembleDebug`.
+
+## Wave 6B — 24 November 2026: field-test changes and kit experiments
+
+Source: `logs/research/algorithms-review.md` sections 2c, 4c and 9. Every experiment kept the pass bar written in that
+review, fixed before running. Scripts, raw outputs and per-item tables are in `logs/wave6/kit/exp1` to `exp7` (not in
+git). All kit work ran as builder on android-build-kit with nice, Gradle under `/work/jumpscan-gradle.lock`, one heavy
+job at a time; the llama-server's GPU memory was left alone.
+
+### Shipped changes (no experiment needed, tests added)
+
+- Slow-motion guard (app): a clip whose container capture rate differs from its timestamp rate by more than 3% is
+  refused. Checked on the emulator with a synthetic clip stored at 30 fps that declares 120 fps capture: Android reads
+  120 and the analysis refuses it before pose work. No real phone slow-motion clip has been tested (review 2c, phone).
+- Cue time (app + core helper): the tone plays on an AudioTrack and its first sample's presentation time is used.
+  On the emulator the timestamp path worked and reported 14 ms after the request; that is an emulator figure, not
+  the A54's audio latency.
+- Sub-frame line crossings (core + app): on a rendered body crossing the band in two 33 ms frames at 30 phases, the
+  mean absolute deviation from the phase-free value fell from 8.25 ms (whole frames) to 3.08 ms, and the mean offset
+  from +15.6 to -4.8 ms. This is synthetic; no sprint has been timed against a reference (review 4c, phone).
+- Balance sway velocity above a noise floor (core + app): hand-checked in JUnit; phone-only, not uploaded.
+
+`:core:test` after these changes: 96 tests, 0 failures, 0 errors, 1 skipped (`RealVideoTest.privateClipsMatchReviewedContacts`:
+the owner's private clips are not installed in this build directory). The measured-data tests still reproduce the webcam rule counts 7 and 1 and the Twente benchmark bounds.
+
+### Experiment 1 — RTMPose-m on MediaPipe-box crops: FAIL (webcam false alarms)
+
+RTMPose-m (HALPE-26) ran on every Twente frame using the box of that frame's MediaPipe landmarks (20% margin); the
+previous RTMPose box was reused when MediaPipe had no row, and YOLOX ran only without either. Same converter, cuts,
+analyzer (with the learned policy) and scoring as `logs/rtm`.
+
+| Bar | Result | Pass |
+|---|---|---|
+| Side right ≥ 82/91 | 84/91 | yes |
+| Front right ≥ 80/91 | 85/91 | yes |
+| 0 spurious | 0 front, 0 side | yes |
+| Side flight MAE ≤ 35 ms | 29.96 ms (bias +29.3) | yes |
+| Side knee RMSE ≤ 6.5° | 5.73° (peak RMSE 6.16°, 91/91 windows) | yes |
+| Detector calls ≤ 5% of frames | 124 / 22,674 = 0.55% | yes |
+| Webcam looking_down false alarms ≤ 7/100 | 18/100 | **no** |
+| Webcam still_pose false alarms ≤ 1/100 | 3/100 | **no** |
+
+Front flight MAE is 24.2 ms (bias -22.5 ms, 59/85 within one frame). The Twente gains hold without YOLOX, but on the
+webcam negatives the hybrid reports more flights than MediaPipe, as the full RTMPose-m run already did
+(28/200 looking_down). No app integration was planned; the experiment fails as a whole. Licence facts on the weights are
+in the Wave 6B report (`logs/out-wave6b.txt`).
+
+### Experiment 2 — isolated RTMPose timing
+
+`/work/jumpscan-run/r1/run_pose.py --bench` (22 frames of Subj06 front after 3 warm-up frames), each run started only
+with the kit's one-minute load below 2, pinned with taskset to one CPU (1 thread) or CPUs 0, 2, 4, 6 (4 threads).
+Kit CPU (Ryzen 7 4700S) only; this ranks variants and is not phone evidence.
+
+| Model | Threads | Detector ms per call | Pose ms per frame | Frames per second, end to end |
+|---|---|---|---|---|
+| RTMPose-s + YOLOX-tiny | 1 / 4 | 144.1 / 45.2 | 33.7 / 11.9 | 5.6 / 17.5 |
+| RTMPose-m + YOLOX-m | 1 / 4 | 1526.7 / 403.9 | 86.4 / 29.1 | 0.62 / 2.31 |
+| RTMPose-l + YOLOX-m | 1 / 4 | 1525.0 / 403.0 | 178.3 / 51.4 | 0.59 / 2.20 |
+| RTMPose-m, own-box crop (1 detection) | 1 / 4 | 1525.5 / 402.0 | 86.2 / 25.4 | 6.4 / 22.9 |
+
+With the MediaPipe box the detector runs on 0.55% of frames, so RTMPose-m costs about the pose time per frame (25–30 ms
+on 4 kit threads) on top of MediaPipe, which already runs. The 1050 Ti was not used: the kit's ONNX Runtime has only
+the CPU provider and the GPU holds the llama-server (3.0 of 4 GB); installing a CUDA runtime was outside the brief.
+
+### Experiment 3 — sub-frame rules edges: FAIL (not shipped)
+
+The rules take-off and landing were interpolated to where the smaller foot clearance crosses 2.5% of leg length,
+between the last ground frame and the first airborne frame (and back at landing), behind an environment flag in a
+scratch copy (`logs/wave6/kit/exp3/subframe.patch`). Same 182 Twente clips and webcam test halves, flag off and on.
+
+| | Front MAE | Side MAE | Right / spurious (front, side) | Webcam false alarms |
+|---|---|---|---|---|
+| Public analyzer, off | 19.68 ms | 16.43 ms | 71/0, 60/0 | 7, 1 |
+| Public analyzer, on | 17.05 ms | 16.43 ms | 71/0, 60/0 | 7, 1 |
+| Rules only, off | 32.08 ms | 87.85 ms | 71/0, 60/0 | 7, 1 |
+| Rules only, on | 28.29 ms | 94.52 ms | 71/0, 60/0 | 7, 1 |
+
+Counts and webcam false alarms are unchanged, but the shipped front MAE falls by 2.63 ms, short of the 3 ms bar
+(the rules-only front MAE falls by 3.79 ms while rules-only side gets 6.7 ms worse). Two Twente clips and three webcam
+positives changed their uncertain_timing flag. Not shipped; the full Twente batch was therefore not rerun for a change.
+
+### Experiment 4 — hip-rise height against impulse height: FAIL
+
+Impulse height: per-athlete body weight from still windows, movement onset from a 2.5% force band, take-off velocity by
+integrating the force to the plate take-off. This reference agrees with the plates' flight-time height within 3 cm on
+52/57 jumps (bias -1.4 cm); 34 jumps had no clean still onset and were left out. Pose height uses the MediaPipe hip
+midpoint scaled by the mocap hip-to-ankle length.
+
+| Estimate (n of 57) | Within 3 cm | Bias | SD |
+|---|---|---|---|
+| Pose hip, front, take-off to apex (53) | 41.5% | +0.1 cm | 4.6 cm |
+| Pose hip, front, standing to apex (53) | 0% | +12.7 cm | 5.8 cm |
+| Pose hip, side, take-off to apex (38) | 34.2% | -3.3 cm | 10.5 cm |
+| Mocap pelvis markers, take-off to apex (57) | 91.2% | -1.5 cm | 1.7 cm |
+
+The physics works (pelvis markers pass), the pose hip at 33 fps does not reach the 90% bar. Not usable as a plausibility
+check.
+
+### Experiment 5 — repeatability (no pass bar)
+
+One-way random effects over subjects; typical error = within-subject SD, MDC95 = 1.96 × √2 × typical error. App rows
+use the current analyzer's automatic results that match a force jump.
+
+| Source | View | Measure | Trials | Typical error | CV | ICC(1) | MDC95 |
+|---|---|---|---|---|---|---|---|
+| App | front | jump height | 71 | 4.07 cm | 16.8% | 0.64 | 11.3 cm |
+| App | side | jump height | 60 | 1.85 cm | 10.7% | 0.81 | 5.1 cm |
+| Force plate | — | jump height | 91 | 1.64 cm | 11.1% | 0.86 | 4.5 cm |
+| App | front | flight time | 71 | 34.9 ms | 8.2% | 0.73 | 96.6 ms |
+| App | side | flight time | 60 | 21.0 ms | 5.4% | 0.81 | 58.2 ms |
+| Force plate | — | flight time | 91 | 19.7 ms | 5.6% | 0.86 | 54.5 ms |
+| App | front | peak knee flexion (left) | 71 | 7.4° | 11.3% | 0.90 | 20.6° |
+| App | side | peak knee flexion | 60 | 10.3° | 13.6% | 0.78 | 28.5° |
+| OpenSim IK | — | peak knee flexion (left) | 91 | 7.6° | 10.0% | 0.84 | 21.1° |
+
+App minus force plate: front height +1.0 ± 4.4 cm (SD), side +1.0 ± 1.4 cm. The front typical error is inflated by a
+few matched jumps with large timing errors (every match within 300 ms counts). A records guard based on these numbers
+would need a front-view jump to beat the previous best by about 11 cm and a side-view jump by about 5 cm to exceed the
+95% detectable change; the force plate itself needs 4.5 cm, because these athletes' heights vary from jump to jump.
+
+### Experiment 6 — periodicity cross-check for form counting: FAIL
+
+Method fixed before scoring (`logs/wave6/kit/exp6/periodicity.py`): for every catalogue signal of the exercise and both
+sides, the strongest autocorrelation period between 0.7 and 6 s; period count from peaks of that signal. The engine
+counts reproduce round 4 exactly (held-out push-up 20/27 recorded and 19/27 live, squat 21/22, curl 7/13 and 8/13).
+
+- (a) Period count instead of the engine for push-up and curl: held-out exact falls (push-up 20 → 7 recorded,
+  19 → 6 live; curl 7 → 0 and 8 → 0). Fail.
+- (b) Flag when the period count and the engine differ by more than one: held-out recorded flags 42 of 55 sets that are
+  off by more than one (pass) but also 23 of 98 exact sets (23%, bar 10%); live 36/44 and 24/112 (21%). Fail.
+
+### Experiment 7 — MM-Fit wrist accelerometer repetitions: FAIL
+
+MM-Fit's accelerometer files were downloaded (public archive, CC BY 4.0) because only labels were on the kit. Method fixed
+before scoring (`logs/wave6/kit/exp7/imu_reps.py`): first principal component of each smartwatch's acceleration, the
+stronger autocorrelation period, peak count. Training split, 87 sets: exact 39 (44.8%; bar 90%); duration over period
+57 (65.5%). Held-out 62.4% and 69.7%. MM-Fit curls alternate arms, so each wrist sees half the repetitions (0/14 exact);
+an exploratory fix chosen after seeing this (adding both wrists for curls) reaches 57.5% training and 71.6% held-out.
+The IMU does not supply labels good enough for a learned counter; none is planned.
+
+### Not measured here (phone only)
+
+A54 pipeline timing, slow-motion metadata of the A54's own camera app, sprint timing against a 240 fps reference
+(which would validate both the audio cue and the sub-frame crossing), the A54 audio output latency, GPS tracks, and
+experiments 8 (needs experiment 1 to pass) and 9 (GPU delegate on a phone).

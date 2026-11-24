@@ -977,3 +977,22 @@ capture rate differs from its timestamp rate by more than 3%, with a clear messa
 proves the rule). Field tests: the reaction/sprint cue time is the moment the tone actually plays (AudioTrack
 timestamp), line crossings are interpolated between frames, and balance reports sway velocity above a measured noise
 floor. Kit experiments 1-7 of the report run with their pass bars; results go to `logs/wave6/`.
+
+6B clarifications (added by the 6B worker, 2026-11-24):
+- Slow-motion guard: every analysed video (jump and form) reads `METADATA_KEY_CAPTURE_FRAMERATE`; when it is present,
+  finite and positive and differs from the sample-timestamp rate by more than 3% of the timestamp rate, the clip is
+  refused with `slow_motion_error` before any pose work. A clip without the key passes. Nothing is rescaled.
+- Cue time (supersedes 9.3's "when the tone is requested"): the start tone is a 1 kHz tone on its own `AudioTrack`; the
+  cue time is the presentation time of its first sample from `AudioTrack.getTimestamp`, moved onto the camera frame
+  clock. Until that time is known, motion is not judged; motion before it is a false start. If no timestamp arrives
+  within 1 s, the request time is used (the old behaviour) and the result screen says so. The remaining unmeasured parts
+  are the speaker and the sound's travel to the athlete. How the cue was timed stays on the phone.
+- Line crossing: the crossing time is interpolated linearly in band activity between the frame before and the first
+  frame with activity at least 0.12. Precision is still reported as one median frame interval, because the
+  interpolation has no phone measurement yet.
+- Balance sway velocity: the noise floor is the hip midpoint's path length per second over the first window before the
+  lift of at least 1000 ms and 5 frames with both feet down (lift below 4%) and the hips within 3% of leg length of the
+  window's first position. Sway velocity is the hip path length per second over the stance; both are in % of leg length
+  per second, and the result shows velocity minus floor (never below zero), or says the floor was not measured. Both
+  stay on the phone: the server's balance fields are unchanged (uploading them needs a server field first).
+- Kit experiments: results and verdicts are in `core/VALIDATION.md` (Wave 6B) and the raw outputs in `logs/wave6/kit/`.
