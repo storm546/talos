@@ -68,16 +68,18 @@ def factor_phrase(t, factor):
     return f"{names.get(key, key)} {t.num(value, digits)}{units.get(key, '')}{usual_text}"
 
 
-def recovery(t, readiness):
+def recovery(t, readiness, adjustment=None):
     status = readiness["status"]
     factors = [f for f in readiness["factors"] if f.get("value") is not None and f["key"] in
                ("wellbeing", "resting_hr", "hrv", "jump")]
     better = [factor_phrase(t, f) for f in factors if f["state"] == "better"]
     worse = [factor_phrase(t, f) for f in factors if f["state"] == "worse"]
     if status == "good":
+        advice = (t(". Отбелязахте, че днес не сте на 100 %: следвайте по-лекия план.",
+                    ". You marked today as not 100 %: follow the lighter plan.") if adjustment else
+                  t(". Подходящ ден за по-тежка тренировка.", ". A good day for a harder session."))
         return finding("readiness", GOOD, t("Добре възстановени", "Recovered well"),
-                       t("По-добре от обичайното: ", "Better than usual: ") + "; ".join(better) +
-                       t(". Подходящ ден за по-тежка тренировка.", ". A good day for a harder session."))
+                       t("По-добре от обичайното: ", "Better than usual: ") + "; ".join(better) + advice)
     if status == "take_care":
         return finding("readiness", WATCH, t("Под обичайното", "Below your usual"),
                        t("По-слабо от обичайното: ", "Weaker than usual: ") + "; ".join(worse) +
@@ -303,7 +305,7 @@ def findings(c, result, language):
             out.append(item)
 
     if result.get("readiness"):
-        attempt(lambda: recovery(t, result["readiness"]))
+        attempt(lambda: recovery(t, result["readiness"], result.get("adjustment")))
         attempt(lambda: sleep(t, result["readiness"]))
     if result.get("nutrition"):
         attempt(lambda: nutrition_today(t, result["nutrition"]))

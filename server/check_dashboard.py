@@ -44,11 +44,13 @@ def check():
         for role, account in [('coach', 'coach'), ('athlete', 'athlete1'), ('admin', 'admin')]:
             login(account)
             # The athlete's own page starts with the phone's Today cards from /api/me/today (SPEC 10.2).
-            assert page.locator('.overview-card').count() - page.locator('#week .overview-card').count() == (10 if role == 'athlete' else 4)
+            cards = page.locator('.overview-card').count() - page.locator('#week .overview-card').count()
+            assert cards >= 10 if role == 'athlete' else cards == 4  # finding-only cards add to the ten (SPEC 10.9)
             assert all(value.replace('\u00a0', '').replace('/', '').replace(' ', '').replace(',', '').replace('.', '').isdigit()
                        for value in page.locator('.overview-card .big-value').all_text_contents())
             if role == 'athlete':
                 assert page.locator('.today-grid progress').count() == 4
+                assert page.locator('.today-grid .finding').count() >= 5  # findings under the cards (SPEC 10.9)
                 assert page.locator('.today-hero .card-subject').inner_text() in ('Добре', 'Нормално', 'Внимание', 'Още се учи', 'Няма данни')
                 for title in ('Днешен план', 'Тегло', 'Нови рекорди (7 дни)', 'Следваща тренировка', 'Съобщения', 'Последен скок'):
                     expect(page.get_by_role('heading', name=title, exact=True)).to_be_visible()
@@ -322,6 +324,8 @@ def check():
             page.evaluate(f'document.documentElement.dataset.theme = "{theme}"')
             for language in ['bg', 'en']:
                 page.locator('#language').select_option(language)
+                # Today reloads to get the findings in this language.
+                page.wait_for_function(f"() => state.todayData?.language === '{language}' && document.querySelector('#week')")
                 for width in [1280, 390]:
                     page.set_viewport_size({'width': width, 'height': 960})
                     page.locator('#week').scroll_into_view_if_needed()

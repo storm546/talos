@@ -50,6 +50,9 @@ def test_fresh_athlete_findings_say_what_is_missing(api, auth):
 
 def test_rules_for_sleep_weight_and_load():
     t = insights.Text("en")
+    good = {"status": "good", "factors": [{"key": "resting_hr", "value": 48.0, "state": "better", "baseline": {"mean": 50.0}}]}
+    assert insights.recovery(t, good)["text"].endswith("A good day for a harder session.")
+    assert insights.recovery(t, good, {"reason": "tired", "mode": "lighter"})["text"].endswith("follow the lighter plan.")
     short = {"factors": [{"key": "sleep", "sleep": {"hours": 5.9, "need_hours": [7, 9], "midpoint_sd_min": None, "nights": 0}}]}
     assert insights.sleep(t, short)["tone"] == "watch"
     trend = [{"day": f"2026-11-{d:02d}", "trend_kg": 80 - 0.05 * d} for d in range(1, 29)]

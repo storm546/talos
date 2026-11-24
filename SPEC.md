@@ -1233,6 +1233,9 @@ a label. The language model is used where it helps.
   language and findings. No model, a failure, or an under-18 athlete with an external model gives `text: null`, and
   the app hides the card. The card says the text is written by the model from the findings, and "Ask about it" opens
   the assistant with a prepared question.
+- **Web dashboard:** the athlete's Today page shows the same findings under its cards (extra cards for sleep, body,
+  technique and consistency when found) and reloads them when the language changes; the response carries `language`.
+- A "not feeling 100%" flag turns the recovery advice into "follow the lighter plan" instead of a harder session.
 - **Assistant:** a read tool `today_findings` returns the same findings, so questions such as "how am I doing" or
   "what should I focus on" start from the app's own conclusions. The model calls (briefing, coach digest) now allow
   4096 tokens and the configured timeout, because reasoning models spend tokens before answering.

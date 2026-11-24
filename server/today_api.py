@@ -134,7 +134,7 @@ def install(app, h):
         if abs((chosen - server_today).days) > 1:
             raise HTTPException(422, "day must be within one day of the server's date (UTC)")
         context = Context(app, user, db, chosen)
-        result = {"day": chosen.isoformat(), "role": user["role"]}
+        result = {"day": chosen.isoformat(), "role": user["role"], "language": language}
         for name, section in SECTIONS.items():
             if user["role"] != "athlete" and name not in EVERYONE:
                 result[name] = None

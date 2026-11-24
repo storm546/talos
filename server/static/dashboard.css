@@ -236,3 +236,5 @@ svg polyline {stroke-linecap:round;stroke-linejoin:round}
 .week-section > small {margin-bottom:16px}
 .week-grid .stat-line progress {flex-basis:100%;height:6px}
 .rd-not-100 {margin-left:6px}
+.finding{margin-top:12px}.finding strong{display:block}.finding p{margin:2px 0 0;color:var(--muted)}.finding-good strong{color:var(--ok)}.finding-watch strong{color:var(--warn)}
+.today-hero .finding strong{color:var(--hero-ink)}.today-hero .finding-good strong{color:#98d7c8}.today-hero .finding-watch strong{color:var(--signal)}.today-hero .finding p{color:var(--hero-muted)}

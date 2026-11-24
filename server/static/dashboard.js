@@ -210,6 +210,7 @@ Object.assign(dictionary.bg, {
   tdReadiness_still_learning:'Нужни са поне 7 дни собствени стойности преди сравнение.',
   tdReadiness_no_data:'Отбележете как се чувствате или направете сутрешен скок.', tdNoData:'Още няма данни.',
   tdLogged:'Записана днес', tdFoodLogs:'записи: ', tdLoad:'Натоварване днес', tdLoadUnit:'AU', tdSessions:'тренировки: ',
+  tdSleep:'Сън', tdBody:'Тяло', tdForm:'Техника', tdWeek:'Постоянство',
   tdWeight:'Тегло', tdTrend:'тенденция ', tdWeightEmpty:'Още няма претегляне.', tdRecords:'Нови рекорди (7 дни)',
   tdRecordsEmpty:'Тази седмица няма нови рекорди.', tdNextSession:'Следваща тренировка', tdNoSession:'Няма планирана тренировка в клуба.',
   tdMessages:'Съобщения', tdUnread:'Непрочетени от треньора.', tdNoUnread:'Няма непрочетени съобщения.',
@@ -234,6 +235,7 @@ Object.assign(dictionary.en, {
   tdReadiness_still_learning:'Needs at least 7 days of your own values before comparing.',
   tdReadiness_no_data:'Check in or do a morning jump to see today’s readiness.', tdNoData:'Nothing loaded yet.',
   tdLogged:'Logged today', tdFoodLogs:'entries: ', tdLoad:'Load today', tdLoadUnit:'AU', tdSessions:'sessions: ',
+  tdSleep:'Sleep', tdBody:'Body', tdForm:'Technique', tdWeek:'Consistency',
   tdWeight:'Weight', tdTrend:'trend ', tdWeightEmpty:'No weigh-in yet.', tdRecords:'New records (7 days)',
   tdRecordsEmpty:'No new records this week.', tdNextSession:'Next session', tdNoSession:'No club session planned.',
   tdMessages:'Messages', tdUnread:'Unread from your coach.', tdNoUnread:'No unread messages.',
@@ -429,7 +431,7 @@ async function load(view=state.view) {
     const day = apiDay();
     const [summary, jumps, todayData] = await Promise.all([
       api('/api/athletes/' + id + '/summary'), api('/api/jumps?athlete_id=' + id + '&limit=1'),
-      api('/api/me/today?day=' + day)]);
+      api('/api/me/today?day=' + day + '&language=' + state.language)]);
     const weekData = await api('/api/me/week?language=' + state.language + (state.week ? '&week=' + state.week : '')).catch(() => null);
     data = {summary, jumps, todayData, weekData};
   }
@@ -644,7 +646,16 @@ function today(content) {
       (jump[field] == null ? '' : ' · ' + change(jump[field] - metric.baseline, field))));
     jumpCard.append(row);
   }
-  grid.append(readiness, plan, checkin, food, training, weight, records, session, messages, jumpCard);
+  // Each card's findings under its numbers (SPEC 10.9); sleep, body, technique and consistency are cards only when found.
+  const byCard = {readiness, plan, checkin, nutrition: food, training, weight, records};
+  const extra = [];
+  for (const f of data.findings || []) {
+    if (!byCard[f.card]) extra.push(byCard[f.card] = overviewCard(t({sleep:'tdSleep', body:'tdBody', form:'tdForm', week:'tdWeek'}[f.card] || 'tdNoData'), null, '', 'checkin'));
+    const note = node('div', null, 'finding finding-' + f.tone);
+    note.append(node('strong', f.title), node('p', f.text));
+    byCard[f.card].append(note);
+  }
+  grid.append(readiness, plan, checkin, food, training, weight, ...extra, records, session, messages, jumpCard);
   content.append(grid);
   weekSection(content);
 }
@@ -1912,5 +1923,5 @@ $('theme').addEventListener('click', () => {
   updateThemeLabel();
 });
 systemTheme.addEventListener('change', updateThemeLabel);
-$('language').addEventListener('change',event=>{state.language=event.target.value;message('');render();});
+$('language').addEventListener('change',event=>{state.language=event.target.value;message('');if(state.view==='today'&&state.user?.role==='athlete')load('today');else render();});
 render();
