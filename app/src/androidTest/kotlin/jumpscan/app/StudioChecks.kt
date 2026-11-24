@@ -62,9 +62,11 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             bitmap.recycle()
         }
         // Kotlin `internal` members get a module suffix on the JVM (e.g. history$app_debug).
+        // Screens with optional Int parameters (e.g. checkin(addMinutes = 0)) are opened with zeros.
         fun open(method: String) = MainActivity::class.java.declaredMethods
-            .first { it.parameterCount == 0 && (it.name == method || it.name.startsWith("$method$")) }
-            .apply { isAccessible = true }.invoke(host)
+            .filter { (it.name == method || it.name.startsWith("$method$")) && it.parameterTypes.all { t -> t == Int::class.javaPrimitiveType } }
+            .minBy { it.parameterCount }
+            .apply { isAccessible = true }.let { it.invoke(host, *Array<Any?>(it.parameterCount) { 0 }) }
         fun buttons(view: View): List<Button> = when (view) {
             is Button -> listOf(view)
             is ViewGroup -> (0 until view.childCount).flatMap { buttons(view.getChildAt(it)) }
