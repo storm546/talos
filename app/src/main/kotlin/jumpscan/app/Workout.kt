@@ -462,8 +462,11 @@ internal fun MainActivity.programs(message: String? = null) {
             text(program.getString(if (bg) "note_bg" else "note_en"), 13)
             for (day in program.getJSONArray("days").objects()) {
                 val items = day.getJSONArray("items").objects()
-                text(day.getString("name"), 14, getColor(R.color.muted)).setPadding(0, dp(8), 0, 0)
-                text(items.joinToString("\n") { "${it.getString("exercise")}  ${it.getInt("sets")}×${it.getInt("reps")}" }, 15)
+                text(day.optString(if (bg) "name" else "name_en", day.getString("name")), 14, getColor(R.color.muted)).setPadding(0, dp(8), 0, 0)
+                text(items.joinToString("\n") {
+                    val dose = if (it.optBoolean("hold")) getString(R.string.programs_hold, it.getInt("sets")) else "${it.getInt("sets")}×${it.getInt("reps")}"
+                    "${it.optString(if (bg) "exercise" else "exercise_en", it.getString("exercise"))}  $dose"
+                }, 15)
             }
             button(getString(R.string.programs_adopt)) {
                 work(getString(R.string.feature_saving), { featureApi().post("/api/programs/${program.getString("key")}/adopt", JSONObject()) }, { result ->

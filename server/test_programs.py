@@ -7,10 +7,11 @@ from server.test_training_nutrition_api import make_athlete
 
 def test_every_program_exercise_is_in_the_library():
     names = {name for name, *_ in programs_api.LIBRARY}
-    assert len(names) == len(programs_api.LIBRARY)
+    assert len(names) == len(programs_api.LIBRARY) and names == set(programs_api.NAMES_EN)
     for program in programs_api.PROGRAMS.values():
         for items in program["days"].values():
             assert {e for e, *_ in items} <= names
+        assert set(program["days"]) <= set(programs_api.DAYS_EN) | {"A", "B"}
 
 
 def test_adopt_creates_private_templates_once(api, auth):

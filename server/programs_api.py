@@ -29,8 +29,28 @@ LIBRARY = (
     ("Леко бягане", "conditioning", 0), ("Скачане на въже", "conditioning", 0), ("Гребен ергометър", "conditioning", 0),
 )
 
+# English names for the program preview in the English app; adopted templates use the club's (Bulgarian) names.
+NAMES_EN = {
+    "Клякане със щанга": "Back squat", "Предно клякане": "Front squat", "Гоблет клякане": "Goblet squat",
+    "Клякане без тежест": "Bodyweight squat", "Мъртва тяга": "Deadlift", "Румънска тяга": "Romanian deadlift",
+    "Лег преса": "Leg press", "Напади с дъмбели": "Dumbbell lunge", "Български сплит клек": "Bulgarian split squat",
+    "Хип тръст": "Hip thrust", "Глутеус мост": "Glute bridge", "Сгъване на бедрата на машина": "Leg curl",
+    "Разгъване на бедрата на машина": "Leg extension", "Повдигане на пръсти": "Calf raise",
+    "Лежанка": "Bench press", "Лежанка с дъмбели на наклон": "Incline dumbbell press", "Лицеви опори": "Push-up",
+    "Кофички": "Dip", "Раменна преса със щанга": "Overhead press", "Раменна преса с дъмбели": "Dumbbell shoulder press",
+    "Странично повдигане с дъмбели": "Lateral raise", "Разгъване за трицепс на скрипец": "Triceps pushdown",
+    "Набирания": "Pull-up", "Обърнато гребане": "Inverted row", "Гребане със щанга": "Barbell row",
+    "Гребане с дъмбел": "Dumbbell row", "Вертикален скрипец": "Lat pulldown", "Хоризонтален скрипец": "Seated cable row",
+    "Фейс пул": "Face pull", "Сгъване за бицепс с дъмбели": "Dumbbell curl",
+    "Планк": "Plank", "Повдигане на крака от вис": "Hanging leg raise", "Мобилност за глезени": "Ankle mobility",
+    "Леко бягане": "Easy run", "Скачане на въже": "Jump rope", "Гребен ергометър": "Rowing machine",
+}
+DAYS_EN = {"Горна A": "Upper A", "Долна A": "Lower A", "Горна B": "Upper B", "Долна B": "Lower B",
+           "Бутане": "Push", "Дърпане": "Pull", "Крака": "Legs", "У дома": "Home"}
+HOLDS = {"Планк"}  # reps are holds of 30-45 s
+
 # Program key -> titles, days per week, and days of (exercise, sets, reps, rest seconds). Plank reps are sets of
-# about 30-45 s, as in the club plans. Loads are left to the workout screen, which pre-fills from the last session.
+# about 30-45 s (HOLDS), as in the club plans. Loads are left to the workout screen, which pre-fills from the last session.
 PROGRAMS = {
     "full_body": {
         "title_bg": "Цяло тяло (начинаещи)", "title_en": "Full body (beginner)", "per_week": 3,
@@ -89,7 +109,9 @@ def add_library(db, club_id):
 
 def public(key, program):
     return {"key": key, **{k: v for k, v in program.items() if k != "days"},
-            "days": [{"name": name, "items": [{"exercise": e, "sets": s, "reps": r, "rest_s": rest} for e, s, r, rest in items]}
+            "days": [{"name": name, "name_en": DAYS_EN.get(name, name),
+                      "items": [{"exercise": e, "exercise_en": NAMES_EN[e], "sets": s, "reps": r, "rest_s": rest,
+                                 "hold": e in HOLDS} for e, s, r, rest in items]}
                      for name, items in program["days"].items()]}
 
 

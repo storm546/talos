@@ -1200,4 +1200,6 @@ real end-to-end check against the live vision model from openclaw with a public-
   (consent required) and shared with the club for staff. A day already adopted by the same owner is not created
   again; exercises a coach removed from the club are left out and listed in `missing_exercises`. Loads are not
   prescribed: the workout screen pre-fills from the last session and progression works as before.
+- The list also carries English exercise and day names (`exercise_en`, `name_en`) for the English app, and
+  `hold` for timed holds (plank: sets of 30–45 s). Adopted templates use the club's names.
 - The assistant can read the programs (`list_programs`); adopting happens in the app (Workout › Ready-made programs).
