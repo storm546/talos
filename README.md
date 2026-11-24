@@ -95,9 +95,8 @@ server/.venv/bin/python -m pytest server -q
 ./gradlew --no-daemon :core:test                 # JDK 17
 ```
 
-Validation snapshot for 21 November 2026: server **506 passed, 1 skipped** on the final tree;
-Android core **71 passed, 1 skipped** (72 total, build-kit report of 20 November 2026;
-the merged tree has the same core test sources). See [`docs/validacia.md`](docs/validacia.md).
+Validation snapshot for 24 November 2026: server **684 passed, 1 skipped**; Android core **99 passed**
+(build kit, merged tree); instrumented app checks passed on the emulator. See [`docs/validacia.md`](docs/validacia.md).
 
 GitHub Actions runs three jobs on every push and pull request (`.github/workflows/ci.yml`): server
 tests, core tests and a debug build of the Android app (GitHub's Ubuntu runners include the Android SDK).
