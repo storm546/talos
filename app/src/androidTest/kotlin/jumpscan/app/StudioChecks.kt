@@ -61,7 +61,10 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             File(context.filesDir, "$language-$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             bitmap.recycle()
         }
-        fun open(method: String) = MainActivity::class.java.getDeclaredMethod(method).apply { isAccessible = true }.invoke(host)
+        // Kotlin `internal` members get a module suffix on the JVM (e.g. history$app_debug).
+        fun open(method: String) = MainActivity::class.java.declaredMethods
+            .first { it.parameterCount == 0 && (it.name == method || it.name.startsWith("$method$")) }
+            .apply { isAccessible = true }.invoke(host)
         fun buttons(view: View): List<Button> = when (view) {
             is Button -> listOf(view)
             is ViewGroup -> (0 until view.childCount).flatMap { buttons(view.getChildAt(it)) }
