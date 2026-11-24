@@ -426,21 +426,29 @@ Validated status (benchmark of 21 November 2026, round 4; hand counts, Countix a
   unclear repetitions.
 - **Plank** is validated for hold time: 9 of 9 held-out sets within max(1 s, 10%), 3 people. In-band time is
   not validated (8 of 9 held-out sets live, below the bar).
-- **Experimental**, with their held-out live exact rates:
-  - lateral raise 75% of 12;
+- **Experimental**, with their held-out live exact rates (adaptive counting of 24 November 2026 included; no
+  exercise met that round's promotion bar, see `core/VALIDATION.md`):
+  - lateral raise 83% of 12;
+  - overhead press 83% of 12;
+  - bent-over row 73% of 15;
   - push-up 70% of 27 (74% recorded);
-  - overhead press 67% of 12;
+  - jumping jack 68% of 28;
   - biceps curl 62% of 13;
-  - jumping jack 61% of 28;
   - pull-up 59% of 17;
   - lunge 53% of 36;
-  - bent-over row 0% of 15;
   - glute bridge, which has 2 counted sets;
   - the other 9 entries, which have no counted or timed test videos.
 
 Catalogue signals may set:
 - `"limbs": "each"`: in a front view with no side chosen, each arm or leg is counted separately, and overlapping
-  repetitions on both sides count once;
+  repetitions on both sides count once (with `"count": "adaptive"` in every view, so alternating arms seen in
+  profile still count);
+- `"limbs": "best"`: one side drives the count in every view, the better-seen one, chosen between repetitions;
+- `"count": "adaptive"`: a repetition is a rise of at least half of `min_range` above the athlete's own rest (the
+  lowest value since the previous repetition), ended by a return of 60% of its own excursion; it is complete when
+  the excursion reaches `min_range`, otherwise partial. `up`/`down` then only give the direction. A set whose first
+  movement is a return began mid-repetition and reports `incomplete_start`. Used by overhead press, lateral raise,
+  biceps curl, bent-over row and jumping jack;
 - `min_visibility` for the signal and its gate (checks keep 0.5);
 - `signal_front`: an alternative driving signal for front or diagonal views. Push-up detects the view from
   plank posture when possible. Its `rise:wrist:nose` signal uses the height of the nose above the wrist,

@@ -1185,3 +1185,71 @@ The IMU does not supply labels good enough for a learned counter; none is planne
 A54 pipeline timing, slow-motion metadata of the A54's own camera app, sprint timing against a 240 fps reference
 (which would validate both the audio cue and the sub-frame crossing), the A54 audio output latency, GPS tracks, and
 experiments 8 (needs experiment 1 to pass) and 9 (GPU delegate on a phone).
+
+## 2026-11-24 (form7): adaptive repetition counting for the experimental exercises
+
+Goal: more of the 18 experimental exercises past a promotion bar fixed before any test scoring: on the held-out split
+at least 12 sets from at least 4 people, exact-count rate at least 0.85, mean absolute error at most 0.2 repetitions and
+at most 1 false repetition per 10 sets. Squat and plank were not to change.
+
+Method. Baseline = the stage engine (74db7cd) run over every cached track (`batch/form7-base`; push-up numbers differ
+from round 3 because round 4 changed its view). All diagnosis and tuning used the training split only, through a
+Python port of `FormStream`'s repetition path that reproduces the engine count on 200 of 200 training sets
+(`logs/form7/proto/`). The held-out split was scored twice: look 1 after the main work, look 2 (final) after one
+revert. Only aggregate tables were read; no held-out set was inspected. Logs: `logs/form7/` (`train-*.csv`,
+`test-base.csv`, `test-look1.csv`, `test-final.csv`, `test-looks.txt`).
+
+Diagnosis on training sets (observed):
+- Bent-over row, 0 of 5: the `tilt:hip:shoulder` gate (40–90°) never opened. MM-Fit rowers lean 20–45° and, seen from
+  the front, the forward lean is invisible in the image (2–30°). In front views the average of both elbows also needed
+  the far arm, which is hidden at the top of every pull.
+- Lateral raise, 1 of 10: athletes rest at 40–50° of abduction, above the 35° rest level, so the first repetition was
+  open (incomplete_start) and some never returned to the band.
+- Overhead press, 13 of 15: two sets stopped short of the absolute lockout level (partial).
+- Jumping jack, 14 of 30: feet do not close to the 0.65 rest span on fast sets; partials and merged cycles.
+- Push-up: in front views MM-Fit athletes leave the bottom of the frame at the bottom of each repetition (wrists and nose
+  above y = 1), so the arm signals vanish for 0.5–0.8 s and every repetition becomes a tracking gap.
+- Biceps curl, 14 of 14: MM-Fit curls alternate arms; per-limb counting works in front views only.
+- Pull-up and lunge: Countix clips with tracking gaps and edge cycles; the adaptive counter did not help (pull-up 0.52
+  → 0.48, lunge 0.39 → 0.28 with many false repetitions on alternating legs), so they keep the stage counter (training numbers from the Python port).
+- Glute bridge: one training and one test set; too little data for any tuning or promotion. No clips were added.
+
+Change (`FormStream.adaptiveStep`, catalogue `"count": "adaptive"` and `"limbs": "best"`): a repetition is a rise of at
+least half of `min_range` above the athlete's own rest (lowest value since the previous repetition), ended by a return
+of 60% of its own excursion; complete when the excursion reaches `min_range`. Rest, start and return fractions (0.2,
+0.5, 0.6) were chosen on a plateau of a training grid (overhead press, lateral raise and curl exact on every point of
+0.5–0.7 × 0.4–0.6 × 0.6–1.2 min_range). Applied to overhead press, lateral raise, biceps curl, bent-over row (gate
+removed, better-seen arm) and jumping jack. Per-limb counting now also applies in profile for adaptive signals (curls
+seen from the side: training 0/14 → 14/14 when the view is forced to side). Squat (legacy path), plank (hold path) and
+every non-adaptive exercise run the unchanged code: their batch outputs are byte-identical to the baseline on all
+tracks, training and held-out, recorded and live (`cmp` of the 12 group files of glute bridge, lunge, plank, pull-up, push-up and squat).
+
+Push-up was changed after training (better-seen elbow from the side; front signal `rise:hip:shoulder`, which stays in
+view at the bottom; training 0.68 → 0.81 exact) but held-out look 1 fell (recorded 20/27 → 15/27, live 19/27 → 12/27).
+It was reverted to the stage counter before look 2. Its look-2 number is therefore the stage number and is biased by
+that choice only in the conservative direction.
+
+Results, exact rate / mean absolute error / false repetitions (recorded = heavy model, live = lite model at about
+15 fps):
+
+| Exercise | Train sets | Train recorded before → after | Test sets / people | Test recorded before → after | Test live before → after | Bar |
+|---|---:|---|---:|---|---|---|
+| Overhead press | 15 | 0.87/0.27/0 → 1.00/0.00/0 | 12 / 4 | 0.75/0.25/2 → 0.83/0.17/2 | 0.67/0.33/2 → 0.83/0.17/2 | fail (exact, false) |
+| Lateral raise | 10 | 0.10/1.20/0 → 0.90/0.10/0 | 12 / 4 | 0.67/0.58/0 → 0.83/0.25/0 | 0.75/0.50/0 → 0.83/0.33/0 | fail (exact, MAE) |
+| Bent-over row | 5 | 0.00/9.60/0 → 1.00/0.00/0 | 15 / 5 | 0.00/10.13/0 → 0.53/0.80/0 | 0.00/10.13/0 → 0.73/0.27/0 | fail |
+| Biceps curl | 14 | 1.00/0.00/0 → 1.00/0.00/0 | 13 / 5 | 0.54/0.69/0 → 0.62/0.62/0 | 0.62/0.46/0 → 0.62/0.38/0 | fail |
+| Jumping jack | 30 | 0.47/1.53/1 → 0.70/0.37/4 | 28 / 18 | 0.61/1.29/2 → 0.68/0.68/2 | 0.61/1.29/2 → 0.68/0.64/2 | fail |
+| Push-up (reverted) | 37 | 0.68/1.35/0 → unchanged | 27 / 17 | 0.74/0.48/3 → unchanged | 0.70/0.44/4 → unchanged | fail |
+| Pull-up (unchanged) | 29 | 0.52/0.86/3 | 17 / 17 | 0.41/0.88/0 | 0.59/0.65/0 | fail |
+| Lunge (unchanged) | 61 | 0.43/1.39/1 | 36 / 25 | 0.22/2.44/1 | 0.53/1.42/0 | fail |
+| Glute bridge (unchanged) | 1 | 0.00/3.00/0 | 1 / 1 | 1.00/0.00/0 | 1.00/0.00/0 | too few sets |
+| Squat (unchanged, validated) | 29 | 0.55/1.21/0 | 22 / 12 | 0.95/0.05/0 | 0.95/0.05/0 | pass |
+| Plank hold (unchanged, validated) | 6 | 0.83 | 9 / 3 | 0.89 | 1.00 | hold bar |
+
+Decision: no exercise is promoted; all 18 stay experimental and their one-line reasons quote the new held-out live
+rates. Every changed exercise improved on the held-out split or stayed level, with no new false repetitions; the
+training sets (MM-Fit people 1–4 and 19, Countix) are too few and too uniform to expose the held-out failures
+(training 0.90–1.00 against held-out 0.53–0.83). The remaining overhead-press false repetitions (2 in 12 sets) and the
+lateral-raise misses were not inspected, to keep the held-out split clean for a later round.
+
+Not verified: live counting with a phone camera (all "live" numbers replay tracked frames at about 15 fps).
