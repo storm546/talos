@@ -148,4 +148,10 @@
     <plurals name="workout_exercises"><item quantity="one">%1$d exercise</item><item quantity="other">%1$d exercises</item></plurals>
     <string name="tool_records_note">Your personal bests</string>
     <string name="tool_leaderboard_note">Club ranking, opt-in only</string>
+    <string name="programs_title">Ready-made programs</string>
+    <string name="programs_note">4 programs for the gym and home</string>
+    <string name="programs_adopt">Add as my templates</string>
+    <string name="programs_already">These templates are already yours.</string>
+    <string name="programs_start">Start a workout</string>
+    <plurals name="programs_added"><item quantity="one">%1$d template added. Start it from Workout.</item><item quantity="other">%1$d templates added. Start them from Workout.</item></plurals>
 </resources>

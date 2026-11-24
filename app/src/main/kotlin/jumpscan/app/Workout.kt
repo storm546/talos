@@ -120,6 +120,8 @@ private fun MainActivity.workoutChoices(templates: List<JSONObject>, plans: List
     settingRow("plus", getString(R.string.workout_empty), getString(R.string.workout_empty_note), starts) {
         beginWorkout(getString(R.string.workout_default_title), null, null, emptyList())
     }
+    divider(starts)
+    settingRow("route", getString(R.string.programs_title), getString(R.string.programs_note), starts) { programs() }
     for (plan in plans) {
         val items = planDays(plan, weekStart(today)).filter { it.first == today }.map { it.second }
         if (items.isEmpty()) continue
@@ -444,4 +446,32 @@ internal fun MainActivity.exercisePicker(query: String = "") {
     }
     search.onChange(::update)
     update()
+}
+
+/** Ready-made programs (SPEC 10.8); adopting one adds ordinary templates, shown on the start screen. */
+internal fun MainActivity.programs(message: String? = null) {
+    work(getString(R.string.feature_loading), { featureApi().array("/api/programs") }, { list ->
+        layout(getString(R.string.programs_title), "programs")
+        if (message != null) notice(message)
+        val bg = locale.language == "bg"
+        for (program in list) {
+            text(program.getString(if (bg) "title_bg" else "title_en"), 20).apply {
+                instrumentType(display = true); setPadding(0, dp(20), 0, 0)
+                if (android.os.Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
+            }
+            text(program.getString(if (bg) "note_bg" else "note_en"), 13)
+            for (day in program.getJSONArray("days").objects()) {
+                val items = day.getJSONArray("items").objects()
+                text(day.getString("name"), 14, getColor(R.color.muted)).setPadding(0, dp(8), 0, 0)
+                text(items.joinToString("\n") { "${it.getString("exercise")}  ${it.getInt("sets")}×${it.getInt("reps")}" }, 15)
+            }
+            button(getString(R.string.programs_adopt)) {
+                work(getString(R.string.feature_saving), { featureApi().post("/api/programs/${program.getString("key")}/adopt", JSONObject()) }, { result ->
+                    val created = result.optJSONArray("created")?.length() ?: 0
+                    programs(if (created == 0) getString(R.string.programs_already) else resources.getQuantityString(R.plurals.programs_added, created, created))
+                }, { programs(it) })
+            }
+        }
+        button(getString(R.string.programs_start), primary = true) { workoutStart() }
+    }, { workoutStart() })
 }

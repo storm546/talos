@@ -1187,3 +1187,17 @@ real end-to-end check against the live vision model from openclaw with a public-
   signed-in athlete (app backup is off). Never uploaded, never sent to a model. The screen shows the first
   and the latest side by side; the latest can be deleted.
 - Reached from Nutrition › Insights under the weight log ("Body measurements and photos").
+
+### 10.8 Exercise library and ready-made programs (added 2026-11-24)
+
+- **Library:** 36 common gym and home exercises (`programs_api.LIBRARY`, Bulgarian names like the club
+  catalogue) are added to every club once: existing clubs at startup, new clubs when created. A table
+  `club_library(club_id)` records it, so an exercise a coach deletes does not come back; names the club already
+  has are kept.
+- **Programs:** four built-in programs (full body A/B for beginners, upper/lower, push/pull/legs, home without
+  equipment), each a few days of exercise, sets, reps and rest. `GET /api/programs` lists them;
+  `POST /api/programs/{key}/adopt` creates one ordinary workout template per day, private for an athlete
+  (consent required) and shared with the club for staff. A day already adopted by the same owner is not created
+  again; exercises a coach removed from the club are left out and listed in `missing_exercises`. Loads are not
+  prescribed: the workout screen pre-fills from the last session and progression works as before.
+- The assistant can read the programs (`list_programs`); adopting happens in the app (Workout › Ready-made programs).

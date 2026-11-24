@@ -17,7 +17,7 @@ import time
 from fastapi.testclient import TestClient
 import pytest
 
-from server import main
+from server import main, programs_api
 from server.seed import seed
 
 
@@ -793,7 +793,9 @@ def test_reset_demo_rebuilds_only_demo_data(api, auth, monkeypatch):
         assert db.execute("SELECT COUNT(*) FROM checkins WHERE day=?", (today.isoformat(),)).fetchone()[0] == 6
         assert db.execute("SELECT COUNT(DISTINCT day) FROM food_logs WHERE athlete_id=?", (demo_id,)).fetchone()[0] == 13
         assert db.execute("SELECT kcal FROM nutrition_targets WHERE athlete_id=?", (demo_id,)).fetchone()[0] == 2200
-        assert not db.execute("SELECT 1 FROM exercises WHERE club_id=?", (other_club,)).fetchone()
+        # Only the built-in library (SPEC 10.8), nothing from the demo seed.
+        assert {r[0] for r in db.execute("SELECT name FROM exercises WHERE club_id=?", (other_club,))} <= {
+            name for name, *_ in programs_api.LIBRARY}
         for table, column, value in (("users", "id", personal_id), ("jumps", "athlete_id", personal_id),
                                      ("weights", "athlete_id", personal_id), ("nutrition_targets", "athlete_id", personal_id),
                                      ("sessions", "id", shared_session)):

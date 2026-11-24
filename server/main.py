@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from . import assistant_api, food_vision_api, measurements_api, readiness_api, records_api, today_api, training_nutrition_api, week_api
+from . import assistant_api, food_vision_api, measurements_api, programs_api, readiness_api, records_api, today_api, training_nutrition_api, week_api
 from .input_bounds import Offset, SQLITE_MAX, SqliteInt, SqlitePath
 from .response_data import complete_json, spooled_response
 
@@ -195,6 +195,7 @@ def init_db(path):
         records_api.init_schema(db)  # leaderboard opt-in columns (SPEC 8)
         readiness_api.init_schema(db)  # check-in readiness fields and training sessions (SPEC 9 wave 2)
         measurements_api.init_schema(db)  # field-test measurements (SPEC 9.3)
+        programs_api.init_schema(db)  # exercise library in every club (SPEC 10.8)
         week_api.init_schema(db)  # "not feeling 100%" day adjustments (SPEC 10.3)
 
 
@@ -970,6 +971,7 @@ def create_app(db_path=None):
     training_tools.update(records_api.install(app, sys.modules[__name__]))
     training_tools.update(readiness_api.install(app, sys.modules[__name__]))
     training_tools.update(measurements_api.install(app, sys.modules[__name__]))
+    training_tools.update(programs_api.install(app, sys.modules[__name__]))
     today_api.install(app, sys.modules[__name__])
     week_api.install(app, sys.modules[__name__])
     app.mount("/static", StaticFiles(directory=Path(__file__).with_name("static")), name="static")
@@ -1382,6 +1384,7 @@ def create_app(db_path=None):
             cursor = db.execute("INSERT INTO clubs(name) VALUES (?)", (body.name,))
         except sqlite3.IntegrityError:
             raise HTTPException(409, "Club already exists") from None
+        programs_api.add_library(db, cursor.lastrowid)
         audit(db, user["id"], "club_created", cursor.lastrowid)
         db.commit()
         return {"id": cursor.lastrowid, "name": body.name}

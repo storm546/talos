@@ -9,8 +9,8 @@ import sqlite3
 from fastapi.testclient import TestClient
 import pytest
 
-from server import main
-from server.seed import seed
+from server import main, programs_api
+from server.seed import EXERCISES, seed
 from server.test_server import METRICS, api, auth, new_user, template, temporary_directory, user_id
 from server.test_club_v2 import group_id
 
@@ -731,7 +731,8 @@ def test_seed_training_nutrition_is_idempotent_and_synthetic(api):
         assert db.execute("SELECT COUNT(*) FROM plans WHERE group_id IS NOT NULL").fetchone()[0] == 2  # one per demo group
         assert db.execute("SELECT COUNT(DISTINCT athlete_id) FROM set_logs").fetchone()[0] == 6
         assert db.execute("SELECT COUNT(DISTINCT day) FROM weights WHERE athlete_id = (SELECT id FROM users WHERE email = 'athlete1@demo.test')").fetchone()[0] == 12
-        assert db.execute("SELECT COUNT(*) FROM exercises").fetchone()[0] == 26 and before["foods"] >= 300
+        assert db.execute("SELECT COUNT(*) FROM exercises").fetchone()[0] == 2 * len(  # seed and library (SPEC 10.8)
+            {name for name, *_ in EXERCISES} | {name for name, *_ in programs_api.LIBRARY}) and before["foods"] >= 300
     seed(path)
     seed(path)
     with main.database(path) as db:

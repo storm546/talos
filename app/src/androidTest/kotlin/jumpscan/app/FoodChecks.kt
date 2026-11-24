@@ -165,6 +165,17 @@ internal class FoodStudio(private val test: Instrumentation, private val server:
             scrollTo(checkNotNull(photo))
             shot("body-photos")
             host.progressPhotos().deleteRecursively()
+
+            // Programs (SPEC 10.8): adopt the beginner program; its two days appear as templates.
+            test.runOnMainSync { host.programs() }
+            test.foodWait("programs") { host.getString(R.string.programs_adopt) in texts(host.page) }
+            shot("programs")
+            test.foodClick(host, host.getString(R.string.programs_adopt))
+            test.foodWait("adopted") { texts(host.page).any { it == host.resources.getQuantityString(R.plurals.programs_added, 2, 2) ||
+                it == host.getString(R.string.programs_already) } }
+            test.runOnMainSync { host.workoutStart() }
+            test.foodWait("program templates") { texts(host.page).count { it.contains(" · A") || it.contains(" · B") } >= 2 }
+            shot("workout-start")
         } finally {
             test.runOnMainSync { host.finish() }
             context.getSharedPreferences("food", 0).edit().clear().commit()

@@ -148,4 +148,10 @@
     <plurals name="workout_exercises"><item quantity="one">%1$d упражнение</item><item quantity="other">%1$d упражнения</item></plurals>
     <string name="tool_records_note">Личните Ви най-добри резултати</string>
     <string name="tool_leaderboard_note">Класиране в клуба, само по желание</string>
+    <string name="programs_title">Готови програми</string>
+    <string name="programs_note">4 програми за зала и у дома</string>
+    <string name="programs_adopt">Добавете като мои шаблони</string>
+    <string name="programs_already">Тези шаблони вече са Ваши.</string>
+    <string name="programs_start">Започнете тренировка</string>
+    <plurals name="programs_added"><item quantity="one">Добавен е %1$d шаблон. Започнете го от „Тренировка“.</item><item quantity="other">Добавени са %1$d шаблона. Започнете ги от „Тренировка“.</item></plurals>
 </resources>

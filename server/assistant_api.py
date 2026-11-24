@@ -80,7 +80,7 @@ INTENTS = {
                  r"match|gym|rpe|train|load|серия|серии|повторен|клякане|лежанк|набиран|тяга|преса|упражнен|тренир|план|"
                  r"мач|фитнес|натоварван|сесия",
                  ("list_exercises", "log_set", "list_set_logs", "training_summary", "list_plans", "get_plan",
-                  "list_templates", "list_workouts", "get_workout", "log_training_session", "list_training_sessions",
+                  "list_templates", "list_programs", "list_workouts", "get_workout", "log_training_session", "list_training_sessions",
                   "training_load", "assign_plan", "edit_plan")),
     "checkin": (r"check-?in|sleep|fatigue|soreness|stress|mood|readiness|hrv|heart|чек-?ин|отчет|сън|умора|треска|"
                 r"стрес|настроение|готовност|пулс|вариабилност",
@@ -424,6 +424,8 @@ def build_tools(h, operations):
          **paging)
     read("get_workout", "get_workout", "Read one workout with its sets.", workout_id=(record_id, ...))
     read("list_templates", "list_templates", "List workout templates you can start from.")
+    read("list_programs", "list_programs", "List the built-in training programs (days, exercises, sets, reps, rest); "
+         "the user adopts one in the app's workout screen.")
     read("athlete_records", "athlete_records", "Read personal records (jumps, form, strength, field tests).", **target)
     read("leaderboard", "leaderboard", "Read the club jump leaderboard (opted-in athletes only), ranked per "
          "frame-rate class within one camera view.", measure=(Literal["jump_height", "flight_time"], "jump_height"),
