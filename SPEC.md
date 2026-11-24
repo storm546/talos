@@ -1100,3 +1100,52 @@ Done when: the app builds; AppChecks cover availability handling, permission den
 Health Connect data (the API 34 emulator has Health Connect built in; insert test records from the test APK); the
 emulator screenshots show the Profile row, the prefilled check-in and a workout suggestion in light-bg; the real A54 with
 Samsung Health data is a documented owner check.
+
+### 10.6 Food photos, pantry recipes and nearby stores (added 2026-11-24)
+
+Owner: "Implement food analysis by image. Implement recipe and food suggestions based on stores near user and for
+example a pic of the fridge or pantry will get you recipes including those ingredients."
+
+**Privacy rule (amends PHILOSOPHY 1 and 4.3):** video, body images and landmarks still never leave the phone. A food
+or pantry photo leaves the phone only when the user starts the analysis, after a one-time notice saying it goes to the
+club's language model (currently an NVIDIA cloud model) and is not stored. The server forwards the downscaled image
+(max 1024 px JPEG, EXIF stripped on the phone) to the vision model and discards it; no image is written to disk, the
+database, logs or the audit (the audit records only "food_photo_analysed"). Athletes under 18 cannot use photo
+analysis while the model is external (same rule as the assistant). Location for stores is rounded to about 1 km on
+the phone and is not stored.
+
+**Server**
+- `JUMPSCAN_VISION_MODEL` (default `nvidia/nemotron-3.5-super-vl-120b-a12b`), same URL/key/fallback settings as the
+  assistant; timeout 90 s; image body max 2 MB; rate limit shared with the assistant.
+- `POST /api/me/nutrition/photo` `{image_jpeg_base64, meal?}`: the model lists foods with estimated grams; the server
+  matches each to the catalogue/club foods (same search as text, Bulgarian and English) and returns
+  `{items:[{label, grams, food|catalog_id|null, kcal, protein_g, carbs_g, fat_g, confidence}], totals}`. Nothing is
+  saved; the app shows the items for review and saves through the existing food-log batch route (confirm step).
+  Numbers come from the catalogue, never from the model; unmatched items are shown as "not found, add manually".
+- `POST /api/me/nutrition/pantry` `{image_jpeg_base64}`: the model lists visible ingredients; returns
+  `{ingredients:[{label, food|catalog_id|null}]}` for the user to edit.
+- `POST /api/me/nutrition/recipe-ideas` `{ingredients:[labels], goal?: "high_protein"|"light"|"any", servings?}`:
+  the model proposes up to 3 recipes using mainly those ingredients (steps in the user's language); the server matches
+  every ingredient to the catalogue and computes kcal and macros per serving itself. Returns recipes with
+  `uses_from_pantry`, `missing` ingredients and per-serving nutrition. "Save as recipe" uses the existing recipes route.
+- `GET /api/stores/nearby?lat=&lon=` (lat/lon rounded to 2 decimals): supermarkets and greengrocers within 2 km from
+  OpenStreetMap (Overpass API, ODbL attribution shown), name, brand, distance; cached 1 day per rounded cell; 10 s
+  timeout; no stock or price claims.
+- Recipe ideas can include `stores` context: when the app passes nearby store brands, missing ingredients get a
+  "можете да ги намерите в: Lidl (400 м), Kaufland (1,2 км)" line built from the store list (plain text, no claim
+  that a store has the item in stock).
+- Tests: all model and Overpass calls mocked; privacy tests (no image persisted or logged, minors refused with an
+  external model, audit without content); matching and nutrition computed server-side.
+
+**App**
+- Nutrition screen: "Снимка на храната / Photo of a meal" (camera or gallery) -> review list -> save to the chosen meal.
+- "Какво да сготвя? / What can I cook?": photo of fridge or pantry (or type ingredients) -> editable ingredient chips
+  -> goal -> 3 recipe cards (time, kcal and protein per serving, uses / missing, steps) -> save as recipe or log.
+- "Магазини наблизо / Stores nearby" on the recipe screen using coarse location permission (asked only when tapped),
+  with OSM attribution; works without location by hiding the store line.
+- One-time privacy notice before the first photo; EXIF stripped and image downscaled on the phone.
+- Bulgarian formal (Вие), brand "Talos", both themes.
+
+Done when: server tests pass under the memory cap; the app builds; AppChecks cover the photo review flow, pantry ->
+recipe flow and stores list with a fixture server (model and Overpass mocked server-side via a test switch); one
+real end-to-end check against the live vision model from openclaw with a public-domain food photo is recorded.
