@@ -95,7 +95,7 @@ server/.venv/bin/python -m pytest server -q
 ./gradlew --no-daemon :core:test                 # JDK 17
 ```
 
-Validation snapshot for 24 November 2026: server **702 passed, 1 skipped**; Android core **104 passed**
+Validation snapshot for 24 November 2026: server **706 passed, 1 skipped**; Android core **104 passed**
 (build kit, merged tree); instrumented app checks passed on the emulator. See [`docs/validacia.md`](docs/validacia.md).
 
 GitHub Actions runs three jobs on every push and pull request (`.github/workflows/ci.yml`): server

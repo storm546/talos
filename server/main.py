@@ -972,7 +972,7 @@ def create_app(db_path=None):
     training_tools.update(readiness_api.install(app, sys.modules[__name__]))
     training_tools.update(measurements_api.install(app, sys.modules[__name__]))
     training_tools.update(programs_api.install(app, sys.modules[__name__]))
-    today_api.install(app, sys.modules[__name__])
+    training_tools.update(today_api.install(app, sys.modules[__name__]))
     week_api.install(app, sys.modules[__name__])
     app.mount("/static", StaticFiles(directory=Path(__file__).with_name("static")), name="static")
 

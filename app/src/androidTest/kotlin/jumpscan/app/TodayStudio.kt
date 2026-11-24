@@ -66,7 +66,9 @@ internal fun todayChecks(test: Instrumentation) {
             return keys
         }
         check(test.screenOf(host, "home") == "home")
-        check(cardOrder() == TODAY_CARDS) { "default order: ${cardOrder()}" }
+        // The fixture has no findings, so the finding-only cards (sleep, body, form) stay hidden (SPEC 10.9).
+        val drawn = TODAY_CARDS.filter { it !in setOf("sleep", "body", "form") }
+        check(cardOrder() == drawn) { "default order: ${cardOrder()}" }
         var shown = emptyList<String>()
         test.runOnMainSync { shown = texts(host.page) }
         for (expected in listOf(host.getString(R.string.rd_good), host.getString(R.string.today_checkin_done), "Back squat",
@@ -78,16 +80,16 @@ internal fun todayChecks(test: Instrumentation) {
         test.runOnMainSync { host.finish() }
         host = test.startActivitySync(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         check(test.screenOf(host, "home") == "home")
-        val expected = listOf("readiness", "checkin", "plan") + TODAY_CARDS.drop(3).filter { it != "weight" }
+        val expected = listOf("readiness", "checkin", "plan") + drawn.drop(3).filter { it != "weight" }
         check(cardOrder() == expected) { "stored order: ${cardOrder()}" }
         test.runOnMainSync { shown = texts(host.page) }
         check(shown.any { it.equals(host.getString(R.string.today_hidden), ignoreCase = true) }) { "no hidden list in $shown" }
         context.hideCard("weight", false)
         context.moveCard("checkin", 1)
         check(context.todayOrder() == TODAY_CARDS && context.hiddenCards().isEmpty())
-        // Deep links open the tool with that hub key; an unknown key opens the hub.
+        // Deep links open the tool with that key; an unknown key opens Today.
         for ((link, screen) in listOf("talos://tool/calculators" to "calculators", "talos://tool/timer" to "interval_timer",
-                "talos://tool/no-such-tool" to "tools")) {
+                "talos://tool/no-such-tool" to "home")) {
             test.runOnMainSync { host.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(context, MainActivity::class.java)) }
             check(test.screenOf(host, screen) == screen) { "$link opened ${test.screenOf(host, screen)}" }
         }

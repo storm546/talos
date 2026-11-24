@@ -240,7 +240,7 @@ internal fun MainActivity.fieldResult(run: FieldRun, error: String? = null) {
 
 /** Result of [CameraToolActivity]: show it with a save button. */
 internal fun MainActivity.cameraToolResult(data: Intent?) {
-    val json = data?.getStringExtra("measurement") ?: return toolsHub()
+    val json = data?.getStringExtra("measurement") ?: return formHome()
     fieldResult(FieldRun(JSONObject(json), realtime = data?.getBooleanExtra("realtime", true) ?: true,
         local = data?.getStringExtra("local")?.let(::JSONObject) ?: JSONObject()))
 }

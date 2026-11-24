@@ -154,8 +154,8 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
             setAutoSizeTextTypeUniformWithConfiguration(12, 20, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }
     }
-    toolRow(UiTile(R.string.nutr_add, "plus") { foods(day) }, UiTile(R.string.scan_short, "scan") { scanBarcode() },
-        UiTile(R.string.nutr_copy_day, "copy") { copyLogs(day, null) }, UiTile(R.string.nutr_insights, "insights") { insights(day) })
+    toolRow(UiTile(R.string.nutr_add, "plus") { foods(day) }, UiTile(R.string.food_photo_short, "camera") { foodPhoto(day) },
+        UiTile(R.string.scan_short, "scan") { scanBarcode() }, UiTile(R.string.nutr_copy_day, "copy") { copyLogs(day, null) })
     section(R.string.meal_timeline).setPadding(0, dp(22), 0, dp(8))
     val byMeal = summary?.optJSONObject("by_meal_kcal") ?: JSONObject()
     meals.entries.forEachIndexed { index, (meal, label) ->
@@ -180,6 +180,7 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
             saveFeature(FeatureWrite.COMPLETE, JSONObject(), day) { _, result -> nutritionHome(day, result) }
         }
     } else button(getString(R.string.nutr_summary)) { nutritionHome(day) }
+    toolList(R.string.section_food_more, Tools.food)
     pendingControls()
 }
 

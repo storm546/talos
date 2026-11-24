@@ -1203,3 +1203,36 @@ real end-to-end check against the live vision model from openclaw with a public-
 - The list also carries English exercise and day names (`exercise_en`, `name_en`) for the English app, and
   `hold` for timed holds (plank: sets of 30–45 s). Adopted templates use the club's names.
 - The assistant can read the programs (`list_programs`); adopting happens in the app (Workout › Ready-made programs).
+
+### 10.9 Three parts and a Today that draws conclusions (added 2026-11-24)
+
+Direction from the owner: the Tools page was too much. The app has three parts (form tracking with the camera, food,
+and training) and a home screen that shows the health data a person wants with what it means, not just a number and
+a label. The language model is used where it helps.
+
+- **Navigation:** five tabs: Today, Technique (camera: exercise form, jump test, range of motion, balance, speed,
+  their history and the diagnostics), Food (the day's diary, then photo of a meal, barcode, cooking from a pantry
+  photo, recipes, weight and goal), Training (start a workout, programs, templates, then plans, cardio, interval
+  timer, calculators, records and load) and Profile (check-in, body measurements, the assistant, club sessions,
+  messages and leaderboard, Health Connect, settings). The Tools page is gone; every tool keeps its key, so
+  `talos://tool/<key>` links and launcher shortcuts still work (an unknown key opens Today).
+- **Findings (`server/insights.py`):** `GET /api/me/today` takes `language` (`bg` or `en`) and returns `findings`:
+  `{card, tone (good | info | watch), title, text}`. Rules only, computed from the same route functions as the cards,
+  so the numbers in a sentence are the card's numbers: recovery from the readiness factors against the person's own
+  usual values; sleep hours against the need and regularity; food today (kcal left, protein to go) and the last 7 days
+  (average and days within 10 % of the target); the weight trend over up to 28 days against the goal's weekly rate;
+  training load (last 7 days against the usual week); check-in and training consistency; the newest record; the
+  latest body-fat estimate and its change; the latest technique set (reps, partial reps, notes). A rule that cannot
+  run is left out. Staff get an empty list. Wording stays non-medical.
+- **Today:** every card shows its numbers and, under them, its findings (title in the tone's colour, one or two
+  sentences). Sleep, Body and Technique are cards only when they have a finding. The jump-test card moved to the
+  Technique tab.
+- **Daily briefing (language model):** `GET /api/me/briefing?language=` sends only the findings and the names of
+  today's planned exercises to the club's model, which writes three or four sentences and one suggestion for today
+  (formal Вие in Bulgarian). It may not add numbers, causes or medical words. The answer is cached per athlete, day,
+  language and findings. No model, a failure, or an under-18 athlete with an external model gives `text: null`, and
+  the app hides the card. The card says the text is written by the model from the findings, and "Ask about it" opens
+  the assistant with a prepared question.
+- **Assistant:** a read tool `today_findings` returns the same findings, so questions such as "how am I doing" or
+  "what should I focus on" start from the app's own conclusions. The model calls (briefing, coach digest) now allow
+  4096 tokens and the configured timeout, because reasoning models spend tokens before answering.

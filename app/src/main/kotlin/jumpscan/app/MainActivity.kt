@@ -123,12 +123,11 @@ class MainActivity : Activity() {
         else if (intent.getStringExtra("open") == "today") { intent.removeExtra("open"); home() }
     }
 
-    /** talos://tool/<key> from launcher shortcuts and links: the tool with that hub key, or the hub for an unknown key. */
+    /** talos://tool/<key> from launcher shortcuts and links: the tool with that key, or Today for an unknown key. */
     private fun openDeepLink(intent: Intent): Boolean {
         val link = intent.data?.takeIf { it.scheme == "talos" && it.host == "tool" } ?: return false
         intent.data = null
-        val tool = toolGroups().flatMap { it.second }.firstOrNull { it.key == link.pathSegments.firstOrNull() }
-        if (tool == null) toolsHub() else openTool(tool)
+        openTool(link.pathSegments.firstOrNull().orEmpty())
         return true
     }
 
@@ -213,9 +212,11 @@ class MainActivity : Activity() {
             setBackgroundColor(getColor(R.color.paper))
             addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         }
+        // The app's three parts between Today and Profile (SPEC 10.9).
         val tabs = listOf(UiTile(R.string.ui_today, "home") { home() }, UiTile(R.string.ui_technique, "form") { formHome() },
-            UiTile(R.string.tools_title, "more") { toolsHub() }, UiTile(R.string.ui_profile, "profile") { profile() })
-        val selected = listOf("home", "form", "tools", "profile").indexOf(name)
+            UiTile(R.string.tab_food, "food") { openTool("nutrition") }, UiTile(R.string.tab_training, "training") { openTool("workout") },
+            UiTile(R.string.ui_profile, "profile") { profile() })
+        val selected = TABS.indexOf(name)
         if (selected >= 0) {
             shell.addView(navigation(tabs, selected, previousTab))
             previousTab = selected
@@ -234,7 +235,7 @@ class MainActivity : Activity() {
         setContentView(shell)
         page.arrive()
         shell.requestApplyInsets()
-        val tab = name in listOf("home", "form", "tools", "profile")
+        val tab = name in TABS
         val backable = !tab && name !in listOf("login", "busy", "guide", "frames")
         // Conventional app bar: back arrow and a one-line title on nested screens; tabs get a one-line title.
         // Only Today (its own greeting) and the pre-sign-in screens keep the wordmark.
@@ -475,6 +476,10 @@ class MainActivity : Activity() {
         if (token().isNotEmpty()) {
             divider(group)
             settingRow("signout", getString(R.string.sign_out), null, group, subtle = true) { leaveProfile(showServer = false) }
+        }
+        if (token().isNotEmpty()) {
+            toolList(R.string.section_you, Tools.you)
+            toolList(R.string.tools_club, Tools.club)
         }
         healthProfile()
         if (token().isNotEmpty()) {
@@ -1514,17 +1519,17 @@ class MainActivity : Activity() {
             "diagnostics" -> profile()
             "frames" -> { cancelWork(); edits = null; result() }
             "login" -> if (analysis != null) result() else super.onBackPressed()
-            "checkin", "feedback" -> clubHome()
+            "checkin", "feedback", "body", "assistant" -> profile()
             "history_detail" -> history()
             "technique_history" -> formHome()
             "technique_detail" -> techniqueHistory()
             "form_video", "form_detail", "form_result" -> formHome()
-            "nutrition", "jump" -> home()
-            "tools" -> home()
+            "nutrition", "gym" -> home()
+            "jump", "history", "field_rom", "field_balance", "field_speed", "field_result" -> formHome()
             "workout_pick" -> workoutActive()
-            "workout", "workout_start", "workout_summary", "calculators", "interval_timer" -> toolsHub()
-            "records", "leaderboard" -> toolsHub()
-            "field_rom", "field_balance", "field_speed", "cardio", "field_result" -> toolsHub()
+            "workout", "workout_summary", "calculators", "interval_timer", "records", "training", "sessions", "cardio",
+            "programs" -> workoutStart()
+            "leaderboard", "club" -> profile()
             "food_log" -> foods()
             "recipe_edit" -> recipes()
             "goal_form" -> insights()
@@ -1540,6 +1545,9 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 }
+
+/** Bottom-bar screens: Today, the three parts (form, food, training) and Profile. */
+internal val TABS = listOf("home", "form", "nutrition", "gym", "profile")
 
 /** Dashboard DIGITS precision, without a rounded negative zero. */
 internal fun metricNumber(value: Double, key: String, locale: Locale): String {

@@ -20,7 +20,7 @@ not as a medical measurement.
 | Concrete problem, originality (General) | Clubs cannot afford lab screening; phone-only, privacy-first, with published validation |
 | Client and server technology, security, confidentiality, interoperability (category focus) | Android client with on-device ML, REST API with roles, token auth, rate limits, audit log, consent records, data export, OpenAPI description |
 | Architecture, UI separated from logic (Design) | Three parts with written contracts: `core` (pure maths, tested), `app`, `server`; the same analyzer runs on the phone and in the batch validator |
-| Code quality, tests, version control, error handling, attack protection (Implementation) | As of 24 November 2026: server 702 passed, 1 skipped; core 104 passed; app checks passed on the emulator. |
+| Code quality, tests, version control, error handling, attack protection (Implementation) | As of 24 November 2026: server 706 passed, 1 skipped; core 104 passed; app checks passed on the emulator. |
 | Evidence of testing (Presentation) | Accuracy table against the University of Twente lab dataset (91 jumps, 9 subjects), detection rates on 1000 public clips, own filmed jumps |
 | Language norms, UI (Implementation) | Bulgarian and English interface in app and dashboard |
 

@@ -16,8 +16,8 @@ android {
         applicationId 'jumpscan.app'
         minSdk 26
         targetSdk 35
-        versionCode 26
-        versionName '1.4.0-beta22'
+        versionCode 27
+        versionName '1.4.0-beta23'
         testInstrumentationRunner 'jumpscan.app.AppChecks'
     }
     signingConfigs {

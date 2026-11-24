@@ -47,6 +47,8 @@ What the tools cover:
 - Records and leaderboard (athlete_records, leaderboard); field tests (list_measurements: range of motion, balance,
   sprint, reaction, agility, GPS cardio).
 - Check-ins (list_checkins, save_checkin): five 1-5 items where 5 is best.
+- Today's findings (today_findings): the app's own conclusions for today across every area; use them first for
+  "how am I doing" or "what should I focus on", then read details with the other tools.
 
 Workflows:
 - Logging food: first find the food with list_foods (search in the user's language, then in English if nothing is
@@ -84,7 +86,9 @@ INTENTS = {
                   "training_load", "assign_plan", "edit_plan")),
     "checkin": (r"check-?in|sleep|fatigue|soreness|stress|mood|readiness|hrv|heart|чек-?ин|отчет|сън|умора|треска|"
                 r"стрес|настроение|готовност|пулс|вариабилност",
-                ("save_checkin", "list_checkins", "team_checkins", "readiness", "training_load")),
+                ("save_checkin", "list_checkins", "team_checkins", "readiness", "training_load", "today_findings")),
+    "overview": (r"today|focus|summary|how am i|doing|advice|suggest|днес|обобщ|наблегн|как съм|съвет|препоръч|фокус",
+                 ("today_findings", "readiness", "nutrition_summary", "training_load", "list_plans")),
     "reading": (r"jump|flight|record|best|leaderboard|rank|sprint|balance|reaction|agility|range of motion|form|"
                 r"скок|полет|рекорд|най-|класаци|спринт|баланс|реакци|ловкост|подвижност|форма",
                 ("list_jumps", "athlete_summary", "athlete_records", "leaderboard", "list_measurements",
@@ -426,6 +430,10 @@ def build_tools(h, operations):
     read("list_templates", "list_templates", "List workout templates you can start from.")
     read("list_programs", "list_programs", "List the built-in training programs (days, exercises, sets, reps, rest); "
          "the user adopts one in the app's workout screen.")
+    read("today_findings", "today_findings", "Read today's findings for the caller: what the app concluded from readiness, "
+         "sleep, food, weight, training load, body measurements, technique and records, as short sentences with "
+         "numbers. Start here for 'how am I doing' or 'what should I focus on today'.",
+         language=(Literal["bg", "en"], "bg"))
     read("athlete_records", "athlete_records", "Read personal records (jumps, form, strength, field tests).", **target)
     read("leaderboard", "leaderboard", "Read the club jump leaderboard (opted-in athletes only), ranked per "
          "frame-rate class within one camera view.", measure=(Literal["jump_height", "flight_time"], "jump_height"),

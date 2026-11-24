@@ -113,7 +113,7 @@ internal fun MainActivity.workoutStart() {
 }
 
 private fun MainActivity.workoutChoices(templates: List<JSONObject>, plans: List<JSONObject>, message: String? = null) {
-    layout(getString(R.string.workout_title), "workout_start")
+    layout(getString(R.string.tab_training), "gym")
     if (message != null) notice(message, caution = true)
     val today = LocalDate.now()
     val starts = settingsGroup()
@@ -145,6 +145,7 @@ private fun MainActivity.workoutChoices(templates: List<JSONObject>, plans: List
         }
     }
     text(getString(R.string.workout_start_note), 13).setPadding(0, dp(16), 0, 0)
+    toolList(R.string.section_training_more, Tools.training)
 }
 
 private fun MainActivity.beginWorkout(title: String, templateId: Long?, planId: Long?, items: List<JSONObject>) {
@@ -292,7 +293,7 @@ internal fun MainActivity.workoutActive(scrollTo: Int = 0) {
     button(getString(R.string.workout_finish), primary = true) { finishWorkout(draft) }.apply { minHeight = dp(56); textSize = 17f }
     button(getString(R.string.workout_discard), look = ActionTone.TEXT) {
         android.app.AlertDialog.Builder(this).setMessage(R.string.workout_discard_confirm)
-            .setPositiveButton(R.string.workout_discard) { _, _ -> WorkoutDraft.clear(this); timerCommand(TimerService.STOP); toolsHub() }
+            .setPositiveButton(R.string.workout_discard) { _, _ -> WorkoutDraft.clear(this); timerCommand(TimerService.STOP); workoutStart() }
             .setNegativeButton(R.string.cancel, null).show()
     }
     restBar()
@@ -403,9 +404,9 @@ private fun MainActivity.workoutSummary(draft: WorkoutDraft, durationMs: Long, m
         })
         val api = featureApi()
         work(getString(R.string.feature_saving), { api.post("/api/workout-templates", JSONObject().put("title", draft.title).put("items", items)) },
-            { toolsHub(); snack(getString(R.string.workout_template_saved)) }, { workoutSummary(draft, durationMs, it) })
+            { workoutStart(); snack(getString(R.string.workout_template_saved)) }, { workoutSummary(draft, durationMs, it) })
     }
-    button(getString(R.string.workout_close), primary = true) { toolsHub() }
+    button(getString(R.string.workout_close), primary = true) { workoutStart() }
 }
 
 /** Search the club's exercises; recent ones first. */

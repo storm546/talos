@@ -15,8 +15,10 @@ import java.time.format.DateTimeFormatter
 // Today: the home screen (SPEC 10.2). One request to /api/me/today fills every card; the last good answer is cached
 // on the phone with its time, so the screen works signed out and offline. Card order and hidden cards stay on the phone.
 
-internal val TODAY_CARDS = listOf("readiness", "plan", "checkin", "week", "nutrition", "training", "weight", "records",
-    "next_session", "messages", "jump")
+internal val TODAY_CARDS = listOf("readiness", "plan", "checkin", "sleep", "nutrition", "training", "weight", "body", "form",
+    "week", "records", "next_session", "messages")
+/** Cards that are only a finding (SPEC 10.9): without one they are not shown. */
+private val FINDING_CARDS = setOf("sleep", "body", "form")
 /** Server events that change a Today card; the whole aggregate is reloaded and only changed cards are redrawn. */
 internal val TODAY_EVENTS = setOf("checkin", "jump", "form", "comment", "record", "measurement", "adjustment")
 
@@ -93,6 +95,7 @@ internal fun MainActivity.home(message: String? = null) {
         return
     }
     val status = text(getString(R.string.today_loading), 12).apply { tag = "today-status" }
+    briefingCard()
     val cards = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "today-cards" }
     page.addView(cards)
     val cached = cachedToday()
@@ -138,7 +141,7 @@ internal fun MainActivity.refreshToday() {
     val cards = page.findViewWithTag<LinearLayout>("today-cards") ?: return
     val status = page.findViewWithTag<android.widget.TextView>("today-status")
     val api = featureApi()
-    later(cards, { api.obj("/api/me/today?day=${todayLocal()}") }) { fresh ->
+    later(cards, { api.obj("/api/me/today?day=${todayLocal()}&language=${language()}") }) { fresh ->
         if (fresh == null) {
             val cached = cachedToday()
             status?.text = if (cached == null) getString(R.string.today_offline_empty) else getString(R.string.today_offline, clockOf(cached.second))
@@ -151,13 +154,18 @@ internal fun MainActivity.refreshToday() {
     }
 }
 
+private fun MainActivity.language() = if (locale.language == "bg") "bg" else "en"
+
+/** The findings for one card, in the server's order. */
+private fun findingsFor(key: String, data: JSONObject?) = data?.optJSONArray("findings")?.objects().orEmpty().filter { it.optString("card") == key }
+
 private fun sectionOf(key: String, data: JSONObject?): String? = when (key) {
     "jump" -> ""
     "messages" -> data?.opt("unread")?.toString()
     // The flag changes the readiness and plan cards too.
     "readiness", "plan" -> data?.opt(key)?.toString() + data?.opt("adjustment")
     else -> data?.opt(key)?.toString()
-}
+} + findingsFor(key, data).joinToString()
 
 /** Draw one card again, for phone-only additions such as Health Connect steps. */
 internal fun MainActivity.redrawCard(cards: LinearLayout, key: String) {
@@ -174,6 +182,7 @@ private fun MainActivity.drawToday(cards: LinearLayout, data: JSONObject?) {
     keys.forEachIndexed { index, key ->
         val section = sectionOf(key, data)
         val old = cards.findViewWithTag<View>("card-$key")
+        if (key in FINDING_CARDS && findingsFor(key, data).isEmpty()) { old?.let { cards.removeView(it) }; shown.remove(key); return@forEachIndexed }
         if (old != null && shown[key] == section) return@forEachIndexed
         shown[key] = section
         // Built off-window and then moved, so animations that stop on detach (the kcal dial) still run.
@@ -197,6 +206,9 @@ private fun cardTitle(key: String) = when (key) {
     "next_session" -> R.string.today_next_session
     "messages" -> R.string.today_messages
     "week" -> R.string.week_title
+    "sleep" -> R.string.today_sleep
+    "body" -> R.string.body_title
+    "form" -> R.string.ui_technique
     else -> R.string.tool_jump
 }
 
@@ -205,7 +217,9 @@ private fun cardIcon(key: String) = when (key) {
     "plan", "training" -> "training"
     "checkin" -> "checkin"
     "nutrition" -> "food"
-    "weight", "records", "week" -> "insights"
+    "weight", "records", "week", "body" -> "insights"
+    "sleep" -> "checkin"
+    "form" -> "form"
     "next_session" -> "club"
     else -> "assistant"
 }
@@ -221,6 +235,9 @@ private fun MainActivity.openCard(key: String) = when (key) {
     "next_session" -> clubHome()
     "messages" -> feedback()
     "week" -> weekScreen()
+    "sleep" -> readinessCheck()
+    "body" -> body()
+    "form" -> techniqueHistory()
     else -> jumpHome()
 }
 
@@ -246,25 +263,31 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
     fun big(value: String, color: Int = ink) = panel.addView(Measurement(this).apply {
         text = value; textSize = if (hero) 34f else 28f; setTextColor(color); instrumentType(numeric = true)
     })
-    fun actions(vararg entries: Pair<Int, () -> Unit>) {
+    var deferred: (() -> Unit)? = null
+    fun strip(entries: Array<out Pair<Int, () -> Unit>>) {
         val strip = row(panel)
         entries.forEachIndexed { index, (label, action) ->
             button(getString(label), primary = index == 0, parent = strip, look = if (index == 0) ActionTone.TONAL else null) { action() }
                 .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10); if (index > 0) marginStart = dp(8) }
         }
     }
+    // Actions go last, under the card's finding.
+    fun actions(vararg entries: Pair<Int, () -> Unit>) { deferred = { strip(entries) } }
     if (hero) healthSteps?.let { line(getString(R.string.hc_steps_today, String.format(locale, "%,d", it)), 13) }
     if (key == "jump") {
         line(getString(R.string.today_jump_note))
-        actions(R.string.today_jump_record to { jumpHome() })
+        strip(arrayOf(R.string.today_jump_record to { jumpHome() }))
         return panel
     }
-    if (section == null && key !in setOf("weight", "records", "next_session", "messages")) { line(getString(R.string.today_no_data)); return panel }
+    val notes = findingsFor(key, data)
+    if (section == null && notes.isEmpty() && key !in setOf("weight", "records", "next_session", "messages")) {
+        line(getString(R.string.today_no_data)); return panel
+    }
     when (key) {
         "readiness" -> (section as? JSONObject)?.let { readiness ->
             val state = readiness.getString("status")
             text(readinessLabel(state), 30, Color.WHITE, panel).instrumentType(display = true)
-            line(getString(when (state) {
+            if (notes.isEmpty()) line(getString(when (state) {
                 "good" -> R.string.rd_summary_good; "take_care" -> R.string.rd_summary_take_care
                 "still_learning" -> R.string.rd_summary_still_learning; "no_data" -> R.string.rd_summary_no_data
                 else -> R.string.rd_summary_normal
@@ -308,7 +331,7 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
             val more = (plan?.optInt("more") ?: 0) + (items.size - 4).coerceAtLeast(0)
             if (more > 0) line(getString(R.string.today_plan_more, more), 13)
             if (plan?.optBoolean("logged") == true) chip(getString(R.string.today_plan_logged), panel)
-            actions(R.string.today_start_workout to { openTool(toolGroups().flatMap { it.second }.first { it.key == "workout" }) })
+            actions(R.string.today_start_workout to { openTool("workout") })
         }
         "checkin" -> {
             val checkin = section as JSONObject
@@ -383,6 +406,17 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
             }
         }
     }
+    // The conclusion under the numbers: what the server's rules found, in the athlete's language.
+    notes.forEach { note ->
+        val tone = note.optString("tone")
+        val color = getColor(when {
+            hero && tone == "good" -> R.color.ready_surface; hero && tone == "watch" -> R.color.signal; hero -> R.color.on_hero
+            tone == "good" -> R.color.ready; tone == "watch" -> R.color.warning; else -> R.color.ink
+        })
+        text(note.optString("title"), 16, color, panel).apply { instrumentType(display = true); setPadding(0, dp(10), 0, 0) }
+        line(note.optString("text"))
+    }
+    deferred?.invoke()
     return panel
 }
 
@@ -396,11 +430,41 @@ internal fun MainActivity.recordLabel(record: JSONObject): String = when (record
         ?: record.optString("exercise").takeIf { it.isNotBlank() && it != "null" } ?: getString(R.string.ft_records)
 }
 
+/** The day's findings phrased by the club's language model; hidden when there is no model or no answer (SPEC 10.9). */
+private fun MainActivity.briefingCard() {
+    val panel = card().apply { tag = "today-briefing" }
+    val head = row(panel, center = true)
+    text(getString(R.string.today_briefing).uppercase(locale), 12, getColor(R.color.accent), head).apply {
+        instrumentType(display = true); letterSpacing = .12f
+        if (android.os.Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
+    }
+    val body = text(getString(R.string.today_briefing_loading), 15, getColor(R.color.muted), panel)
+    val api = featureApi()
+    val host = page
+    // Its own thread: the model can take half a minute, and the cards must not wait behind it.
+    briefingWork.submit {
+        val answer = runCatching { api.obj("/api/me/briefing?day=${todayLocal()}&language=${language()}", readTimeoutMs = 75_000) }.getOrNull()
+        runOnUiThread { if (!isDestroyed && page === host && panel.isAttachedToWindow) showBriefing(panel, body, answer) }
+    }
+}
+
+private val briefingWork = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+private fun MainActivity.showBriefing(panel: LinearLayout, body: android.widget.TextView, answer: JSONObject?) {
+    val said = answer?.optString("text")?.takeIf { !answer.isNull("text") && it.isNotBlank() }
+    if (said == null) { (panel.parent as? LinearLayout)?.removeView(panel); return }
+    body.text = said
+    body.setTextColor(getColor(R.color.ink))
+    text(getString(R.string.today_briefing_note), 12, parent = panel).setPadding(0, dp(8), 0, 0)
+    button(getString(R.string.today_ask), parent = panel, look = ActionTone.TONAL) { assistantScreen(draft = getString(R.string.today_ask_draft)) }
+        .layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) }
+    panel.arrive()
+}
+
 /** Phone-only tools for signed-out or offline use: each works without an account. */
 private fun MainActivity.phoneTools() {
     eyebrow(getString(R.string.today_phone_tools)).tag = "phone-tools"
-    val all = toolGroups().flatMap { it.second }.associateBy { it.key }
-    toolRow(*listOf("timer", "calculators", "cardio", "form").mapNotNull { all[it] }
+    toolRow(*listOf("timer", "calculators", "cardio", "form").mapNotNull { Tools[it] }
         .map { tool -> UiTile(tool.label, tool.icon) { openTool(tool) } }.toTypedArray())
 }
 

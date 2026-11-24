@@ -89,6 +89,7 @@ internal fun MainActivity.formHome(message: String? = null) {
     lastForm?.let { result -> button(getString(R.string.last_result), parent = links) { formResult(result.metrics, result) }
         .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10); if (links.childCount > 1) marginStart = dp(8) } }
     howMeasured(getString(R.string.ui_form_validated_note))
+    toolList(R.string.section_camera_tests, Tools.cameraTests)
     val replay = BuildConfig.DEBUG && File(filesDir, LIVE_REPLAY_FILE).isFile
     if (replay) text(getString(R.string.ui_replay_hint), 13)
     for (group in formGroups) {
@@ -106,6 +107,7 @@ internal fun MainActivity.formHome(message: String? = null) {
             experimental.size)) { showExperimental = !showExperimental; formHome() }
         if (showExperimental) experimental.forEach { exerciseCard(it, formIcon(it.id), replay) }
     }
+    toolList(R.string.section_history, if (token().isEmpty()) Tools.formHistory.filter { it.local } else Tools.formHistory)
 }
 
 private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, replay: Boolean) {

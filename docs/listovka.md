@@ -46,7 +46,7 @@ https://jumpscan.stormlabs.cloud
 
 ## Снимки
 
-Два екрана на телефона: „Проверете кадрите“ (img/app-editor.png) и „Инструменти“ (img/app-hub.png).
+Два екрана на телефона: „Проверете кадрите“ (img/app-editor.png) и „Днес“ с изводите (img/app-today.png).
 
 ## За кого и поверителност
 

@@ -89,8 +89,33 @@ internal class FoodStudio(private val test: Instrumentation, private val server:
             while (at !== host.page) { top += at.top; at = at.parent as View }
             (host.page.parent as ScrollView).scrollTo(0, (top - host.dp(16)).coerceAtLeast(0))
         }
+        fun scrollDown(screens: Float) = test.runOnMainSync {
+            val scroll = host.page.parent as ScrollView
+            scroll.scrollTo(0, (scroll.scrollY + scroll.height * screens).toInt())
+        }
+        fun tab(name: String, open: () -> Unit, ready: () -> Boolean) {
+            test.runOnMainSync { open() }
+            test.foodWait(name, ready)
+            shot("tab-$name"); scrollDown(0.85f); shot("tab-$name-2"); scrollDown(5f); shot("tab-$name-end")
+        }
+        fun eyebrowShown(label: Int) = texts(host.page).any { it == host.getString(label).uppercase(host.resources.configuration.locales[0]) }
         try {
             check(test.screenOf(host, "home") == "home")
+            // SPEC 10.9: Today's cards carry the server's findings; then the three parts and Profile.
+            test.foodWait("today findings") { host.page.findViewWithTag<View>("card-sleep") != null }
+            // The briefing answers within the model's time (up to a minute) or removes itself when there is no model.
+            val end = SystemClock.uptimeMillis() + 75_000
+            var settled = false
+            while (!settled && SystemClock.uptimeMillis() < end) {
+                test.runOnMainSync { settled = host.page.findViewWithTag<View>("today-briefing") == null ||
+                    host.getString(R.string.today_briefing_note) in texts(host.page) }
+                if (!settled) SystemClock.sleep(500)
+            }
+            shot("today"); scrollDown(0.85f); shot("today-2"); scrollDown(0.85f); shot("today-3"); scrollDown(0.85f); shot("today-4")
+            tab("form", { host.formHome() }) { eyebrowShown(R.string.section_camera_tests) }
+            tab("food", { host.nutritionHome() }) { eyebrowShown(R.string.section_food_more) }
+            tab("training", { host.workoutStart() }) { eyebrowShown(R.string.section_training_more) }
+            tab("profile", { host.profile() }) { eyebrowShown(R.string.section_you) }
             // The one-time notice comes before the first photo.
             test.runOnMainSync { diaryMeal = "lunch"; host.foodPhoto(day) }
             check(test.screenOf(host, "food_privacy") == "food_privacy")

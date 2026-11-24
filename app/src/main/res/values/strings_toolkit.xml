@@ -155,4 +155,20 @@
     <string name="programs_start">Start a workout</string>
     <string name="programs_hold">%1$d×30–45 s</string>
     <plurals name="programs_added"><item quantity="one">%1$d template added. Start it from Workout.</item><item quantity="other">%1$d templates added. Start them from Workout.</item></plurals>
+    <string name="tab_food">Food</string>
+    <string name="tab_training">Training</string>
+    <string name="section_camera_tests">Camera tests</string>
+    <string name="section_history">History and checks</string>
+    <string name="section_food_more">More ways to log and plan</string>
+    <string name="section_training_more">Plans, timers and records</string>
+    <string name="section_you">Body and wellbeing</string>
+    <string name="tool_photo_note">Calories from a photo</string>
+    <string name="tool_cook_note">Recipes from a photo of the fridge</string>
+    <string name="tool_body_note">Measurements, body fat, photos</string>
+    <string name="today_briefing">Today\'s summary</string>
+    <string name="today_briefing_loading">Preparing your summary…</string>
+    <string name="today_briefing_note">Written by the language model from the findings below; every number comes from your data.</string>
+    <string name="today_ask">Ask about it</string>
+    <string name="today_sleep">Sleep</string>
+    <string name="today_ask_draft">Given today\'s summary, what should I focus on today?</string>
 </resources>

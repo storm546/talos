@@ -7,6 +7,8 @@ module (auth, scope, consent, audit and event helpers are reused). The numbers c
 from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
+import os
+import re
 from statistics import fmean
 from typing import Annotated, Literal
 
@@ -250,15 +252,19 @@ def phrase(system, facts):
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": json.dumps(facts, ensure_ascii=False)}]
     try:
-        with httpx.Client(timeout=httpx.Timeout(20.0, connect=2.0), trust_env=False) as client:
-            response = client.post(url, headers=headers, json={"model": model, "messages": messages, "max_tokens": 400})
+        # Reasoning models spend tokens before the answer: a small max_tokens cut the text off.
+        timeout = float(os.environ.get("JUMPSCAN_LLM_TIMEOUT", 60))
+        with httpx.Client(timeout=httpx.Timeout(timeout, connect=2.0), trust_env=False) as client:
+            response = client.post(url, headers=headers, json={"model": model, "messages": messages, "max_tokens": 4096})
             response.raise_for_status()
             if len(response.content) > 64 * 1024:
                 return None
             text = response.json()["choices"][0]["message"]["content"]
     except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
         return None
-    return text.strip()[:2000] if isinstance(text, str) and text.strip() else None
+    if isinstance(text, str):
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+    return text[:2000] if isinstance(text, str) and text else None
 
 
 def readiness_range(db, athlete, last, days):

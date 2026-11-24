@@ -124,7 +124,7 @@ internal class FieldStudio(private val test: Instrumentation, private val server
             test.runOnMainSync { host.fieldResult(FieldRun(JSONObject(json), local = local)) }; shot(name, "field_result")
         }
         try {
-            test.runOnMainSync { host.toolsHub() }; shot("hub", "tools")
+            test.runOnMainSync { host.formHome() }; shot("hub", "form")
             test.runOnMainSync { host.romSetup("knee_flexion") }; shot("rom-setup", "field_rom")
             test.runOnMainSync { host.romSetup("shoulder_abduction") }; shot("rom-setup-front", "field_rom")
             live("rom-live", "rom") { putExtra("joint", "knee_flexion") }

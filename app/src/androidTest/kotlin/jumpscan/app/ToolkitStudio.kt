@@ -91,10 +91,10 @@ internal class ToolkitStudio(private val test: Instrumentation, private val serv
                 check(password.transformationMethod is android.text.method.PasswordTransformationMethod) { "password is not masked" }
             }
             shot("login-password", "login")
-            test.runOnMainSync { host.toolsHub() }; shot("hub", "tools")
-            scroll(1f); shot("hub-groups", "tools")
+            test.runOnMainSync { host.formHome() }; shot("hub", "form")
+            scroll(1f); shot("hub-groups", "form")
             // Workout: empty start, two exercises from the picker, three sets each.
-            test.runOnMainSync { host.workoutStart() }; shot("workout-start", "workout_start")
+            test.runOnMainSync { host.workoutStart() }; shot("workout-start", "gym")
             click { it.isClickable && views(it).any { v -> v is android.widget.TextView && v.text == host.getString(R.string.workout_empty) } }
             wait("workout")
             val names = listOf("Клякане със щанга", "Лежанка")

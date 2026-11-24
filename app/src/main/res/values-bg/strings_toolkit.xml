@@ -155,4 +155,20 @@
     <string name="programs_start">Започнете тренировка</string>
     <string name="programs_hold">%1$d×30–45 с</string>
     <plurals name="programs_added"><item quantity="one">Добавен е %1$d шаблон. Започнете го от „Тренировка“.</item><item quantity="other">Добавени са %1$d шаблона. Започнете ги от „Тренировка“.</item></plurals>
+    <string name="tab_food">Храна</string>
+    <string name="tab_training">Тренировка</string>
+    <string name="section_camera_tests">Тестове с камерата</string>
+    <string name="section_history">История и проверки</string>
+    <string name="section_food_more">Още начини за записване и планиране</string>
+    <string name="section_training_more">Планове, таймери и рекорди</string>
+    <string name="section_you">Тяло и самочувствие</string>
+    <string name="tool_photo_note">Калории по снимка</string>
+    <string name="tool_cook_note">Рецепти по снимка на хладилника</string>
+    <string name="tool_body_note">Обиколки, мазнини, снимки</string>
+    <string name="today_briefing">Обобщение за деня</string>
+    <string name="today_briefing_loading">Подготвяме обобщението…</string>
+    <string name="today_briefing_note">Написано от езиковия модел по изводите по-долу; всяко число е от Вашите данни.</string>
+    <string name="today_ask">Попитайте за това</string>
+    <string name="today_sleep">Сън</string>
+    <string name="today_ask_draft">Според обобщението, на какво да наблегна днес?</string>
 </resources>

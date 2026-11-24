@@ -6,11 +6,11 @@ return. No tables of its own.
 """
 
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, HTTPException, Query
 
-from . import week_api
+from . import insights, week_api
 from .readiness_api import wellbeing_sum
 
 MAX_PLAN_ITEMS, MAX_SESSIONS, MAX_RECORDS = 20, 10, 10
@@ -124,7 +124,7 @@ class Context:
 
 def install(app, h):
     @app.get("/api/me/today")
-    def today(day: Annotated[str | None, Query(max_length=10)] = None,
+    def today(day: Annotated[str | None, Query(max_length=10)] = None, language: Literal["bg", "en"] = "bg",
               user=Depends(h.current_user), db=Depends(h.get_db)):
         server_today = datetime.now(timezone.utc).date()
         try:
@@ -143,4 +143,20 @@ def install(app, h):
                 result[name] = section(context)
             except Exception:  # one broken or forbidden section must not hide the others (SPEC 10.2)
                 result[name] = None
+        result["findings"] = insights.findings(context, result, language) if user["role"] == "athlete" else []
         return result
+
+    @app.get("/api/me/briefing")
+    def briefing(day: Annotated[str | None, Query(max_length=10)] = None, language: Literal["bg", "en"] = "bg",
+                 user=Depends(h.current_user), db=Depends(h.get_db)):
+        """Today's findings phrased by the language model (SPEC 10.9); text is null when there is no model."""
+        result = today(day=day, language=language, user=user, db=db)
+        text, phrased_by = insights.briefing(user, db, result, language)
+        return {"day": result["day"], "text": text, "phrased_by": phrased_by, "findings": result["findings"]}
+
+    def today_findings(language="bg", user=None, db=None):
+        """The assistant's read of the same findings (SPEC 10.9)."""
+        result = today(day=None, language=language, user=user, db=db)
+        return {"day": result["day"], "findings": result["findings"]}
+
+    return {"today_findings": today_findings}

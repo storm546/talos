@@ -16,7 +16,7 @@ internal fun MainActivity.featureError(message: String?) {
 
 internal class FeatureApi(private val base: String, private val token: String) {
     fun array(path: String) = JSONArray(api(base, path, token = token)).objects()
-    fun obj(path: String) = JSONObject(api(base, path, token = token))
+    fun obj(path: String, readTimeoutMs: Int = 30_000) = JSONObject(api(base, path, token = token, readTimeoutMs = readTimeoutMs))
     fun post(path: String, body: JSONObject, readTimeoutMs: Int = 30_000) = JSONObject(api(base, path, "POST", token, body, readTimeoutMs))
     fun send(method: String, path: String, body: JSONObject? = null) = api(base, path, method, token, body)
 }
