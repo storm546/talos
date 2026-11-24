@@ -10,6 +10,11 @@ same window times 7700 kcal/kg, divided by the window. The step is capped so the
 exceeds 150/7 kcal beyond the previous value. Missing intake is never invented as zero; only an explicitly
 complete day (which may be an empty day with no food) contributes, and the series holds when a day is
 incomplete, a bodyweight measurement is missing, or the trend cannot cover the window.
+
+Uncertainty band (SPEC 10.4; display only, the method is unchanged): an error of s kg in the 14-day trend change
+moves the estimate by 7700 x s / 14 kcal per day. s is the weight trend's own error (`sigma_kg`, the model's
+weigh-in noise scale) at the end of the window. The band covers the weight side only, not logging errors in the
+intake, and a holding day keeps the band of the last update.
 """
 
 from bisect import bisect_left, bisect_right
@@ -40,8 +45,13 @@ def _lookback(date, days):
 
 
 def _model(observations):
-    """Single seam to the recovered weight-trend pipeline: date_us -> trend_kg over the daily calendar."""
-    return {row["date_us"]: row["trend_kg"] for row in weight_trend_pipeline(observations)}
+    """Single seam to the recovered weight-trend pipeline: date_us -> (trend_kg, sigma_kg) over the daily calendar."""
+    return {row["date_us"]: (row["trend_kg"], row["sigma_kg"]) for row in weight_trend_pipeline(observations)}
+
+
+def band_kcal(sigma_kg):
+    """The expenditure error per day caused by an error of sigma_kg in the 14-day trend change."""
+    return KCAL_PER_KG * sigma_kg / WINDOW_DAYS
 
 
 def step(t, previous, mode, snaps, weights, *, weight_days=None):
@@ -77,9 +87,10 @@ def step(t, previous, mode, snaps, weights, *, weight_days=None):
         if any(not math.isfinite(o[1]) or not 1 <= o[1] <= 1000 for o in observations):
             raise ValueError("invalid weight")
         trend_by_us = _model(observations)
-        end = trend_by_us[observations[-1][0]]
-        begin = trend_by_us[observations[-1][0] - WINDOW_DAYS * DAY_MICROS]
-        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in (end, begin)):
+        end, sigma = trend_by_us[observations[-1][0]]
+        begin = trend_by_us[observations[-1][0] - WINDOW_DAYS * DAY_MICROS][0]
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+                   for v in (end, begin, sigma)):
             raise ValueError("invalid trend")
     except (ImportError, OSError, ValueError, TypeError, KeyError, ArithmeticError, IndexError):
         return hold("Weight trend unavailable for this window.")
@@ -88,7 +99,8 @@ def step(t, previous, mode, snaps, weights, *, weight_days=None):
     if not math.isfinite(candidate) or candidate <= 0:
         return hold("Energy-balance estimate was not positive and finite.")
     value = previous + max(-MAX_STEP, min(MAX_STEP, candidate - previous))
-    return {**base, "value_kcal": value, "status": "updating", "reason": "Updated from 14-day energy balance."}
+    return {**base, "value_kcal": value, "status": "updating", "reason": "Updated from 14-day energy balance.",
+            "uncertainty_kcal": band_kcal(sigma)}
 
 
 def compute(seed_date, seed_kcal, mode, snaps, weights, as_of):
@@ -99,23 +111,24 @@ def compute(seed_date, seed_kcal, mode, snaps, weights, as_of):
     """
     if seed_date is None:
         return {"expenditure": None, "history": []}
-    previous = float(seed_kcal)
+    previous, band = float(seed_kcal), None
     series = [{"date": seed_date, "value_kcal": previous, "status": "holding", "reason": "Seed value.",
                "complete_days": 0, "window_start": _lookback(seed_date, WINDOW_DAYS),
-               "window_end": _lookback(seed_date, 1)}]
+               "window_end": _lookback(seed_date, 1), "uncertainty_kcal": None}]
     history_start = max(seed_date, _lookback(as_of, HISTORY_DAYS - 1))
     weight_days = sorted(weights) if mode != "holding" else []
     for t in weight_days[bisect_right(weight_days, seed_date):bisect_left(weight_days, history_start)]:
-        previous = step(t, previous, mode, snaps, weights, weight_days=weight_days)["value_kcal"]
+        entry = step(t, previous, mode, snaps, weights, weight_days=weight_days)
+        previous, band = entry["value_kcal"], entry.get("uncertainty_kcal", band)
     t = seed_date if history_start == seed_date else _shift(history_start, -1)
     while t < as_of:
         t = _shift(t, 1)
         entry = step(t, previous, mode, snaps, weights, weight_days=weight_days)
-        previous = entry["value_kcal"]
-        series.append(entry)
-    history_keys = ("date", "value_kcal", "status", "reason", "complete_days")
+        previous, band = entry["value_kcal"], entry.get("uncertainty_kcal", band)
+        series.append({**entry, "uncertainty_kcal": band})
+    history_keys = ("date", "value_kcal", "status", "reason", "complete_days", "uncertainty_kcal")
     return {"expenditure": {k: series[-1][k] for k in ("value_kcal", "status", "reason", "complete_days",
-                                                       "window_start", "window_end")},
+                                                       "window_start", "window_end", "uncertainty_kcal")},
             "history": [{k: e[k] for k in history_keys} for e in series[-HISTORY_DAYS:]]}
 
 

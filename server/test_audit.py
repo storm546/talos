@@ -159,9 +159,11 @@ def test_cold_coaching_sparse_replay_matches_daily_replay(monkeypatch, mode):
 
     monkeypatch.setattr(coaching, "step", step)
     result = coaching.compute(seed.isoformat(), 2500, mode, snaps, weights, end.isoformat())
-    assert result["history"] == [{key: row[key] for key in ("date", "value_kcal", "status", "reason", "complete_days")}
-                                 for row in rows[-30:]]
-    assert result["expenditure"] == {key: value for key, value in rows[-1].items() if key != "date"}
+    keys = ("date", "value_kcal", "status", "reason", "complete_days")  # the method; the band is checked elsewhere
+    assert [{key: row[key] for key in keys} for row in result["history"]] == [{key: row[key] for key in keys}
+                                                                               for row in rows[-30:]]
+    assert {key: value for key, value in result["expenditure"].items() if key != "uncertainty_kcal"} == {
+        key: value for key, value in rows[-1].items() if key not in ("date", "uncertainty_kcal")}
     assert len(calls) <= 30 + len(weights)
 
 
