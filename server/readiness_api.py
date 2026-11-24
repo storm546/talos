@@ -255,7 +255,8 @@ def phrase(system, facts):
         # Reasoning models spend tokens before the answer: a small max_tokens cut the text off.
         timeout = float(os.environ.get("JUMPSCAN_LLM_TIMEOUT", 60))
         with httpx.Client(timeout=httpx.Timeout(timeout, connect=2.0), trust_env=False) as client:
-            response = client.post(url, headers=headers, json={"model": model, "messages": messages, "max_tokens": 4096})
+            response = client.post(url, headers=headers, json={"model": model, "messages": messages, "max_tokens": 4096,
+                                                                 "temperature": 0.2})
             response.raise_for_status()
             if len(response.content) > 64 * 1024:
                 return None
