@@ -116,6 +116,17 @@ internal class FoodStudio(private val test: Instrumentation, private val server:
             tab("food", { host.nutritionHome() }) { eyebrowShown(R.string.section_food_more) }
             tab("training", { host.workoutStart() }) { eyebrowShown(R.string.section_training_more) }
             tab("profile", { host.profile() }) { eyebrowShown(R.string.section_you) }
+            // The goal form's phase segments fit on one line each (bug from the phone, 24.11).
+            test.runOnMainSync { host.insights(days = 30) }
+            test.foodWait("goal button") { texts(host.page).any { it == host.getString(R.string.goal_set) || it == host.getString(R.string.goal_change) } }
+            test.runOnMainSync { foodViews(host.page, Button::class.java).first { it.text == host.getString(R.string.goal_set) ||
+                it.text == host.getString(R.string.goal_change) }.performClick() }
+            check(test.screenOf(host, "goal_form") == "goal_form")
+            test.runOnMainSync {
+                val segments = foodViews(host.page, android.widget.RadioButton::class.java)
+                check(segments.size == 3 && segments.all { it.lineCount == 1 }) { "segments: ${segments.map { it.text to it.lineCount }}" }
+            }
+            shot("goal-form")
             // The one-time notice comes before the first photo.
             test.runOnMainSync { diaryMeal = "lunch"; host.foodPhoto(day) }
             check(test.screenOf(host, "food_privacy") == "food_privacy")

@@ -1241,6 +1241,13 @@ a label. The language model is used where it helps.
   that opens the assistant with a prepared question (technique: the camera analysis via `list_form_sets`; food: what
   to eat for the rest of the day; training: what workout today). The assistant answers formally (Вие) in plain text
   for the phone; the app also strips stray Markdown.
+- **At a glance (owner, 24.11 evening: "clunky and cluttered, present everything more at a glance"):** Today is a short
+  header, four quick actions (meal photo, check-in, workout, technique), the briefing, the readiness hero, then tiles two
+  per row: wellbeing, sleep, food, load, weight, steps (Health Connect), body, technique, consistency, records. A tile
+  shows one number, a small picture (meter, 7-day bars or a sparkline) and the finding's title; a tile with nothing to
+  show is left out. Tapping a tile opens a sheet with the full findings and "Open details". Today's plan, the next
+  session and messages appear only when they have something. `/api/me/today` adds `training.daily` (7 daily loads),
+  `weight.series` (trend, 28 days), `body` (latest Navy estimate, series) and `form` (latest camera set).
 - **Widget:** the Today home-screen widget shows the most important finding (the first to watch, else the first good
   one) under readiness; its own fetch asks for the phone's language.
 - A "not feeling 100%" flag turns the recovery advice into "follow the lighter plan" instead of a harder session.

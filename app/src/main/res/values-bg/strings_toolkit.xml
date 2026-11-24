@@ -175,4 +175,15 @@
     <string name="ask_form_draft">Обяснете анализа на техниката от камерата за серията ми %1$s от %2$s и върху какво да работя.</string>
     <string name="ask_food_draft">Вижте храненето ми на %1$s: какво да ям до края на деня, за да достигна целите?</string>
     <string name="ask_training_draft">Според готовността и последните ми тренировки, каква тренировка да направя днес?</string>
+    <string name="today_open_details">Подробно</string>
+    <string name="today_hours_unit">ч</string>
+    <string name="today_sleep_need">нужда %1$s–%2$s ч</string>
+    <string name="today_load_7d">7 дни</string>
+    <string name="today_load_usual">обичайно %1$s седмично</string>
+    <string name="today_steps_unit">крачки</string>
+    <string name="today_reps_unit">повт.</string>
+    <string name="today_days_unit">дни</string>
+    <string name="today_s_unit">с</string>
+    <string name="today_steps">Крачки</string>
+    <string name="today_quick_photo">Снимка на храна</string>
 </resources>

@@ -58,22 +58,24 @@ internal fun todayChecks(test: Instrumentation) {
     context.saveToday(todayFixture())
     var host = test.startActivitySync(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
     try {
+        // Cards and tiles in drawing order: the readiness hero, the tiles two per row, then plan and messages (SPEC 10.9).
         fun cardOrder(): List<String> {
             var keys = emptyList<String>()
-            test.runOnMainSync {
-                val cards = host.page.findViewWithTag<LinearLayout>("today-cards")
-                keys = (0 until cards.childCount).map { cards.getChildAt(it).tag.toString().removePrefix("card-") }
-            }
+            fun walk(view: View): List<String> = (listOfNotNull((view.tag as? String)?.takeIf { it.startsWith("card-") }?.removePrefix("card-")) +
+                ((view as? ViewGroup)?.let { group -> (0 until group.childCount).flatMap { walk(group.getChildAt(it)) } } ?: emptyList()))
+            test.runOnMainSync { keys = walk(host.page.findViewWithTag<LinearLayout>("today-cards")) }
             return keys
         }
+        // What the fixture has: no steps, body, technique, consistency or next session.
+        val drawn = setOf("readiness", "plan", "checkin", "sleep", "nutrition", "training", "weight", "records", "messages")
+        fun visual(order: List<String>) = order.filter { it == "readiness" } + order.filter { it in GLANCE && it in drawn } +
+            order.filter { it !in GLANCE && it != "readiness" && it in drawn }
         check(test.screenOf(host, "home") == "home")
-        // The fixture has no findings, so the finding-only cards (sleep, body, form) stay hidden (SPEC 10.9).
-        val drawn = TODAY_CARDS.filter { it !in setOf("sleep", "body", "form") }
-        check(cardOrder() == drawn) { "default order: ${cardOrder()}" }
+        check(cardOrder() == visual(TODAY_CARDS)) { "default order: ${cardOrder()}" }
         var shown = emptyList<String>()
         test.runOnMainSync { shown = texts(host.page) }
-        for (expected in listOf(host.getString(R.string.rd_good), host.getString(R.string.today_checkin_done), "Back squat",
-                host.getString(R.string.feature_kg, host.short(64.3)), host.getString(R.string.today_messages_unread, 2)))
+        for (expected in listOf(host.getString(R.string.rd_good), "Recovered well", "18", "Back squat", host.short(64.3),
+                host.getString(R.string.today_messages_unread, 2), host.getString(R.string.today_quick_photo)))
             check(shown.any { expected in it }) { "missing $expected in $shown" }
         // Hide and reorder are stored on the phone and survive a restart of the screen.
         context.moveCard("checkin", -1)
@@ -81,8 +83,8 @@ internal fun todayChecks(test: Instrumentation) {
         test.runOnMainSync { host.finish() }
         host = test.startActivitySync(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         check(test.screenOf(host, "home") == "home")
-        val expected = listOf("readiness", "checkin", "plan") + drawn.drop(3).filter { it != "weight" }
-        check(cardOrder() == expected) { "stored order: ${cardOrder()}" }
+        val moved = listOf("readiness", "checkin", "plan") + TODAY_CARDS.drop(3)
+        check(cardOrder() == visual(moved.filter { it != "weight" })) { "stored order: ${cardOrder()}" }
         test.runOnMainSync { shown = texts(host.page) }
         check(shown.any { it.equals(host.getString(R.string.today_hidden), ignoreCase = true) }) { "no hidden list in $shown" }
         context.hideCard("weight", false)

@@ -12,6 +12,7 @@
     <color name="hero_top">#2C292A</color>
     <color name="signal">#FF965B</color>
     <color name="on_hero">#DBDBD8</color>
+    <color name="hero_good">#98D7C8</color>
     <color name="notice">#FFE9BC</color>
     <color name="warning">#744B05</color>
     <color name="error">#9B352C</color>

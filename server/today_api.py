@@ -6,6 +6,7 @@ return. No tables of its own.
 """
 
 from datetime import date, datetime, timedelta, timezone
+import json
 from typing import Annotated, Literal
 
 from fastapi import Depends, HTTPException, Query
@@ -54,8 +55,12 @@ def training(c):
     sessions = c.get("/api/training-sessions")(athlete_id=None, from_=c.day, to=c.day, user=c.user, db=c.db)
     load = c.get("/api/athletes/{athlete_id}/load")(athlete_id=c.uid, days=7, day=c.day, user=c.user, db=c.db)
     ratio = load["acute_chronic"]
+    first = (c.date - timedelta(days=6)).isoformat()
+    by_day = dict(c.db.execute("SELECT day, SUM(minutes * rpe) FROM training_sessions WHERE athlete_id = ? AND day BETWEEN ? AND ? "
+                               "GROUP BY day", (c.uid, first, c.day)).fetchall())
     return {"sessions": [{k: s[k] for k in ("id", "kind", "minutes", "rpe", "load", "source")}
                          for s in sessions[:MAX_SESSIONS]],
+            "daily": [by_day.get((c.date - timedelta(days=6 - n)).isoformat(), 0) for n in range(7)],
             "total_load": sum(s["load"] for s in sessions),
             "acute_load": load["acute_load"], "chronic_load": load["chronic_load"],
             "acute_chronic": {**ratio, "still_learning": not ratio["ready"]}}
@@ -74,8 +79,10 @@ def weight(c):
         return None
     latest = series["weights"][-1]
     trend = series["trend"][-1] if series["trend"] else None
+    since = (c.date - timedelta(days=27)).isoformat()
     return {"day": latest["day"], "kg": latest["kg"], "trend_kg": trend and trend["trend_kg"],
-            "trend_day": trend and trend["day"]}
+            "trend_day": trend and trend["day"],
+            "series": [round(t["trend_kg"], 2) for t in series["trend"] if t["day"] >= since]}
 
 
 def records(c):
@@ -94,6 +101,31 @@ def next_session(c):
     return upcoming and {k: upcoming[k] for k in ("id", "title", "starts_at", "place", "test")}
 
 
+def body(c):
+    """The latest Navy body-fat estimate and the first one, for the Today tile (SPEC 10.9)."""
+    rows = [json.loads(r[1]) | {"day": r[0][:10]} for r in c.db.execute(
+        "SELECT created_at, data FROM measurements WHERE athlete_id = ? AND kind = 'body' ORDER BY created_at DESC "
+        "LIMIT 60", (c.uid,))]
+    estimates = [r for r in rows if r.get("body_fat_pct") is not None]
+    if not estimates:
+        return None
+    latest, first = estimates[0], estimates[-1]
+    return {"day": latest["day"], "pct": latest["body_fat_pct"], "error_pct": latest["body_fat_error_pct"],
+            "series": [r["body_fat_pct"] for r in reversed(estimates[:12])],
+            "first_day": first["day"], "first_pct": first["body_fat_pct"]}
+
+
+def form(c):
+    """The latest camera technique set, for the Today tile."""
+    sets = c.get("/api/form")(athlete_id=None, limit=1, offset=0, user=c.user, db=c.db)
+    if not sets:
+        return None
+    s, summary = sets[0], sets[0].get("summary") or {}
+    return {"exercise": s.get("exercise"), "day": s["created_at"][:10], "reps": summary.get("repetition_count"),
+            "partial": summary.get("partial_count"), "hold_ms": summary.get("hold_ms"),
+            "notes": len(s.get("warnings") or [])}
+
+
 def adjustment(c):
     return week_api.adjustment(c.db, c.uid, c.day)
 
@@ -109,7 +141,7 @@ def unread(c):
 
 SECTIONS = {"readiness": readiness, "checkin": checkin, "plan": plan, "training": training, "nutrition": nutrition,
             "weight": weight, "records": records, "next_session": next_session, "unread": unread,
-            "adjustment": adjustment, "week": week}
+            "adjustment": adjustment, "week": week, "body": body, "form": form}
 EVERYONE = {"next_session"}  # the rest is the athlete's own data; staff get null
 
 

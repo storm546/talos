@@ -409,4 +409,7 @@
     <string name="not_signed_in">Not signed in</string>
     <string name="retry">Try again</string>
     <string name="jump_vs_baseline">Compared with your starting point</string>
+    <string name="goal_short_maintain">Maintain</string>
+    <string name="goal_short_lose">Lose</string>
+    <string name="goal_short_gain">Gain</string>
 </resources>

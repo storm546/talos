@@ -388,7 +388,10 @@ private fun MainActivity.goalForm(day: String, days: Int, data: Insight, message
     }
     fun sync() { target.isEnabled = phase != "maintain"; endButton.isEnabled = phase != "maintain" }
     for (option in listOf("maintain", "lose", "gain")) phases.addView(RadioButton(this).apply {
-        id = android.view.View.generateViewId(); text = goalName(option); textSize = 13f; segment(); maxLines = 2
+        // Short labels on one line: "Decrease weight" wrapped and was clipped in the segment on a phone.
+        id = android.view.View.generateViewId(); text = getString(when (option) { "lose" -> R.string.goal_short_lose
+            "gain" -> R.string.goal_short_gain; else -> R.string.goal_short_maintain }); textSize = 14f; segment(); maxLines = 1
+        contentDescription = goalName(option)
         isChecked = option == phase
         setOnClickListener { phase = option; sync() }
     }, RadioGroup.LayoutParams(0, -2, 1f))

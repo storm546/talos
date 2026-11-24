@@ -125,7 +125,9 @@ internal fun weekChecks(test: Instrumentation) {
         val shownEnd = SystemClock.uptimeMillis() + 10000
         do { test.runOnMainSync { shown = texts(host.page) }; if (shown.contains(flag)) break; SystemClock.sleep(150) } while (SystemClock.uptimeMillis() < shownEnd)
         check(flag in shown && host.getString(R.string.adj_rest_day) in shown) { "adjusted Today: $shown" }
-        check(shown.any { host.getString(R.string.week_of_days, 13, 14) in it }) { "week card: $shown" }
+        // The consistency tile (SPEC 10.9): the number and "/ 14 days".
+        test.runOnMainSync { shown = host.page.findViewWithTag<android.view.View>("card-week")?.let { texts(it) }.orEmpty() }
+        check("13" in shown && shown.any { it.startsWith("/ 14") }) { "week tile: $shown" }
         // Share into the assistant: the text becomes a draft and nothing is sent.
         val before = server.requests.size
         test.runOnMainSync {

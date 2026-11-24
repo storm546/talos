@@ -50,6 +50,8 @@ def test_sections_equal_the_separate_routes(api, auth):
     wellbeing = next(f["value"] for f in route["days"][0]["factors"] if f["key"] == "wellbeing")
     assert result["checkin"] == {"done": True, "wellbeing": wellbeing, "out_of": 25}
     assert [s["load"] for s in result["training"]["sessions"]] == [420] and result["training"]["total_load"] == 420
+    assert result["training"]["daily"] == [0, 0, 0, 0, 0, 0, 420]  # the Today tile's 7-day bars (SPEC 10.9)
+    assert "series" in result["weight"] and result["body"] is None and result["form"] is None
     load = client.get(f"/api/athletes/{athlete}/load", params={"days": 7, "day": day()}, headers=headers).json()
     assert result["training"]["acute_chronic"]["ratio"] == load["acute_chronic"]["ratio"]
     assert (result["training"]["acute_load"], result["training"]["chronic_load"]) == (load["acute_load"], load["chronic_load"])

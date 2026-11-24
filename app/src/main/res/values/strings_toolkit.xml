@@ -175,4 +175,15 @@
     <string name="ask_form_draft">Explain the camera technique analysis of my %1$s set from %2$s and what I should work on.</string>
     <string name="ask_food_draft">Look at my food on %1$s: what should I eat for the rest of the day to reach my targets?</string>
     <string name="ask_training_draft">Given my readiness and recent training, what workout should I do today?</string>
+    <string name="today_open_details">Open details</string>
+    <string name="today_hours_unit">h</string>
+    <string name="today_sleep_need">need %1$s–%2$s h</string>
+    <string name="today_load_7d">7 days</string>
+    <string name="today_load_usual">usual %1$s a week</string>
+    <string name="today_steps_unit">steps</string>
+    <string name="today_reps_unit">reps</string>
+    <string name="today_days_unit">days</string>
+    <string name="today_s_unit">s</string>
+    <string name="today_steps">Steps</string>
+    <string name="today_quick_photo">Meal photo</string>
 </resources>

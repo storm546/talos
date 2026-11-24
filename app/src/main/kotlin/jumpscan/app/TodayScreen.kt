@@ -15,10 +15,9 @@ import java.time.format.DateTimeFormatter
 // Today: the home screen (SPEC 10.2). One request to /api/me/today fills every card; the last good answer is cached
 // on the phone with its time, so the screen works signed out and offline. Card order and hidden cards stay on the phone.
 
-internal val TODAY_CARDS = listOf("readiness", "plan", "checkin", "sleep", "nutrition", "training", "weight", "body", "form",
+/** Today's order: the readiness hero, the tiles (GLANCE, two per row), then today's plan, next session and messages. */
+internal val TODAY_CARDS = listOf("readiness", "plan", "checkin", "sleep", "nutrition", "training", "weight", "steps", "body", "form",
     "week", "records", "next_session", "messages")
-/** Cards that are only a finding (SPEC 10.9): without one they are not shown. */
-private val FINDING_CARDS = setOf("sleep", "body", "form")
 /** Server events that change a Today card; the whole aggregate is reloaded and only changed cards are redrawn. */
 internal val TODAY_EVENTS = setOf("checkin", "jump", "form", "comment", "record", "measurement", "adjustment")
 
@@ -79,7 +78,7 @@ internal fun MainActivity.home(message: String? = null) {
     val greeting = getString(when { hour < 12 -> R.string.today_morning; hour < 18 -> R.string.today_afternoon; else -> R.string.today_evening })
     val name = getSharedPreferences("account", Context.MODE_PRIVATE).getString("name", "").orEmpty().substringBefore(' ')
     eyebrow(localDate(todayLocal(), locale)).setPadding(0, dp(16), 0, 0)
-    text(if (signedIn && name.isNotEmpty()) getString(R.string.today_greeting_named, greeting, name) else greeting, 30).apply {
+    text(if (signedIn && name.isNotEmpty()) getString(R.string.today_greeting_named, greeting, name) else greeting, 26).apply {
         instrumentType(display = true)
         if (android.os.Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
     }
@@ -94,7 +93,10 @@ internal fun MainActivity.home(message: String? = null) {
         phoneTools()
         return
     }
-    val status = text(getString(R.string.today_loading), 12).apply { tag = "today-status" }
+    // The four things done most often, one tap each (SPEC 10.9).
+    toolRow(UiTile(R.string.today_quick_photo, "camera") { openTool("photo") }, UiTile(R.string.today_check_in, "checkin") { checkin() },
+        UiTile(R.string.workout_title, "training") { openTool("workout") }, UiTile(R.string.ui_technique, "form") { formHome() })
+    val status = text(getString(R.string.today_loading), 12).apply { tag = "today-status"; setPadding(0, dp(12), 0, 0) }
     briefingCard()
     val cards = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "today-cards" }
     page.addView(cards)
@@ -167,32 +169,31 @@ private fun sectionOf(key: String, data: JSONObject?): String? = when (key) {
     else -> data?.opt(key)?.toString()
 } + findingsFor(key, data).joinToString()
 
-/** Draw one card again, for phone-only additions such as Health Connect steps. */
-internal fun MainActivity.redrawCard(cards: LinearLayout, key: String) {
-    @Suppress("UNCHECKED_CAST")
-    (cards.getTag(R.id.today_sections) as? MutableMap<String, String?>)?.remove(key)
-    cards.findViewWithTag<View>("card-$key")?.let { cards.removeView(it) }
-    drawToday(cards, cachedToday()?.first)
-}
+/** Draw Today again, for phone-only additions such as Health Connect steps. */
+internal fun MainActivity.redrawCard(cards: LinearLayout, @Suppress("UNUSED_PARAMETER") key: String) = drawToday(cards, cachedToday()?.first)
 
+/** The whole Today: hero, tiles two per row, then the plan, next session and messages when they have something. */
 private fun MainActivity.drawToday(cards: LinearLayout, data: JSONObject?) {
-    @Suppress("UNCHECKED_CAST")
-    val shown = (cards.getTag(R.id.today_sections) as? MutableMap<String, String?>) ?: mutableMapOf<String, String?>().also { cards.setTag(R.id.today_sections, it) }
+    val section = TODAY_CARDS.joinToString { sectionOf(it, data).toString() } + healthSteps
+    if (cards.getTag(R.id.today_sections) == section) return
+    cards.setTag(R.id.today_sections, section)
+    cards.removeAllViews()
     val keys = todayOrder().filter { it !in hiddenCards() }
-    keys.forEachIndexed { index, key ->
-        val section = sectionOf(key, data)
-        val old = cards.findViewWithTag<View>("card-$key")
-        if (key in FINDING_CARDS && findingsFor(key, data).isEmpty()) { old?.let { cards.removeView(it) }; shown.remove(key); return@forEachIndexed }
-        if (old != null && shown[key] == section) return@forEachIndexed
-        shown[key] = section
-        // Built off-window and then moved, so animations that stop on detach (the kcal dial) still run.
-        val holder = LinearLayout(this)
-        val view = todayCard(key, data, holder)
-        holder.removeView(view)
-        if (old != null) { val at = cards.indexOfChild(old); cards.removeView(old); cards.addView(view, at) }
-        else cards.addView(view, minOf(index, cards.childCount))
-        view.arrive(if (old == null) index * 18L else 0L)
+    if ("readiness" in keys) todayCard("readiness", data, cards)
+    glanceGrid(keys.filter { it in GLANCE }.mapNotNull { key ->
+        glanceTile(key, data, findingsFor(key, data), getString(cardTitle(key))) { openCard(key) }
+    }, cards)
+    for (key in keys.filter { it !in GLANCE && it != "readiness" }) {
+        val plan = data?.optJSONObject("plan")
+        val show = when (key) {
+            "plan" -> plan != null && (plan.optJSONArray("items")?.length() ?: 0) + plan.optInt("more") > 0 || plan?.isNull("adjusted") == false
+            "next_session" -> data?.optJSONObject("next_session") != null
+            "messages" -> (data?.optInt("unread") ?: 0) > 0
+            else -> false
+        }
+        if (show) todayCard(key, data, cards)
     }
+    cards.arrive()
 }
 
 private fun cardTitle(key: String) = when (key) {
@@ -207,6 +208,7 @@ private fun cardTitle(key: String) = when (key) {
     "messages" -> R.string.today_messages
     "week" -> R.string.week_title
     "sleep" -> R.string.today_sleep
+    "steps" -> R.string.today_steps
     "body" -> R.string.body_title
     "form" -> R.string.ui_technique
     else -> R.string.tool_jump
@@ -219,6 +221,7 @@ private fun cardIcon(key: String) = when (key) {
     "nutrition" -> "food"
     "weight", "records", "week", "body" -> "insights"
     "sleep" -> "checkin"
+    "steps" -> "conditioning"
     "form" -> "form"
     "next_session" -> "club"
     else -> "assistant"
@@ -236,6 +239,7 @@ private fun MainActivity.openCard(key: String) = when (key) {
     "messages" -> feedback()
     "week" -> weekScreen()
     "sleep" -> readinessCheck()
+    "steps" -> profile()
     "body" -> body()
     "form" -> techniqueHistory()
     else -> jumpHome()
@@ -273,7 +277,6 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
     }
     // Actions go last, under the card's finding.
     fun actions(vararg entries: Pair<Int, () -> Unit>) { deferred = { strip(entries) } }
-    if (hero) healthSteps?.let { line(getString(R.string.hc_steps_today, String.format(locale, "%,d", it)), 13) }
     if (key == "jump") {
         line(getString(R.string.today_jump_note))
         strip(arrayOf(R.string.today_jump_record to { jumpHome() }))
@@ -310,7 +313,9 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
             val flag = data?.optJSONObject("adjustment")
             if (flag != null) line(getString(R.string.adj_flag, adjustLabel(flag.getString("reason")).lowercase(locale),
                 adjustLabel(flag.getString("mode")).lowercase(locale)), 14, Color.WHITE)
-            actions((if (flag == null) R.string.adj_question else R.string.adj_change) to { adjustmentSheet(flag) })
+            // A quiet text action: the hero stays short (SPEC 10.9).
+            deferred = { button(getString(if (flag == null) R.string.adj_question else R.string.adj_change), parent = panel,
+                look = ActionTone.TEXT) { adjustmentSheet(flag) }.apply { setTextColor(getColor(R.color.signal)); gravity = Gravity.START or Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, 0) } }
         } ?: line(getString(R.string.today_no_data))
         "plan" -> {
             val plan = section as? JSONObject
@@ -333,63 +338,6 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
             if (plan?.optBoolean("logged") == true) chip(getString(R.string.today_plan_logged), panel)
             actions(R.string.today_start_workout to { openTool("workout") })
         }
-        "checkin" -> {
-            val checkin = section as JSONObject
-            if (checkin.getBoolean("done")) {
-                big(metricNumber(checkin.getDouble("wellbeing"), "training_minutes", locale) + " / " + checkin.getInt("out_of"))
-                line(getString(R.string.today_checkin_done))
-            } else {
-                line(getString(R.string.today_checkin_missing), 15, ink)
-                actions(R.string.today_check_in to { checkin() })
-            }
-        }
-        "nutrition" -> {
-            val food = section as JSONObject
-            val eaten = food.getJSONObject("eaten")
-            val target = food.optJSONObject("target")
-            val line = row(panel, center = true)
-            val kcal = eaten.getDouble("kcal")
-            line.addView(Dial(this).apply {
-                caption = metricNumber(kcal, "kcal", locale); unit = getString(R.string.unit_kcal)
-                show(if (target == null) 0 else (kcal / target.getDouble("kcal") * 100).toInt())
-            }, LinearLayout.LayoutParams(dp(112), dp(104)))
-            val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            line.addView(column, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(10) })
-            val protein = eaten.getDouble("protein_g")
-            if (target != null) {
-                text(getString(R.string.today_kcal_of, metricNumber(target.getDouble("kcal"), "kcal", locale)), 14, parent = column)
-                // A label and a bar; the empty reading line under the label is not needed here.
-                targetBar(getString(R.string.today_protein, short(protein), short(target.getDouble("protein_g"))), "",
-                    protein / target.getDouble("protein_g"), column).visibility = View.GONE
-            } else text(getString(R.string.today_protein_plain, short(protein)), 14, parent = column)
-            text(getString(R.string.today_food_logs, food.getInt("logs")), 12, parent = column)
-            actions(R.string.today_scan_food to { scanBarcode() }, R.string.today_add_food to { foods() })
-        }
-        "training" -> {
-            val training = section as JSONObject
-            big(metricNumber(training.getDouble("total_load"), "kcal", locale))
-            line(getString(R.string.today_load_unit) + " · " + getString(R.string.today_sessions, training.getJSONArray("sessions").length()))
-            val ratio = training.getJSONObject("acute_chronic")
-            line(if (ratio.optBoolean("still_learning") || ratio.isNull("band")) getString(R.string.today_ratio_learning)
-                else getString(R.string.rd_ratio) + ": " + String.format(locale, "%.2f", ratio.getDouble("ratio")) + " · " + getString(when (ratio.getString("band")) {
-                    "well_above" -> R.string.rd_band_well_above; "above" -> R.string.rd_band_above
-                    "below" -> R.string.rd_band_below; else -> R.string.rd_band_similar
-                }))
-        }
-        "weight" -> {
-            val weight = section as? JSONObject
-            if (weight == null) line(getString(R.string.today_weight_empty)) else {
-                big(getString(R.string.feature_kg, short(weight.getDouble("kg"))))
-                val trend = if (weight.isNull("trend_kg")) "—" else short(weight.getDouble("trend_kg"))
-                line(getString(R.string.today_weight_trend, trend, localDate(weight.getString("day"), locale)))
-            }
-        }
-        "records" -> {
-            val found = (section as? org.json.JSONArray)?.objects().orEmpty()
-            if (found.isEmpty()) line(getString(R.string.today_records_empty))
-            found.take(3).forEach { record -> valueRow(recordLabel(record), recordValue(record), panel) }
-            found.firstOrNull()?.let { newest -> shareButton(newest, row(panel)) }
-        }
         "next_session" -> {
             val session = section as? JSONObject
             if (session == null) line(getString(R.string.today_session_empty)) else {
@@ -397,7 +345,6 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
                 line(localDateTime(session.getString("starts_at"), locale) + (session.optString("place").takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""))
             }
         }
-        "week" -> consistencyRows((section as? JSONObject)?.optJSONObject("consistency"), panel)
         "messages" -> {
             val unread = (section as? Number)?.toInt() ?: 0
             if (unread == 0) line(getString(R.string.today_messages_none)) else {
@@ -406,16 +353,11 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
             }
         }
     }
-    // The conclusion under the numbers: what the server's rules found, in the athlete's language.
+    // The conclusion under the numbers, as a title; tapping the card explains it (SPEC 10.9).
     notes.forEach { note ->
-        val tone = note.optString("tone")
-        val color = getColor(when {
-            hero && tone == "good" -> R.color.ready_surface; hero && tone == "watch" -> R.color.signal; hero -> R.color.on_hero
-            tone == "good" -> R.color.ready; tone == "watch" -> R.color.warning; else -> R.color.ink
-        })
-        text(note.optString("title"), 16, color, panel).apply { instrumentType(display = true); setPadding(0, dp(10), 0, 0) }
-        line(note.optString("text"))
+        text(note.optString("title"), 16, toneColor(note.optString("tone"), hero), panel).apply { instrumentType(display = true); setPadding(0, dp(10), 0, 0) }
     }
+    if (notes.isNotEmpty()) panel.setOnClickListener { findingSheet(getString(cardTitle(key)), notes) { openCard(key) } }
     deferred?.invoke()
     return panel
 }

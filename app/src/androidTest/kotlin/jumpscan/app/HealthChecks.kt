@@ -182,17 +182,17 @@ internal fun healthChecks(test: Instrumentation) {
         test.waitFor("weight prefill") { kg.text.toString() == host.short(64.3) }
         test.runOnMainSync { check(host.getString(R.string.hc_source, host.getString(R.string.nutr_weight_kg)) in texts(host.page)) }
 
-        // Today: steps on the readiness card and the run offered as a session; turning it down keeps it away.
+        // Today: steps in their own tile (SPEC 10.9) and the run offered as a session; turning it down keeps it away.
         context.saveToday(todayFixture())
         test.runOnMainSync { host.finish() }
         host = test.startActivitySync(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         check(test.screenOf(host, "home") == "home")
         val offer = host.getString(R.string.hc_session_offer, host.getString(R.string.hc_title), host.getString(R.string.hc_run), 42)
-        val steps = host.getString(R.string.hc_steps_today, String.format(host.locale, "%,d", 4412))
+        val steps = String.format(host.locale, "%,d", 4412)
         test.waitFor("Today suggestion and steps") { texts(host.page).let { offer in it && steps in it } }
         test.runOnMainSync {
-            val readiness = host.page.findViewWithTag<View>("card-readiness")
-            check(steps in texts(readiness)) { "steps not on the readiness card" }
+            val tile = host.page.findViewWithTag<View>("card-steps")
+            check(tile != null && steps in texts(tile)) { "steps tile missing" }
         }
         test.click(host, host.getString(R.string.hc_session_dismiss))
         check(context.handledSessions().any { Duration.between(it, fixture.workoutStart).abs().seconds < 1 })

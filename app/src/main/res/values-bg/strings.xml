@@ -409,4 +409,7 @@
     <string name="not_signed_in">Не сте влезли</string>
     <string name="retry">Опитайте отново</string>
     <string name="jump_vs_baseline">Спрямо началните Ви скокове</string>
+    <string name="goal_short_maintain">Задържане</string>
+    <string name="goal_short_lose">Отслабване</string>
+    <string name="goal_short_gain">Качване</string>
 </resources>
