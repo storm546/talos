@@ -4,7 +4,7 @@ Object.assign(dictionary.bg, {
   ftTitle:'Полеви тестове', ftIntro:'Числа от инструментите на телефона: обхват на движение, баланс, спринт и реакция, кардио с GPS. Видео, поза и маршрут остават на телефона.',
   ftRom:'Обхват на движение', ftBalance:'Баланс на един крак', ftSpeed:'Спринт, ловкост и реакция', ftCardio:'Кардио с GPS',
   ftJoint:'Става', ftLeft:'Ляво', ftRight:'Дясно', ftDiff:'Разлика', ftError:'Грешка', ftLeg:'Опорен крак', ftBest:'Най-добро',
-  ftLatest:'Последно', ftSway:'Люлеене', ftEnded:'Край', ftTest:'Тест', ftPrecision:'Точност', ftActivity:'Активност',
+  ftLatest:'Последно', ftSway:'Люлеене', ftSwaySpeed:'Скорост на люлеене над шума', ftPerSec:'%/с', ftNoise:'шум ', ftEnded:'Край', ftTest:'Тест', ftPrecision:'Точност', ftActivity:'Активност',
   ftDistance:'Разстояние', ftDuration:'Време', ftPace:'Темпо', ftSplits:'Километри', ftNone:'Още няма полеви тестове. Появяват се след първия запис от телефона.',
   ftWithin:'в рамките на грешката', ftNotValidated:'не е проверено спрямо еталон',
   ftRomNote:'Ъгъл от позата, задържан неподвижно поне 1 s. Типична грешка ±10° (коляно отстрани, измерена); за таза и рамото няма еталон. Сравнявайте със себе си при същата постановка.',
@@ -21,7 +21,7 @@ Object.assign(dictionary.en, {
   ftTitle:'Field tests', ftIntro:'Numbers from the phone tools: range of motion, balance, sprint and reaction, GPS cardio. Video, pose and route stay on the phone.',
   ftRom:'Range of motion', ftBalance:'Single-leg balance', ftSpeed:'Sprint, agility and reaction', ftCardio:'GPS cardio',
   ftJoint:'Joint', ftLeft:'Left', ftRight:'Right', ftDiff:'Difference', ftError:'Error', ftLeg:'Stance leg', ftBest:'Best',
-  ftLatest:'Latest', ftSway:'Sway', ftEnded:'Ended by', ftTest:'Test', ftPrecision:'Precision', ftActivity:'Activity',
+  ftLatest:'Latest', ftSway:'Sway', ftSwaySpeed:'Sway speed above noise', ftPerSec:'%/s', ftNoise:'noise ', ftEnded:'Ended by', ftTest:'Test', ftPrecision:'Precision', ftActivity:'Activity',
   ftDistance:'Distance', ftDuration:'Duration', ftPace:'Pace', ftSplits:'Kilometres', ftNone:'No field tests yet. They appear after the first phone recording.',
   ftWithin:'within the measuring error', ftNotValidated:'not checked against a reference',
   ftRomNote:'Angle from the pose, held still for at least 1 s. Typical error ±10° (side-view knee, measured); hip and shoulder have no reference. Compare with yourself in the same setup.',
@@ -84,15 +84,18 @@ function fieldtests(content) {
         '±' + ftDeg(row.error_deg) + (row.warnings.includes('not_validated') ? ' · ' + t('ftNotValidated') : ''), date(row.created_at)]);
     }
   }
+  // Sway speed is shown above the measured noise floor (never below zero), with the floor itself (SPEC 10.4).
+  const swaySpeed = row => row.sway_velocity_pct == null ? '—' : format(Math.max(0, row.sway_velocity_pct -
+    (row.noise_floor_pct ?? 0))) + ' ' + t('ftPerSec') + (row.noise_floor_pct == null ? '' : ' · ' + t('ftNoise') + format(row.noise_floor_pct));
   const balance = kind('balance');
   if (balance.length) {
-    const body = ftSection(content, 'ftBalance', 'ftBalanceNote', ['ftLeg', 'ftBest', 'ftLatest', 'ftSway', 'ftEnded', 'date']);
+    const body = ftSection(content, 'ftBalance', 'ftBalanceNote', ['ftLeg', 'ftBest', 'ftLatest', 'ftSway', 'ftSwaySpeed', 'ftEnded', 'date']);
     for (const leg of ['L', 'R']) {
       const list = balance.filter(row => row.leg === leg);
       if (!list.length) continue;
       const best = list.reduce((a, b) => b.stance_ms > a.stance_ms ? b : a);
       ftRow(body, [t('ftLeg' + leg), ftSeconds(best.stance_ms, 1), ftSeconds(list[0].stance_ms, 1),
-        list[0].sway_pct == null ? '—' : format(list[0].sway_pct) + ' %', t(list[0].ended_by), date(list[0].created_at)]);
+        list[0].sway_pct == null ? '—' : format(list[0].sway_pct) + ' %', swaySpeed(list[0]), t(list[0].ended_by), date(list[0].created_at)]);
     }
   }
   const timed = rows.filter(row => ['sprint', 'agility', 'reaction'].includes(row.kind));

@@ -41,6 +41,8 @@ def test_every_kind_round_trips_newest_first(api, auth):
 @pytest.mark.parametrize("body, field, value", [
     (ROM, "joint", "elbow_flexion"), (ROM, "left_deg", 181), (ROM, "warnings", ["wrong_view"]), (ROM, "extra", 1),
     (BALANCE, "stance_ms", 60_001), (BALANCE, "ended_by", "fell"), (BALANCE, "stance_ms", 12.5), (BALANCE, "leg", "both"),
+    (BALANCE, "sway_velocity_pct", -0.1), (BALANCE, "sway_velocity_pct", 1000.1), (BALANCE, "noise_floor_pct", "low"),
+    (BALANCE, "noise_floor_pct", 1001),
     (SPRINT, "time_ms", 99), (SPRINT, "distance_m", 0), (SPRINT, "start", "gun"),
     (REACTION, "time_ms", 1501), (REACTION, "fps", 0),
     (AGILITY, "test", "illinois"), (AGILITY, "precision_ms", -1),
@@ -51,6 +53,17 @@ def test_validation_rejects_bad_fields(api, auth, body, field, value):
     client, _ = api
     response = client.post("/api/measurements", json={**body, field: value, "client_id": "x"}, headers=auth("athlete1"))
     assert response.status_code == 422, response.text
+
+
+def test_balance_sway_velocity_and_noise_floor_are_optional(api, auth):
+    client, _ = api
+    headers = auth("athlete1")
+    with_speed = post(client, headers, {**BALANCE, "sway_velocity_pct": 7.5, "noise_floor_pct": 2.25}, "v1")
+    without = post(client, headers, BALANCE, "v2")  # older apps send neither field
+    nulls = post(client, headers, {**BALANCE, "sway_velocity_pct": None, "noise_floor_pct": None}, "v3")
+    rows = {row["id"]: row for row in client.get("/api/measurements", params={"kind": "balance"}, headers=headers).json()}
+    assert (rows[with_speed["id"]]["sway_velocity_pct"], rows[with_speed["id"]]["noise_floor_pct"]) == (7.5, 2.25)
+    assert rows[without["id"]]["sway_velocity_pct"] is None and rows[nulls["id"]]["noise_floor_pct"] is None
 
 
 def test_rom_needs_one_side_and_cycling_allows_fast_pace(api, auth):
