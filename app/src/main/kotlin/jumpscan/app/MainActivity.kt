@@ -451,17 +451,20 @@ class MainActivity : Activity() {
 
     internal fun profile() {
         layout(getString(R.string.ui_profile), "profile")
-        val account = card().apply { gravity = Gravity.CENTER_HORIZONTAL }
-        iconTile("profile", account).layoutParams = LinearLayout.LayoutParams(dp(64), dp(64))
+        // One compact account row (DESIGN.md), not a centred card with a big avatar.
+        val head = row(center = true).apply { setPadding(0, dp(8), 0, dp(4)) }
+        iconTile("profile", head).layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(14) }
+        val account = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        head.addView(account, LinearLayout.LayoutParams(0, -2, 1f))
         fun line(value: String, size: Int) = text(value, size, parent = account).apply {
-            gravity = Gravity.CENTER_HORIZONTAL; if (size > 14) instrumentType(display = true)
+            setPadding(0, 0, 0, 0); if (size > 14) instrumentType(display = true)
         }
         if (token().isEmpty()) {
-            line(getString(R.string.not_signed_in), 18).setPadding(0, dp(10), 0, 0)
+            line(getString(R.string.not_signed_in), 18)
             line(getString(R.string.login_intro), 13)
             button(getString(R.string.sign_in), primary = true, parent = account) { login() }
         } else {
-            line(prefs.getString("name", "").orEmpty(), 18).setPadding(0, dp(10), 0, 0)
+            line(prefs.getString("name", "").orEmpty(), 18)
             prefs.getString("email", null)?.let { line(it, 13).setPadding(0, 0, 0, 0) }
         }
         val settings = getSharedPreferences("instrument", android.content.Context.MODE_PRIVATE)

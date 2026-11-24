@@ -1,5 +1,6 @@
 package jumpscan.app
 
+import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 
@@ -55,9 +56,11 @@ internal fun MainActivity.openTool(key: String) = Tools[key]?.let { openTool(it)
 
 /** "Ask the assistant" with a prepared question about what is on screen (SPEC 10.9). */
 internal fun MainActivity.askButton(draft: String) =
-    button(getString(R.string.ask_assistant), look = ActionTone.TONAL) { assistantScreen(draft = draft) }.apply {
+    // A quiet link, not a slab (DESIGN.md: one accent, one primary action per screen).
+    button(getString(R.string.ask_assistant), look = ActionTone.TEXT) { assistantScreen(draft = draft) }.apply {
         setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("assistant", green), null, null, null)
-        compoundDrawablePadding = dp(8)
+        compoundDrawablePadding = dp(8); gravity = Gravity.START or Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, 0)
+        layoutParams = LinearLayout.LayoutParams(-2, dp(48)).apply { topMargin = dp(8) }
     }
 
 /** A section's tools as one list of rows under an eyebrow. */

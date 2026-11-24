@@ -198,4 +198,7 @@
     <string name="today_load_today">today</string>
     <string name="today_exercises_unit">exercises</string>
     <string name="today_briefing_by">Written by the language model from your findings</string>
+    <string name="food_ring_of">%1$s of %2$s</string>
+    <string name="food_left">%1$s left today</string>
+    <string name="food_over">%1$s over the target</string>
 </resources>

@@ -81,13 +81,12 @@ private fun MainActivity.repLabel(key: String) = getString(repFields.getValue(ke
 internal fun MainActivity.formHome(message: String? = null) {
     layout(getString(R.string.form_title), "form")
     message?.let { notice(it, caution = true) }
-    text(getString(R.string.ui_form_eyebrow, FormExercises.validated.size).uppercase(locale), 12, green).apply { letterSpacing = .1f; instrumentType(display = true) }
-    text(getString(R.string.form_modes_guide), 16)
-    val links = row(page)
-    if (token().isNotEmpty()) button(getString(R.string.ui_form_history), parent = links, look = ActionTone.TONAL) { techniqueHistory() }
-        .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10) }
-    lastForm?.let { result -> button(getString(R.string.last_result), parent = links) { formResult(result.metrics, result) }
-        .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10); if (links.childCount > 1) marginStart = dp(8) } }
+    // One line of purpose, then the actions as pills (DESIGN.md).
+    text(getString(R.string.form_modes_guide), 14)
+    actionChips(*listOfNotNull(
+        lastForm?.let { result -> UiTile(R.string.last_result, "form") { formResult(result.metrics, result) } },
+        UiTile(R.string.tool_jump, "legs") { jumpHome() },
+        if (token().isNotEmpty()) UiTile(R.string.ui_form_history, "history") { techniqueHistory() } else null).toTypedArray())
     howMeasured(getString(R.string.ui_form_validated_note))
     toolList(R.string.section_camera_tests, Tools.cameraTests)
     val replay = BuildConfig.DEBUG && File(filesDir, LIVE_REPLAY_FILE).isFile

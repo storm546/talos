@@ -96,16 +96,21 @@ internal fun MainActivity.nutritionHome(day: String = diaryDay, message: String?
 }
 
 private fun MainActivity.dayStepper(day: String, picked: (String) -> Unit) {
-    val line = row(top = 4, center = true)
+    val line = row(top = 2, center = true)
     val date = LocalDate.parse(day)
     fun step(label: String, description: Int, days: Long) = button(label, parent = line, look = ActionTone.TEXT) {
         picked(date.plusDays(days).toString())
-    }.apply { contentDescription = getString(description); textSize = 22f; layoutParams = LinearLayout.LayoutParams(dp(52), -2) }
+    }.apply { contentDescription = getString(description); textSize = 20f; layoutParams = LinearLayout.LayoutParams(dp(48), dp(44)) }
     step("‹", R.string.nutr_previous_day, -1)
-    button(localDate(day, locale), parent = line) {
-        DatePickerDialog(this, { _, year, month, dayOfMonth -> picked(LocalDate.of(year, month + 1, dayOfMonth).toString()) },
-            date.year, date.monthValue - 1, date.dayOfMonth).show()
-    }.layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+    // The date is a quiet tappable line (DESIGN.md), not a big button.
+    text(localDate(day, locale), 15, getColor(R.color.ink), line).apply {
+        gravity = Gravity.CENTER; instrumentType(numeric = true); layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f)
+        isClickable = true; isFocusable = true
+        setOnClickListener {
+            DatePickerDialog(this@dayStepper, { _, year, month, dayOfMonth -> picked(LocalDate.of(year, month + 1, dayOfMonth).toString()) },
+                date.year, date.monthValue - 1, date.dayOfMonth).show()
+        }
+    }
     step("›", R.string.nutr_next_day, 1)
 }
 
@@ -127,34 +132,23 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
     val target = summary?.optJSONObject("target") ?: JSONObject()
     val goal = target.optDouble("kcal")
     val eaten = totals.optDouble("kcal", 0.0)
-    val energy = row(top = 8, center = true)
-    energy.addView(Dial(this).apply {
-        caption = metricNumber(eaten, "kcal", locale)
-        unit = getString(R.string.unit_kcal)
-        show(if (goal > 0) (100 * eaten / goal).toInt() else 0)
-    }, dp(136), dp(128))
-    val side = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    energy.addView(side, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(10) })
-    if (goal > 0) {
-        val left = goal - eaten
-        text(getString(if (left >= 0) R.string.nutr_remaining else R.string.nutr_over), 13, parent = side)
-        text(kcalText(abs(left)), 28, getColor(if (left >= 0) R.color.ink else R.color.warning), side).instrumentType(numeric = true)
-        text(getString(R.string.energy_target, number(target, "kcal")), 13, parent = side)
-    } else text(getString(R.string.nutr_no_targets), 14, parent = side)
-    val macros = row(top = 6)
-    for ((key, label) in listOf("protein_g" to R.string.macro_protein, "carbs_g" to R.string.macro_carbs, "fat_g" to R.string.macro_fat)) {
-        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, dp(8), 0) }
-        macros.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
-        val goalGrams = target.optDouble(key)
-        fun whole(json: JSONObject) = metricNumber(json.optDouble(key, 0.0), "kcal", locale)
-        val grams = whole(totals) + (if (goalGrams > 0) " / ${whole(target)}" else "")
-        targetBar(getString(label), "$grams ${getString(R.string.unit_grams)}", if (goalGrams > 0) totals.optDouble(key, 0.0) / goalGrams else null, column).apply {
-            // One line in every language: the reading shrinks rather than wraps in the narrow column.
-            maxLines = 1
-            setAutoSizeTextTypeUniformWithConfiguration(12, 20, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-        }
+    // The day at a glance (DESIGN.md): four rings against the targets, one line of what is left, then the actions.
+    val rings = LinearLayout(this).apply { isBaselineAligned = false; setPadding(0, dp(10), 0, 0) }
+    page.addView(rings, LinearLayout.LayoutParams(-1, -2))
+    for ((key, label) in listOf("kcal" to R.string.unit_kcal, "protein_g" to R.string.macro_protein, "carbs_g" to R.string.macro_carbs,
+            "fat_g" to R.string.macro_fat)) {
+        val value = totals.optDouble(key, 0.0); val aim = target.optDouble(key).takeIf { it > 0 }
+        val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+        cell.addView(DayRing(this, aim?.let { value / it }, aim != null && key == "kcal" && value > aim * 1.1,
+            metricNumber(value, "kcal", locale)), LinearLayout.LayoutParams(dp(68), dp(68)))
+        text(if (aim != null) getString(R.string.food_ring_of, getString(label).lowercase(locale), metricNumber(aim, "kcal", locale))
+            else getString(label), 11, parent = cell).apply { gravity = Gravity.CENTER; maxLines = 2; setPadding(0, dp(4), 0, 0) }
+        rings.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
     }
-    toolRow(UiTile(R.string.nutr_add, "plus") { foods(day) }, UiTile(R.string.food_photo_short, "camera") { foodPhoto(day) },
+    if (goal > 0) text(getString(if (goal - eaten >= 0) R.string.food_left else R.string.food_over, kcalText(abs(goal - eaten))), 13,
+        getColor(if (goal - eaten >= 0) R.color.muted else R.color.warning)).apply { gravity = Gravity.CENTER; instrumentType(numeric = true); setPadding(0, dp(8), 0, 0) }
+    else text(getString(R.string.nutr_no_targets), 13).gravity = Gravity.CENTER
+    actionChips(UiTile(R.string.food_photo_short, "camera") { foodPhoto(day) }, UiTile(R.string.nutr_add, "plus") { foods(day) },
         UiTile(R.string.scan_short, "scan") { scanBarcode() }, UiTile(R.string.nutr_copy_day, "copy") { copyLogs(day, null) })
     section(R.string.meal_timeline).setPadding(0, dp(22), 0, dp(8))
     val byMeal = summary?.optJSONObject("by_meal_kcal") ?: JSONObject()
