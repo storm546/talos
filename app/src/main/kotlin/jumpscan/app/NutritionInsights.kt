@@ -192,7 +192,8 @@ internal fun MainActivity.aiEntry(day: String = diaryDay, draft: String = "", pr
             if (chosen[index]) entries.put(JSONObject(item.getJSONObject("entry").toString()).put("client_id", UUID.randomUUID().toString()))
         }
         val api = featureApi()
-        work(getString(R.string.feature_saving), { api.post("/api/food-logs/batch", JSONObject().put("entries", entries)) },
+        // The batch route answers with an array, so read it as text (post() expects an object and failed after saving).
+        work(getString(R.string.feature_saving), { api.send("POST", "/api/food-logs/batch", JSONObject().put("entries", entries)) },
             { nutritionHome(day, getString(R.string.ai_entry_logged, entries.length())) }, { aiEntry(day, input.value(), proposal, it) })
     }
 }

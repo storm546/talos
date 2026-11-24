@@ -381,5 +381,24 @@ def overpass(lat, lon):
             if not isinstance(elements, list):
                 raise ValueError("Invalid Overpass reply")
             return [element for element in elements if isinstance(element, dict)]
-    except Exception:  # noqa: BLE001 - every Overpass failure is the same 503 for the app
+    except Exception:  # noqa: BLE001 - the public Overpass servers are often overloaded; fall back to Nominatim
+        return nominatim(lat, lon)
+
+
+def nominatim(lat, lon):
+    """Fallback: OpenStreetMap's Nominatim search for supermarkets in a box of about 2 km around the point
+    (one request per rounded cell per day thanks to the cache, within Nominatim's usage policy)."""
+    box = f"{lon - 0.025},{lat + 0.018},{lon + 0.025},{lat - 0.018}"
+    try:
+        with httpx.Client(timeout=httpx.Timeout(10.0), trust_env=False, headers={"User-Agent": fs.USER_AGENT}) as client:
+            response = client.get(os.environ.get("JUMPSCAN_NOMINATIM_URL", "https://nominatim.openstreetmap.org/search"),
+                                  params={"q": "supermarket", "format": "jsonv2", "limit": 40, "bounded": 1, "viewbox": box})
+            response.raise_for_status()
+            places = response.json()
+            if not isinstance(places, list):
+                raise ValueError("Invalid Nominatim reply")
+            return [{"lat": float(place["lat"]), "lon": float(place["lon"]),
+                     "tags": {"name": place.get("name") or "", "shop": place.get("type") or "supermarket"}}
+                    for place in places if isinstance(place, dict) and place.get("lat") and place.get("lon")]
+    except Exception:  # noqa: BLE001 - both sources down: the same 503 for the app
         raise HTTPException(503, "Store search is unavailable; try again later.") from None

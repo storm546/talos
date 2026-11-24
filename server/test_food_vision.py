@@ -197,10 +197,19 @@ def test_nearby_stores_round_the_position_and_cache_per_cell(api, auth, monkeypa
     assert client.get("/api/stores/nearby?lat=42.7&lon=23.32", headers=auth("athlete1")).status_code == 405
 
 
-def test_overpass_failure_is_a_503(monkeypatch):
+def test_overpass_failure_falls_back_to_nominatim_and_both_down_is_a_503(monkeypatch):
     real = httpx.Client
+    nominatim_up = {"value": True}
+
+    def handler(request):
+        if request.url.host == "nominatim.openstreetmap.org" and nominatim_up["value"]:
+            return httpx.Response(200, json=[{"lat": "42.701", "lon": "23.321", "name": "Lidl", "type": "supermarket"}])
+        return httpx.Response(504)
+
     monkeypatch.setattr(fv, "httpx", SimpleNamespace(Timeout=httpx.Timeout, Client=lambda **kw: real(
-        transport=httpx.MockTransport(lambda request: httpx.Response(504)), **kw)))
+        transport=httpx.MockTransport(handler), **kw)))
+    assert fv.overpass(42.7, 23.32) == [{"lat": 42.701, "lon": 23.321, "tags": {"name": "Lidl", "shop": "supermarket"}}]
+    nominatim_up["value"] = False
     with pytest.raises(fv.HTTPException) as error:
         fv.overpass(42.7, 23.32)
     assert error.value.status_code == 503
