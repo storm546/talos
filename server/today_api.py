@@ -57,6 +57,7 @@ def training(c):
     return {"sessions": [{k: s[k] for k in ("id", "kind", "minutes", "rpe", "load", "source")}
                          for s in sessions[:MAX_SESSIONS]],
             "total_load": sum(s["load"] for s in sessions),
+            "acute_load": load["acute_load"], "chronic_load": load["chronic_load"],
             "acute_chronic": {**ratio, "still_learning": not ratio["ready"]}}
 
 

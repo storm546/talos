@@ -8,6 +8,9 @@ model and not medical advice. The constants below are design choices and are lis
 - A value counts as better or worse than usual only when it differs from the baseline mean by more than the
   smallest worthwhile change, 0.5 x SD (Hopkins 2000; Buchheit 2014; Plews 2013 for ln RMSSD), and more than the
   typical error, the SD of trial-to-trial differences divided by sqrt 2 (Hopkins 2000).
+- HRV (ln RMSSD) and resting heart rate compare the mean of the last 7 days (today's value and at least three in
+  all) with the baseline, as HRV practice recommends (Plews 2013; AIS HRV best-practice guide); the typical error of
+  a mean of n days is TE / sqrt n. A synthetic check before shipping is kept in logs/wave6/readiness-sim.txt.
 - Sleep: duration against an age-based need, 8-10 h under 18 and 7-9 h for adults (Hirshkowitz 2015), and
   night-to-night regularity as the SD of the sleep midpoint over the last 7 nights (after Phillips 2017).
 - Load: session RPE x minutes per session, summed per day (Foster 2001); weekly monotony = mean / SD of the
@@ -25,6 +28,8 @@ SLEEP_NIGHTS = 7
 MIN_SLEEP_NIGHTS = 3
 ACUTE_DAYS = 7
 CHRONIC_DAYS = 28
+WEEK_DAYS = 7
+MIN_WEEK_VALUES = 3
 
 
 def baseline(values, minimum=MIN_VALUES):
@@ -62,6 +67,19 @@ def compare(value, base, error=None, higher_is_better=True):
     else:
         state = "better" if (difference > 0) == higher_is_better else "worse"
     return {"state": state, "difference": difference, "threshold": threshold}
+
+
+def compare_week(today, week, base, error=None, higher_is_better=True):
+    """HRV and resting HR: the mean of the week's values (today's included) against the baseline.
+
+    Needs today's value (else "missing") and at least MIN_WEEK_VALUES values in the week (else "learning"); the
+    threshold uses the typical error of a mean of n daily values, TE / sqrt n.
+    """
+    if today is None or not base["ready"]:
+        return compare(today, base, error, higher_is_better)
+    if len(week) < MIN_WEEK_VALUES:
+        return {"state": "learning", "difference": None, "threshold": None}
+    return compare(fmean(week), base, error and error / sqrt(len(week)), higher_is_better)
 
 
 def ln_rmssd(rmssd_ms):
@@ -144,6 +162,14 @@ def ewma(loads, span):
     for load in loads:
         result.append(load if not result else load * weight + result[-1] * (1 - weight))
     return result
+
+
+def load_blocks(loads):
+    """Acute and chronic load as two plain numbers: the last 7 days' total and the mean weekly total of the last
+    28 days (None until 28 days of history)."""
+    return {"acute": {"days": ACUTE_DAYS, "load": sum(loads[-ACUTE_DAYS:])},
+            "chronic": {"days": CHRONIC_DAYS, "weekly_load": sum(loads[-CHRONIC_DAYS:]) * ACUTE_DAYS / CHRONIC_DAYS
+                        if len(loads) >= CHRONIC_DAYS else None}}
 
 
 def acute_chronic(loads):

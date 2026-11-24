@@ -160,11 +160,58 @@ def test_readiness_from_personal_baselines_with_factors(api, auth):
     today = factors(result)
     assert result["days"][0]["status"] == "take_care" and result["days"][0]["day"] == day()
     assert today["resting_hr"]["state"] == "worse" and today["resting_hr"]["baseline"]["n"] == 10
-    assert today["hrv"]["state"] == "worse" and today["hrv"]["value"] == pytest.approx(r.ln_rmssd(50))
+    week = [r.ln_rmssd(78 + n % 5) for n in range(1, 7)] + [r.ln_rmssd(50)]  # HRV and RHR: the 7-day mean
+    assert today["hrv"]["state"] == "worse" and today["hrv"]["value"] == pytest.approx(sum(week) / 7)
+    assert today["hrv"]["today"] == pytest.approx(r.ln_rmssd(50)) and today["hrv"]["week_values"] == 7
+    assert today["resting_hr"]["value"] == pytest.approx((50 + 51 + 49 + 50 + 51 + 49 + 58) / 7)
     assert today["wellbeing"]["state"] == "usual"  # SD 0 and no change: inside the threshold
     assert today["jump"]["state"] == "learning" and today["sleep"]["sleep"]["hours"] == 8
     assert result["days"][1]["status"] in ("normal", "good", "take_care")
     assert "not medical advice" in result["note"]
+
+
+def test_week_mean_rule_for_heart_rate_and_hrv():
+    base = r.baseline([49, 50, 51] * 9)  # mean 50, SD 0.83: SWC 0.42
+    error = 1.2
+    # One high morning in a normal week: the single-day rule calls it worse, the week mean does not.
+    week = [50, 51, 49, 50, 51, 49, 52]
+    assert r.compare(52, base, error, higher_is_better=False)["state"] == "worse"
+    usual = r.compare_week(52, week, base, error, higher_is_better=False)
+    assert usual["state"] == "usual" and usual["threshold"] == pytest.approx(max(0.5 * base["sd"], error / 7 ** 0.5))
+    assert r.compare_week(53, [53] * 7, base, error, higher_is_better=False)["state"] == "worse"
+    assert r.compare_week(53, [53, 53], base, error, higher_is_better=False)["state"] == "learning"  # under 3 values
+    assert r.compare_week(None, [53] * 6, base, error)["state"] == "missing"  # today's value is required
+    assert r.compare_week(53, [53] * 7, r.baseline([50] * 3), error)["state"] == "learning"
+
+
+def test_load_blocks():
+    assert r.load_blocks([100] * 10) == {"acute": {"days": 7, "load": 700}, "chronic": {"days": 28, "weekly_load": None}}
+    assert r.load_blocks([0] * 20 + [100] * 8)["chronic"]["weekly_load"] == 200
+    assert r.load_blocks([])["acute"]["load"] == 0
+
+
+def test_one_high_morning_no_longer_flags_heart_rate(api, auth):
+    client, path = api
+    athlete, headers = make_athlete(client, auth)
+    insert_checkins(path, athlete, range(1, 28), resting_hr=lambda n: 50 + (n % 3) - 1)
+    put_checkin(client, headers, 0, resting_hr=52)
+    resting = factors(client.get(f"/api/athletes/{athlete}/readiness?days=1", headers=headers).json())["resting_hr"]
+    assert resting["state"] == "usual" and resting["today"] == 52 and resting["week_values"] == 7
+    # A whole week higher is a real change.
+    insert_checkins(path, athlete, range(28, 40), resting_hr=50)
+    with main.database(path) as db:
+        db.execute("UPDATE checkins SET resting_hr = 54 WHERE athlete_id = ? AND day >= ?", (athlete, day(-6)))
+    resting = factors(client.get(f"/api/athletes/{athlete}/readiness?days=1", headers=headers).json())["resting_hr"]
+    assert resting["state"] == "worse" and resting["value"] == pytest.approx(54)
+
+
+def test_too_few_values_this_week_is_still_learning(api, auth):
+    client, path = api
+    athlete, headers = make_athlete(client, auth)
+    insert_checkins(path, athlete, range(8, 20), hrv_rmssd=80)
+    put_checkin(client, headers, 0, hrv_rmssd=40)
+    hrv = factors(client.get(f"/api/athletes/{athlete}/readiness?days=1", headers=headers).json())["hrv"]
+    assert hrv["baseline"]["ready"] and hrv["state"] == "learning" and (hrv["week_values"], hrv["week_needed"]) == (1, 3)
 
 
 def test_new_athlete_is_still_learning(api, auth):
@@ -210,6 +257,8 @@ def test_sessions_per_day_with_types_idempotent_and_scoped(api, auth):
     load = client.get(f"/api/athletes/{athlete}/load?days=7", headers=headers).json()
     assert load["daily"][-1] == {"day": day(), "load": 420 + 720, "sessions": 2}
     assert load["acute_chronic"]["ready"] is False and load["acute_chronic"]["days"] == 1
+    assert load["acute_load"] == {"days": 7, "load": 1140}
+    assert load["chronic_load"] == {"days": 28, "weekly_load": None}  # needs 28 days
     assert client.get(f"/api/training-sessions?athlete_id={athlete}", headers=auth("coach2")).status_code == 404
     assert client.get(f"/api/athletes/{athlete}/load", headers=auth("coach2")).status_code == 404
     assert client.get(f"/api/athletes/{athlete}/readiness", headers=auth("athlete1")).status_code == 403
@@ -246,6 +295,10 @@ def test_load_ratio_monotony_and_strain_over_28_days(api, auth):
     ratio = load["acute_chronic"]
     assert ratio["ready"] and ratio["days"] == 28 and ratio["ratio"] == pytest.approx(450 * 29 / 9900)
     assert ratio["band"] == "above" and len(load["daily"]) == 14 and len(load["weeks"]) == 2
+    # Shown first: this week's total and the usual weekly total over 28 days (27 x 300 + 900 = 9000, / 4).
+    assert load["acute_load"] == {"days": 7, "load": 2700}
+    assert load["chronic_load"] == {"days": 28, "weekly_load": 2250}
+    assert "secondary" in load["note"]
     latest = load["weeks"][-1]
     week = [300] * 6 + [900]  # mean 385.71, SD 226.78
     assert latest["load"] == 2700 and latest["monotony"] == pytest.approx(r.monotony(week))

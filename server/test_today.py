@@ -42,7 +42,7 @@ def test_sections_equal_the_separate_routes(api, auth):
     assert client.post("/api/food-logs", headers=headers,
                        json={"day": day(), "meal": "lunch", "food_id": food, "grams": 150}).status_code == 201
     jump(client, headers, 30)
-    jump(client, headers, 40)  # a first value is not a record yet; beating it is (SPEC 8)
+    jump(client, headers, 42, flight=410)  # a first value is not a record yet; beating it beyond MDC95 is (SPEC 8)
     result = today(client, headers)
     route = client.get(f"/api/athletes/{athlete}/readiness", params={"days": 1, "day": day()}, headers=headers).json()
     assert result["readiness"]["factors"] == route["days"][0]["factors"]
@@ -52,13 +52,14 @@ def test_sections_equal_the_separate_routes(api, auth):
     assert [s["load"] for s in result["training"]["sessions"]] == [420] and result["training"]["total_load"] == 420
     load = client.get(f"/api/athletes/{athlete}/load", params={"days": 7, "day": day()}, headers=headers).json()
     assert result["training"]["acute_chronic"]["ratio"] == load["acute_chronic"]["ratio"]
+    assert (result["training"]["acute_load"], result["training"]["chronic_load"]) == (load["acute_load"], load["chronic_load"])
     summary = client.get(f"/api/athletes/{athlete}/nutrition/summary", params={"day": day()}, headers=headers).json()
     assert result["nutrition"]["eaten"]["kcal"] == summary["totals"]["kcal"] > 0 and result["nutrition"]["logs"] == 1
     assert result["nutrition"]["target"] == summary["target"]
     weights = client.get(f"/api/athletes/{athlete}/weights", headers=headers).json()
     assert result["weight"]["kg"] == 70.5 and result["weight"]["day"] == day()
     assert result["weight"]["trend_kg"] == (weights["trend"][-1]["trend_kg"] if weights["trend"] else None)
-    assert [(r["measure"], r["value"], r["unit"]) for r in result["records"]][:1] == [("jump_height", 40, "cm")]
+    assert [(r["measure"], r["value"], r["unit"]) for r in result["records"]][:1] == [("jump_height", 42, "cm")]
 
 
 def test_plan_lists_todays_items_bounded_and_marks_a_logged_workout(api, auth):

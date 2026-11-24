@@ -26,16 +26,19 @@ not as a medical measurement.
 
 The strongest single asset is the validation: most school projects cannot say how wrong they are. Ours can.
 
-## Honest state of accuracy (2026-11-17, nine lab subjects)
+## Honest state of accuracy (2026-11-24, nine lab subjects)
 
 - Detection (rules plus learned cross-check, each subject held out): from the front 64 of 91 jumps get a
   number without a warning and none of them is wrong; the 7 wrong ones carry a warning; 20 get suggested
-  frames. From the side 41 without a warning, 3 of them wrong.
-- Flight time: front mean error 32 ms (about one frame at 33 fps); side flights are about 87 ms long
-  because the pose lags at landing.
+  frames. From the side, with the side policy of 18 November, 59.8 of 91 get a number without a warning and
+  1.6 of them are wrong (mean of five seeds; slightly optimistic, the policy was chosen on the same check).
+- Flight time: front mean error 32 ms (about one frame at 33 fps). From the side the rules alone run about
+  87 ms long because the pose lags at landing; with the learned landing edges 58 of 60 automatic side results
+  are within two frames (61 ms).
 - Knee flexion: front RMSE 17.3 degrees with the range compressed (slope 0.65); side, image plane, 10.0.
 - A server-side model (RTMPose-x) reaches about 5 degrees from the side; it does not help from the front.
-- On 1000 public webcam clips: a flight is found in 45 to 60 percent of jump clips; false alarms 3 to 7 percent.
+- On the held-out public webcam clips (100 per class): an automatic flight in 34 to 64 percent of jump clips;
+  false alarms 7 and 1 percent on the two no-jump classes.
 
 These numbers decide the wording of the product: "change against your own baseline", never "risk".
 
@@ -54,7 +57,7 @@ Status key: done, running, staged (built but not reviewed or not deployed), todo
 - done: auth, roles, jumps, delete-my-data, validation, rate limit, coach dashboard v1
 - done: consent record per athlete; baseline and change summary; CSV and JSON export; audit log; club and user administration; OpenAPI page
 - done: club platform — groups, sessions with calendar export and session report, daily wellbeing check-in, feedback threads, live events stream, idempotent uploads
-- done: training, nutrition, form and assistant modules (SPEC section 6) — exercise form check (`POST /api/form`, numbers only); training plans with set logs, weekly volume and a double-progression suggestion shown but never auto-applied; nutrition with food/weight logs, own weight-trend model, adaptive expenditure estimate and a weekly target program with guardrails (1500 kcal floor, under-18 rule); on-prem AI assistant that proposes actions as the logged-in user and writes only after an explicit confirm. No medical or diet-prescription wording
+- done: training, nutrition, form and assistant modules (SPEC section 6) — exercise form check (`POST /api/form`, numbers only); training plans with set logs, weekly volume and a double-progression suggestion shown but never auto-applied; nutrition with food/weight logs, own weight-trend model, adaptive expenditure estimate and a weekly target program with guardrails (1500 kcal floor, under-18 rule); AI assistant on any OpenAI-compatible model (local or cloud, with a fallback chain) that proposes actions as the logged-in user and writes only after an explicit confirm. No medical or diet-prescription wording
 
 ### C. Coach and admin web dashboard
 - done: team overview with change against baseline, athlete page with trend charts, admin page, Bulgarian and English, phone-friendly layout

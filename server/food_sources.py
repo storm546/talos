@@ -5,6 +5,9 @@ The catalogue (`data/common_catalog.sqlite`) is USDA FoodData Central data (SR L
 FNDDS), CC0; its `metadata` table names the source and licence. It is opened read-only.
 """
 
+import csv
+from collections import Counter
+from functools import cache
 import json
 import math
 import re
@@ -15,6 +18,8 @@ from pathlib import Path
 import httpx
 
 CATALOG = Path(__file__).with_name("data") / "common_catalog.sqlite"
+CATALOG_BG = Path(__file__).with_name("data") / "catalog_bg.csv"  # Bulgarian names for common catalogue foods
+LOCAL_FOODS = Path(__file__).with_name("data") / "foods.csv"
 CATALOG_ID = re.compile(r"(usda_sr_legacy|usda_foundation|usda_fndds):([0-9]{1,12})")
 TOKEN = re.compile(r"[^\W_]+")
 OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
@@ -65,22 +70,47 @@ def _fold(text):
     return "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
 
 
+def tokens_of(text):
+    return [_fold(t) for t in TOKEN.findall(text.casefold())]
+
+
 def heading_rank(name, tokens):
-    """Prefer foods named by the query ("Apples") over foods merely containing it; ordering only."""
+    """Prefer foods named by the query ("Apples", "Домати") over foods merely containing it; ordering only. A first
+    word up to two letters longer than a query word (plural or Bulgarian ending) counts as the same word."""
     word = TOKEN.search(name.casefold())
     if not word:
         return 2
     first = _fold(word.group())
-    if any(first in (token, token + "s", token + "es") for token in tokens):
+    if any(first.startswith(token) and len(first) - len(token) <= 2 for token in tokens):
         return 0
     return 1 if any(first.startswith(token) for token in tokens) else 2
+
+
+def name_rank(names, tokens):
+    """Sort key for a search hit: best heading rank over its names, then the shorter (more generic) name."""
+    return min(heading_rank(name, tokens) for name in names), min(len(name) for name in names)
+
+
+def matches(names, tokens):
+    """Every query word is the start of a word in one of the names (accents and case ignored)."""
+    words = [word for name in names for word in tokens_of(name)]
+    return all(any(word.startswith(token) for word in words) for token in tokens)
+
+
+@cache
+def bulgarian_names():
+    """{(source, fdc_id): Bulgarian name} from data/catalog_bg.csv."""
+    with CATALOG_BG.open(encoding="utf-8") as handle:
+        rows = csv.DictReader(line for line in handle if not line.startswith("#"))
+        return {("usda_" + row["source"].removeprefix("usda_"), int(row["fdc_id"])): row["name_bg"] for row in rows}
 
 
 def catalog_food(row):
     """A catalogue row in the shape of a JumpScan food (no id until it is materialised)."""
     per100, micro = json.loads(row["per100g"]), json.loads(row["micronutrients"])
+    name_bg = bulgarian_names().get((row["source"], row["fdc_id"]), row["name"])
     return {"id": None, "catalog_id": f'{row["source"]}:{row["fdc_id"]}', "fdc_id": row["fdc_id"],
-            "name_bg": row["name"][:100], "name_en": row["name"][:200], "kcal": per100["calories"],
+            "name_bg": name_bg[:100], "name_en": row["name"][:200], "kcal": per100["calories"],
             "protein_g": per100["protein"], "carbs_g": per100["carbs"], "fat_g": per100["fat"],
             "fibre_g": micro.get("fiber", 0), "nutrients": micro,
             "servings": [{"label": s["name"], "grams": s["grams"]} for s in json.loads(row["servings"])],
@@ -89,16 +119,94 @@ def catalog_food(row):
 
 
 def catalog_search(query, limit=20):
-    tokens = [_fold(t) for t in TOKEN.findall(query.casefold())[:10]]
+    """Catalogue foods whose Bulgarian name (data/catalog_bg.csv) matches every query word first, then English
+    full-text matches (FTS5 prefix tokens, heading rank, bm25)."""
+    tokens = tokens_of(query)[:10]
     if len(query.strip()) < 2 or not tokens:
         return []
+    limit = max(1, min(limit, 50))
+    named = sorted((name_rank([name], tokens), key) for key, name in bulgarian_names().items()
+                   if matches([name], tokens))[:limit]
     with _connect() as db:
         db.create_function("heading_rank", 1, lambda name: heading_rank(name, tokens))
-        rows = db.execute(
+        rows = [db.execute("SELECT * FROM foods WHERE source = ? AND fdc_id = ?", key).fetchone() for _, key in named]
+        rows += db.execute(
             "SELECT foods.* FROM foods_fts JOIN foods ON foods.fdc_id = foods_fts.rowid WHERE foods_fts MATCH ? "
             "ORDER BY heading_rank(foods.name), bm25(foods_fts), foods.name, foods.fdc_id LIMIT ?",
-            (" AND ".join(f'"{t}"*' for t in tokens), max(1, min(limit, 50)))).fetchall()
-    return [catalog_food(row) for row in rows]
+            (" AND ".join(f'"{t}"*' for t in tokens), limit)).fetchall()
+    found = {}
+    for row in rows:
+        if row is not None:
+            found.setdefault(row["fdc_id"], row)
+    return [catalog_food(row) for row in list(found.values())[:limit]]
+
+
+# --- typo tolerance ---
+
+def trigrams(word):
+    padded = f"  {word} "
+    return {padded[i:i + 3] for i in range(len(padded) - 2)}
+
+
+def trigram_similarity(a, b):
+    """Shared trigrams over all trigrams of the two padded words (as in PostgreSQL pg_trgm)."""
+    x, y = trigrams(a), trigrams(b)
+    return len(x & y) / len(x | y)
+
+
+def edit_distance(a, b, limit):
+    """Optimal string alignment distance (a swap of two neighbouring letters is one edit); limit + 1 when above."""
+    if abs(len(a) - len(b)) > limit:
+        return limit + 1
+    before, row = None, list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        current = [i]
+        for j, cb in enumerate(b, 1):
+            value = min(row[j] + 1, current[j - 1] + 1, row[j - 1] + (ca != cb))
+            if before is not None and i > 1 and j > 1 and ca == b[j - 2] and a[i - 2] == cb:
+                value = min(value, before[j - 2] + 1)
+            current.append(value)
+        before, row = row, current
+        if min(row) > limit:
+            return limit + 1
+    return row[-1]
+
+
+@cache
+def vocabulary():
+    """Word counts over every food name the search knows: the bundled food list (both languages), the catalogue's
+    Bulgarian names and its English names."""
+    words = Counter()
+    with LOCAL_FOODS.open(encoding="utf-8") as handle:
+        for row in csv.DictReader(line for line in handle if not line.startswith("#")):
+            words.update(tokens_of(row["name_bg"]) + tokens_of(row["name_en"]))
+    for name in bulgarian_names().values():
+        words.update(tokens_of(name))
+    with _connect() as db:
+        for (name,) in db.execute("SELECT name FROM foods"):
+            words.update(tokens_of(name))
+    return words
+
+
+def known(token):
+    return any(word.startswith(token) for word in vocabulary())
+
+
+def correct(query):
+    """The query with each unknown word of at least four letters replaced by the closest known word (one edit, two
+    from eight letters on; ties go to the higher trigram similarity, then the more common word), or None when
+    nothing changed."""
+    words, changed = [], False
+    for token in tokens_of(query)[:10]:
+        if len(token) >= 4 and not known(token):
+            limit = 1 if len(token) < 8 else 2
+            scored = [(distance, -trigram_similarity(token, word), -count, word)
+                      for word, count in vocabulary().items()
+                      if (distance := edit_distance(token, word, limit)) <= limit]
+            if scored:
+                token, changed = min(scored)[3], True
+        words.append(token)
+    return " ".join(words) if changed else None
 
 
 def catalog_get(catalog_id):

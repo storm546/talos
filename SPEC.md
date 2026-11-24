@@ -615,7 +615,7 @@ measurements remain null for other exercises. Holds have empty `repetitions`, ze
   expired proposals return 409 while retained. Each applied action adds an `assistant_action` audit entry
   with the proposal ID and tool name, not the action arguments or body.
 - User text and tool output are untrusted data; prompt instructions do not grant permissions. Tool results
-  are capped at 8 KiB each, with up to four tool rounds and four calls per round. The system prompt tells
+  are capped at 8 KiB each, with up to six tool rounds and four calls per round. The system prompt tells
   the model to match Bulgarian or English and refer medical advice, diagnoses, and diet prescriptions to
   the coach. All assistant endpoints share a rate limit of 20 requests per ten minutes per user.
 - Only user and final assistant text are stored as conversation turns, not the raw tool transcript. Turns
@@ -987,6 +987,23 @@ food, training, check-in and reading questions (all tools when unsure), and SPEC
 Food search: Bulgarian names for the most common catalogue foods and a typo-tolerant fallback (trigram similarity).
 Expenditure: an uncertainty band from the weight trend's own error. Documents: the assistant is described as an
 OpenAI-compatible model (local or cloud), and outdated figures in `docs/validacia.md`/ROADMAP are corrected.
+
+6A clarifications (2026-11-24, as built): the records table lives in `server/records_api.py` (`SMALLEST_CHANGE`,
+MDC95 from the 6B repeatability analysis in `core/VALIDATION.md`: front 11.3 cm and 96.6 ms, side 5.1 cm and 58.2 ms;
+the same for every frame-rate class until faster clips are measured). Frame-rate classes are the nearest of 30, 60, 120,
+240 and 480 fps; view is side when `single_leg_view` is present. Record entries for jumps add `view`, `fps_class`
+and `margin`; the leaderboard takes `view` (default `front`), ranks each frame-rate class separately and adds
+`fps_class` per row and `smallest_change`. HRV and resting heart rate need today's value and at least three values in the
+7 days ending today (else "learning"), with threshold max(0.5 x SD, TE / sqrt n); factor `value` is the 7-day mean
+and `today` the day's own value. The load response adds `acute_load` (7-day total) and `chronic_load` (mean weekly
+total over 28 days, null before 28 days of history); the team board adds `load_acute` and `load_chronic`. The
+fallback chain also moves on after a connection failure, and stays on the model that answered for the rest of the
+turn; a 4xx other than 429 or a malformed reply does not fall back. The router reads the message and the previous
+user turn. Food search matches every query word against word starts in either name; Bulgarian catalogue names are
+in `server/data/catalog_bg.csv`; the typo fallback runs only when nothing matches (one edit, two from eight letters,
+trigram similarity breaking ties). The expenditure band is `uncertainty_kcal` = 7700 x `sigma_kg` / 14 on every
+expenditure row, kept through holding days. Balance measurements take the optional 6B fields `sway_velocity_pct` and
+`noise_floor_pct` (0-1000 % of leg length per second, null allowed).
 
 **6B core, app and kit.** Slow-motion guard: the app reads the clip's capture frame rate and refuses a clip whose
 capture rate differs from its timestamp rate by more than 3%, with a clear message (no rescaling until an A54 test

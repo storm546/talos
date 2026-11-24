@@ -73,6 +73,7 @@ const dictionary = {
     fibre:'Фибри (г)', dailyTotals:'Общо за деня', nutritionTarget:'Дневна цел', remaining:'Остава', perMeal:'По хранения',
     weeklyAverage:'Средно за 7 дни', bodyweight:'Телесно тегло', trendLine:'Тренд', weightKg:'Тегло (кг)',
     expenditure:'Разход на енергия', expenditureNote:'Адаптивна оценка от Вашите записи, не измерване.',
+    expenditureBand:'Пунктир: ± грешката на тренда на теглото (само от страна на теглото, не от записите на храната). Сега: ', kcalPerDay:'ккал/ден',
     programTitle:'Програма', goal:'Цел', maintain:'Поддържане', lose:'Сваляне', gain:'Качване', rate:'Темп (кг/седмица)',
     recommended:'Препоръчано', appliedBadge:'Приложено', notAppliedBadge:'Не е приложено', estimateKcal:'Оценен разход',
     proteinRange:'Препоръчан белтък', setTarget:'Задайте цел', setProgram:'Задайте цел и темп', setGoal:'Задайте цел за тегло', dayComplete:'Отбележете деня завършен',
@@ -167,6 +168,7 @@ const dictionary = {
     fibre:'Fibre (g)', dailyTotals:'Daily totals', nutritionTarget:'Daily target', remaining:'Remaining', perMeal:'By meal',
     weeklyAverage:'7-day average', bodyweight:'Bodyweight', trendLine:'Trend', weightKg:'Weight (kg)',
     expenditure:'Energy expenditure', expenditureNote:'An adaptive estimate from your own logs, not a measurement.',
+    expenditureBand:'Dashed: ± the weight trend’s own error (the weight side only, not food logging errors). Now: ', kcalPerDay:'kcal/day',
     programTitle:'Program', goal:'Goal', maintain:'Maintain', lose:'Lose', gain:'Gain', rate:'Rate (kg/week)',
     recommended:'Recommended', appliedBadge:'Applied', notAppliedBadge:'Not applied', estimateKcal:'Estimated expenditure',
     proteinRange:'Protein range', setTarget:'Set target', setProgram:'Set goal and rate', setGoal:'Set weight goal', dayComplete:'Mark day complete',
@@ -586,7 +588,8 @@ function today(content) {
     if (f.key === 'adjustment') { readiness.append(line(t('rd_adjustment'), t('adj_' + f.value) + ' · ' + t('adjMode_' + f.mode))); continue; }
     const state_ = {better:'rdBetter', worse:'rdWorse'}[f.state];
     readiness.append(line(t('rd_' + f.key), (f.key === 'hrv' ? formatNumber(Math.exp(f.value)) + ' ms' : formatNumber(f.value) +
-      ({points:'', bpm:state.language==='bg'?' уд/мин':' bpm', cm:state.language==='bg'?' см':' cm', score:''}[f.unit] ?? '')) + (state_ ? ' · ' + t(state_).replace(/: $/, '') : '')));
+      ({points:'', bpm:state.language==='bg'?' уд/мин':' bpm', cm:state.language==='bg'?' см':' cm', score:''}[f.unit] ?? '')) +
+      ('week_values' in f ? ' · ' + t('rdWeekMean') : '') + (state_ ? ' · ' + t(state_).replace(/: $/, '') : '')));
   }
   const p = data.plan;
   const plan = overviewCard(t('todayPlan'), p?.adjusted === 'rest' ? t('adjRestDay') : p?.items.length ? p.items[0].plan : null,
@@ -614,8 +617,9 @@ function today(content) {
   }
   const tr = data.training;
   const training = overviewCard(t('tdLoad'), tr ? formatNumber(tr.total_load) : null, tr ? t('tdLoadUnit') + ' · ' + t('tdSessions') + tr.sessions.length : t('tdNoData'), 'training');
-  if (tr) training.append(line(t('rdLoad'), tr.acute_chronic.still_learning || tr.acute_chronic.band == null ? t('rdLoadLearning')
-    : format(tr.acute_chronic.ratio, 'knee_ankle_ratio') + ' · ' + t('rd_' + tr.acute_chronic.band)));
+  if (tr) training.append(line(t('rdLoad'), formatNumber(tr.acute_load.load) + ' / ' +
+    (tr.chronic_load.weekly_load == null ? t('rdLoadLearning') : formatNumber(tr.chronic_load.weekly_load) +
+      (tr.acute_chronic.band == null ? '' : ' · ' + t('rd_' + tr.acute_chronic.band)))));
   const w = data.weight;
   const weight = overviewCard(t('tdWeight'), w ? format(w.kg) : null, w ? t('recKg') + ' · ' + date(w.day) +
     (w.trend_kg == null ? '' : ' · ' + t('tdTrend') + format(w.trend_kg) + ' ' + t('recKg')) : t('tdWeightEmpty'), 'profile');
@@ -1547,8 +1551,13 @@ function weightChart(data) {
 function expenditureChart(exp) {
   const labels = exp.history.map(h => date(h.date));
   const data = exp.history.map((h, i) => ({i, v: h.value_kcal}));
-  const fig = svgChart(t('expenditure'), labels, [{type:'line', cls:'series-left', data}, {type:'dots', cls:'chart-dot', data}]);
+  const band = sign => ({type:'line', cls:'baseline-line', data:exp.history.map((h, i) =>
+    ({i, v: h.uncertainty_kcal == null ? null : h.value_kcal + sign * h.uncertainty_kcal}))});
+  const fig = svgChart(t('expenditure'), labels, [band(1), band(-1), {type:'line', cls:'series-left', data}, {type:'dots', cls:'chart-dot', data}]);
   fig.append(node('p', t('expenditureNote'), 'legend'));
+  const now = exp.expenditure;
+  if (now && now.uncertainty_kcal != null) fig.append(node('p', t('expenditureBand') + formatNumber(Math.round(now.value_kcal)) +
+    ' ± ' + formatNumber(Math.round(now.uncertainty_kcal)) + ' ' + t('kcalPerDay'), 'legend expenditure-band'));
   return fig;
 }
 function analyticsChart(a) {

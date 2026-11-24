@@ -318,6 +318,21 @@ def test_adaptive_expenditure_series_matches_the_reference_to_1e_9(original_coac
     assert updating >= 10  # the real stepping path (trend + 150/7 cap) is exercised, not only holds
 
 
+def test_expenditure_band_comes_from_the_weight_trend_error():
+    seed_date = date(2026, 1, 15)
+    as_of = (seed_date + timedelta(days=40)).isoformat()
+    _, snaps, _, weights = _synthetic_history(seed_date, 18, 40)
+    result = co.compute(seed_date.isoformat(), 2550.0, "updating", snaps, weights, as_of)
+    assert co.band_kcal(0.45) == pytest.approx(7700 * 0.45 / 14)  # 247.5 kcal per day
+    history = result["history"]
+    assert all(row["uncertainty_kcal"] is not None for row in history)  # holding days keep the last update's band
+    updated = [row for row in history if row["status"] == "updating"]
+    assert updated and all(co.band_kcal(0.45) <= row["uncertainty_kcal"] <= co.band_kcal(0.85) for row in updated)
+    assert result["expenditure"]["uncertainty_kcal"] == history[-1]["uncertainty_kcal"]
+    held = co.compute(seed_date.isoformat(), 2550.0, "holding", snaps, weights, as_of)
+    assert held["expenditure"]["uncertainty_kcal"] is None  # never updated: no band
+
+
 def test_weekly_program_targets_match_the_reference_to_1e_9(original_coaching):
     ref = original_coaching
     seed_date, seed_kcal, mode = date(2026, 1, 15), 2550.0, "updating"

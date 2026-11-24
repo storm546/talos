@@ -84,6 +84,10 @@ class Balance(Base):
     leg: Literal["L", "R"]
     stance_ms: int = Field(ge=0, le=60_000)
     sway_pct: float | None = Field(ge=0, le=100)
+    # Wave 6B (SPEC 10.4): hip path per second over the stance and over a still two-footed window, in % of leg
+    # length per second; optional so older apps keep working.
+    sway_velocity_pct: float | None = Field(default=None, ge=0, le=1000)
+    noise_floor_pct: float | None = Field(default=None, ge=0, le=1000)
     ended_by: Literal["touch_down", "sway", "time_limit", "stopped", "lost_tracking"]
     fps: Fps
     quality: Unit

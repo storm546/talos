@@ -1135,18 +1135,33 @@ def install(app, h):
                    limit: Annotated[int, Query(ge=1, le=500)] = 50,
                    offset: Offset = 0,
                    user=Depends(current_user), db=Depends(get_db)):
-        """Existing foods first, then (for a search with room left on the page) catalogue foods not yet here."""
+        """Existing foods first, then (for a search with room left on the page) catalogue foods not yet here.
+
+        A search matches every query word against the start of a word in either name, ranks foods named by the query
+        first, and when nothing matches it searches the closest known spelling of each unknown word (SPEC 10.4).
+        """
         clause, params = visible_food_sql(user)
-        like = None
-        if q:
-            escaped = q.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            like = f"%{escaped}%"
-        found = [food_row(r) for r in db.execute(
-            f"SELECT * FROM foods WHERE ({clause}) AND (? IS NULL OR casefold(name_bg) LIKE ? ESCAPE '\\' "
-            "OR casefold(name_en) LIKE ? ESCAPE '\\') ORDER BY name_bg, id LIMIT ? OFFSET ?",
-            (*params, like, like, like, limit, offset))]
-        if q and len(found) < limit:
-            hits = fs.catalog_search(q, limit - len(found))
+        if not q:
+            return [food_row(r) for r in db.execute(f"SELECT * FROM foods WHERE ({clause}) ORDER BY name_bg, id "
+                                                    "LIMIT ? OFFSET ?", (*params, limit, offset))]
+        visible = db.execute(f"SELECT * FROM foods WHERE ({clause}) ORDER BY name_bg, id", params).fetchall()
+        found, hits = {}, {}
+
+        def search(query):
+            tokens = fs.tokens_of(query)[:10]
+            if tokens:
+                for *_, r in sorted((fs.name_rank([r["name_bg"], r["name_en"]], tokens), index, r)
+                                    for index, r in enumerate(visible) if fs.matches([r["name_bg"], r["name_en"]], tokens)):
+                    found.setdefault(r["id"], r)
+                for hit in fs.catalog_search(query, 50):
+                    hits.setdefault(hit["catalog_id"], hit)
+
+        search(q)
+        if not found and not hits and (fixed := fs.correct(q)):
+            search(fixed)
+        found = [food_row(r) for r in list(found.values())[offset:offset + limit]]
+        if len(found) < limit and hits:
+            hits = list(hits.values())[:limit - len(found)]
             here = {r[0] for r in db.execute(
                 f"SELECT catalog_id FROM foods WHERE catalog_id IN ({','.join('?' * len(hits))})",
                 [h["catalog_id"] for h in hits])} | {r[0] for r in db.execute(

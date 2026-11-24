@@ -4,41 +4,41 @@ Object.assign(dictionary.bg, {
   readiness:'Сутрешна проверка (скок от място)',
   rdBoard:'Готовност', rdEyebrow:'Табло на отбора', rdCheckedIn:'Направили отчет днес: ',
   rdAthlete:'Спортист', rdCheckin:'Отчет', rdStatus:'Готовност', rdWellbeing:'Самочувствие', rdJump:'Скок спрямо нормата',
-  rdLoad:'Натоварване (7/28 дни)', rdAction:'Напомняне',
+  rdLoad:'Натоварване: 7 дни / обичайна седмица', rdAction:'Напомняне',
   rd_good:'Добре', rd_normal:'Нормално', rd_take_care:'Внимание', rd_still_learning:'Още се учи', rd_no_data:'Няма данни',
   rdDone:'Направен', rdMissing:'Няма отчет', rdNudged:'Напомнено днес', rdNudge:'Напомни', rdNudgeAll:'Напомни на всички без отчет',
   rdNudgeSent:'Напомнянето е изпратено.', rdNudgeNone:'Няма на кого да се напомни.',
   rd_wellbeing:'самочувствие', rd_resting_hr:'пулс в покой', rd_hrv:'вариабилност на пулса', rd_jump:'скок', rd_sleep:'сън',
   rdWorse:'По-неблагоприятно от обичайното: ', rdBetter:'По-добре от обичайното: ', rdLearning:'Още се събират данни: ',
   rdOf:' от ', rdDays:' дни', rd_well_above:'много над обичайното', rd_above:'над обичайното', rd_similar:'както обикновено',
-  rd_below:'под обичайното', rdLoadLearning:'нужни са 28 дни', rdExcluded:' несигурни не се броят',
+  rd_below:'под обичайното', rdLoadLearning:'нужни са 28 дни', rdRatio:'съотношение 7/28 дни ', rdWeekMean:'средно за 7 дни', rdExcluded:' несигурни не се броят',
   rdGroup:'Група', rdAllGroups:'Целият клуб', rdSort:'Подреждане', rdSortStatus:'По готовност', rdSortName:'По име',
   rdSortLoad:'По натоварване', rdSortJump:'По скок',
   rdDigest:'Сутрешен преглед', rdDigestEmpty:'Няма какво да се отбележи тази сутрин.',
   rdPhrase:'Оформи с локалния модел', rdPhrased:'Оформено от локалния модел само от фактите по-долу.',
   rdNoModel:'Локалният модел не е наличен; показан е списъкът с факти.', rdFacts:'Факти',
   rdNot100:'Не е на 100%', rdFact_missing_checkin:'Няма отчет: ', rdFact_below_usual:'Под обичайното: ', rdFact_load_spike:'Натоварване над обичайното: ',
-  rdNote:'Информация за спортиста и треньора, не медицински съвет. Всеки показател се сравнява с последните 28 дни на самия спортист (поне 7 стойности); промяна се отчита само над 0,5 × стандартното отклонение и типичната грешка. Сънят се сравнява с нужните часове за възрастта и с редовността. Натоварването е RPE × минути за всяка тренировка; съотношението 7/28 дни описва само сравнение с обичайното, не е прогноза.'
+  rdNote:'Информация за спортиста и треньора, не медицински съвет. Всеки показател се сравнява с последните 28 дни на самия спортист (поне 7 стойности); промяна се отчита само над 0,5 × стандартното отклонение и типичната грешка. За пулса в покой и вариабилността на пулса се сравнява средното за последните 7 дни (днешната стойност и поне 3 общо), за да не решава една сутрин. Сънят се сравнява с нужните часове за възрастта и с редовността. Натоварването е RPE × минути за всяка тренировка; показани са сборът за последните 7 дни и обичайната седмица за последните 28 дни. Съотношението 7/28 дни е второстепенно: само сравнение с обичайното, не прогноза и не оценка на риск, а ползата му е спорна в литературата.'
 });
 Object.assign(dictionary.en, {
   readiness:'Morning readiness check (countermovement jump)',
   rdBoard:'Readiness', rdEyebrow:'Team board', rdCheckedIn:'Checked in today: ',
   rdAthlete:'Athlete', rdCheckin:'Check-in', rdStatus:'Readiness', rdWellbeing:'Wellbeing', rdJump:'Jump vs usual',
-  rdLoad:'Load (7/28 days)', rdAction:'Reminder',
+  rdLoad:'Load: 7 days / usual week', rdAction:'Reminder',
   rd_good:'Good', rd_normal:'Normal', rd_take_care:'Take care', rd_still_learning:'Still learning', rd_no_data:'No data',
   rdDone:'Done', rdMissing:'Not checked in', rdNudged:'Nudged today', rdNudge:'Nudge', rdNudgeAll:'Nudge everyone not checked in',
   rdNudgeSent:'Reminder sent.', rdNudgeNone:'Nobody to remind.',
   rd_wellbeing:'wellbeing', rd_resting_hr:'resting heart rate', rd_hrv:'heart rate variability', rd_jump:'jump', rd_sleep:'sleep',
   rdWorse:'Less favourable than usual: ', rdBetter:'Better than usual: ', rdLearning:'Still collecting: ',
   rdOf:' of ', rdDays:' days', rd_well_above:'well above usual', rd_above:'above usual', rd_similar:'similar to usual',
-  rd_below:'below usual', rdLoadLearning:'needs 28 days', rdExcluded:' uncertain not counted',
+  rd_below:'below usual', rdLoadLearning:'needs 28 days', rdRatio:'7/28-day ratio ', rdWeekMean:'7-day mean', rdExcluded:' uncertain not counted',
   rdGroup:'Group', rdAllGroups:'Whole club', rdSort:'Sort', rdSortStatus:'By readiness', rdSortName:'By name',
   rdSortLoad:'By load', rdSortJump:'By jump',
   rdDigest:'Morning digest', rdDigestEmpty:'Nothing to note this morning.',
   rdPhrase:'Phrase with the local model', rdPhrased:'Phrased by the local model from the facts below only.',
   rdNoModel:'The local model is not available; the list of facts is shown.', rdFacts:'Facts',
   rdNot100:'Not 100%', rdFact_missing_checkin:'Not checked in: ', rdFact_below_usual:'Below usual: ', rdFact_load_spike:'Load above usual: ',
-  rdNote:'Information for athlete and coach, not medical advice. Each measure is compared with the athlete’s own last 28 days (at least 7 values); a change counts only beyond 0.5 × SD and the typical error. Sleep is compared with the hours needed for the age and with regularity. Load is RPE × minutes per session; the 7/28-day ratio only compares with what is usual, it is not a forecast.'
+  rdNote:'Information for athlete and coach, not medical advice. Each measure is compared with the athlete’s own last 28 days (at least 7 values); a change counts only beyond 0.5 × SD and the typical error. Resting heart rate and heart rate variability compare the mean of the last 7 days (today’s value and at least 3 in all), so one morning does not decide. Sleep is compared with the hours needed for the age and with regularity. Load is RPE × minutes per session; shown are the last 7 days’ total and the usual week over the last 28 days. The 7/28-day ratio is secondary: it only compares with what is usual, it is not a forecast or a risk score, and its use is disputed in the literature.'
 });
 state.readiness = {group:'', sort:'status', phrased:false};
 const RD_ORDER = {take_care:0, normal:1, good:2, still_learning:3, no_data:4};
@@ -84,9 +84,10 @@ function jumpCell(jump) {
 }
 function loadCell(row) {
   const cell = node('td', null, 'num');
-  if (!row.load_ready) { cell.append(node('span', '—'), node('small', t('rdLoadLearning'))); return cell; }
-  cell.append(node('strong', row.load_ratio == null ? '—' : format(row.load_ratio, 'knee_ankle_ratio')));
+  cell.append(node('strong', formatNumber(row.load_acute) + ' / ' + (row.load_chronic == null ? '—' : formatNumber(row.load_chronic))));
+  if (!row.load_ready) { cell.append(node('small', t('rdLoadLearning'))); return cell; }
   if (row.load_band) cell.append(node('small', t('rd_' + row.load_band), ['above', 'well_above'].includes(row.load_band) ? 'below' : null));
+  if (row.load_ratio != null) cell.append(node('small', t('rdRatio') + format(row.load_ratio, 'knee_ankle_ratio'), 'muted'));
   return cell;
 }
 function digestPanel(digest) {
@@ -100,7 +101,7 @@ function digestPanel(digest) {
     const item = node('li');
     let detail = '';
     if (fact.kind === 'below_usual') detail = t('rd_' + fact.status) + (fact.factors.length ? ' · ' + factorNames(fact.factors) : '');
-    if (fact.kind === 'load_spike') detail = format(fact.ratio, 'knee_ankle_ratio') + ' · ' + t('rd_' + fact.band);
+    if (fact.kind === 'load_spike') detail = formatNumber(fact.acute_load) + ' / ' + formatNumber(fact.chronic_weekly_load) + ' · ' + t('rd_' + fact.band);
     if (fact.kind === 'missing_checkin' && fact.nudged) detail = t('rdNudged');
     item.append(node('span', t('rdFact_' + fact.kind) + fact.name), node('span', detail, 'muted'));
     list.append(item);
