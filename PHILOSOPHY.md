@@ -23,7 +23,9 @@ never enter the repo, because the entry is released under the GPL as the owner's
 Three promises hold for every tool:
 
 1. **The phone does the seeing.** Video, images, raw landmarks and GPS routes stay on the device. The
-   server stores numbers and the athlete's own words, nothing else.
+   server stores numbers and the athlete's own words, nothing else. The one exception is chosen by the user
+   each time: a food or pantry photo goes, after a one-time notice, to the club's language model for analysis
+   and is never stored (SPEC 10.6).
 2. **Numbers are honest.** Every number either has published validation behind it or says that it does
    not. "Still learning", "uncertain" and "experimental" are features, not failures.
 3. **The coach sees what matters.** Anything an athlete measures can reach the coach, with consent, without
@@ -164,6 +166,10 @@ server/  Python FastAPI + SQLite, coach dashboard             -> stores numbers,
 - Every write that matters is audited without storing private content in the audit row.
 - Athletes can export everything and delete everything (`DELETE /api/me/data`), and each new table joins
   both paths in the same change.
+- A food or pantry photo passes through the server to the vision model only when the user starts the
+  analysis, and is never written to disk, the database, logs or the audit (which records only
+  `food_photo_analysed`). Athletes under 18 cannot send one while the model is external. Store search uses a
+  position rounded to about 1 km, sent in the request body and not stored.
 - Tokens in headers, never in URLs. Rate limits on login and on the assistant. Secrets live in files with
   mode 600 outside the repo, never in code, logs, commits or chat.
 - The dashboard builds the DOM with `textContent`, under a strict Content Security Policy.

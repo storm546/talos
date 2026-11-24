@@ -1146,6 +1146,27 @@ the phone and is not stored.
 - One-time privacy notice before the first photo; EXIF stripped and image downscaled on the phone.
 - Bulgarian formal (Вие), brand "Talos", both themes.
 
+Clarifications from the implementation (2026-11-24):
+- Module `server/food_vision_api.py`. The vision model is called at `JUMPSCAN_LLM_URL` with `JUMPSCAN_LLM_KEY_FILE`, then
+  the `JUMPSCAN_LLM_FALLBACK` models; `JUMPSCAN_VISION_TIMEOUT` (default 90 s), `max_tokens` 4000, only
+  `message.content` is read. Recipe ideas use the same vision model with a text-only message.
+- The 2 MB limit is on the decoded JPEG (checked for the JPEG signature); the request body limit is raised to fit it
+  only on the photo and pantry routes. Routes return 503 when the model fails, 403 for a minor with an external model,
+  429 from the assistant's shared limit (20 requests in 10 minutes). The audit row has no detail.
+- Photo items also carry `label_bg` (the model's Bulgarian words), `food_id`, `catalog_id`, `name_bg`, `name_en`;
+  nutrition fields are null for an unmatched item. Pantry ingredients have the same reference fields.
+- Recipe ideas: `servings` 1-8 (default 2), `language` "bg"|"en" (default "bg"), optional `stores` as
+  `[{name, brand, distance_m}]` from the stores route. Each recipe has `name, minutes, servings, ingredients[{label,
+  name, grams, from_pantry, food_id|catalog_id}], steps, uses_from_pantry, missing, per_serving{kcal, protein_g,
+  carbs_g, fat_g}, nutrition_complete, stores_line`; unmatched ingredients are left out of the numbers and
+  `nutrition_complete` is false.
+- Stores is `POST /api/stores/nearby {lat, lon}` instead of a GET, so the position stays out of access logs. The cache is
+  in memory only. `JUMPSCAN_OVERPASS_URL` overrides the public Overpass instance.
+- `JUMPSCAN_FOOD_FIXTURE=1` (tests and emulator screenshots only, off by default) answers with canned model and Overpass
+  replies.
+- App: the photo is decoded with sampling, turned upright from its EXIF orientation, scaled to at most 1024 px and
+  re-encoded as JPEG 85, which drops all EXIF. A camera photo goes through a cache file that is deleted after reading.
+
 Done when: server tests pass under the memory cap; the app builds; AppChecks cover the photo review flow, pantry ->
 recipe flow and stores list with a fixture server (model and Overpass mocked server-side via a test switch); one
 real end-to-end check against the live vision model from openclaw with a public-domain food photo is recorded.
