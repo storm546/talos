@@ -28,4 +28,6 @@
     <string name="leaderboard_opt_in_note">Club members see only your first name, the first letter of your surname and your best jump. Nothing else is shared, and you can turn this off at any time.</string>
     <string name="leaderboard_await_coach">You are under 18, so your coach also needs to confirm before you appear.</string>
     <string name="leaderboard_empty">No one is ranked for this period yet.</string>
+    <string name="records_view_front">front view</string>
+    <string name="records_view_side">side view</string>
 </resources>

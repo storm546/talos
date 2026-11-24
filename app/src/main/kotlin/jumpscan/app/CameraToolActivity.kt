@@ -443,8 +443,11 @@ class CameraToolActivity : ComponentActivity() {
 
     private fun finishBalance(result: Balance.Result) {
         beep(ToneGenerator.TONE_PROP_BEEP2, 400)
-        done(result.toJson(), JSONObject().put("sway_velocity_pct", result.swayVelocityPct ?: JSONObject.NULL)
-            .put("noise_floor_pct", result.noiseFloorPct ?: JSONObject.NULL))
+        val sway = JSONObject().put("sway_velocity_pct", result.swayVelocityPct ?: JSONObject.NULL)
+            .put("noise_floor_pct", result.noiseFloorPct ?: JSONObject.NULL)
+        // The server stores both sway numbers with the balance result (SPEC 10.4); the result screen reads them locally.
+        done(JSONObject(result.toJson()).put("sway_velocity_pct", sway.get("sway_velocity_pct"))
+            .put("noise_floor_pct", sway.get("noise_floor_pct")).toString(), sway)
     }
 
     /** Plays the cue tone; the cue time becomes final when the tone's output timestamp (or its fallback) arrives. */

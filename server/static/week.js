@@ -8,7 +8,7 @@ Object.assign(dictionary.bg, {
   wkOfDays:(done, days) => done + ' от последните ' + days + ' дни', wkLearning:'Започва с първия Ви запис.',
   wkBody:'Самочувствие и храна', wkCheckins:'Дни с отчет', wkWellbeing:'Средно самочувствие', wkReadiness:'Готовност по дни',
   wkFoodDays:'Дни с храна', wkKcal:'Средно ккал', wkProtein:'Средно протеин', wkWeight:'Тегло (тренд)',
-  wkRecords:'Рекорди', wkNoRecords:'Няма нови рекорди тази седмица.', wkText:'Обобщение от локалния модел само от фактите.',
+  wkRecords:'Рекорди', wkNoRecords:'Няма нови рекорди тази седмица.', wkText:'Обобщение от езиковия модел само от фактите.',
   rd_adjustment:'Не сте на 100%', adj_ill:'неразположение', adj_aches:'болежки', adj_tired:'умора', adj_busy:'натоварен ден',
   adjMode_rest:'почивка днес', adjMode_lighter:'по-леко днес', adjRestDay:'Ден за почивка',
   adjRestNote:'Отбелязахте почивка за днес. Планът се връща утре.', adjLighterBadge:'По-лек вариант'
@@ -21,7 +21,7 @@ Object.assign(dictionary.en, {
   wkOfDays:(done, days) => done + ' of the last ' + days + ' days', wkLearning:'Starts with your first entry.',
   wkBody:'Wellbeing and food', wkCheckins:'Check-in days', wkWellbeing:'Average wellbeing', wkReadiness:'Readiness by day',
   wkFoodDays:'Days with food', wkKcal:'Average kcal', wkProtein:'Average protein', wkWeight:'Weight (trend)',
-  wkRecords:'Records', wkNoRecords:'No new records this week.', wkText:'Summary by the local model, from the facts only.',
+  wkRecords:'Records', wkNoRecords:'No new records this week.', wkText:'Summary by the language model, from the facts only.',
   rd_adjustment:'Not feeling 100%', adj_ill:'unwell', adj_aches:'aches', adj_tired:'tired', adj_busy:'busy day',
   adjMode_rest:'rest today', adjMode_lighter:'lighter today', adjRestDay:'Rest day',
   adjRestNote:'You marked today as a rest day. The plan is back tomorrow.', adjLighterBadge:'Lighter version'

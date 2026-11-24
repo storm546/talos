@@ -345,7 +345,7 @@ def check():
         assert page.locator('.rd-digest').get_by_text('Няма отчет: Мартин Колев', exact=True).is_visible()
         assert page.locator('.rd-digest').get_by_text('Под обичайното: Борис Петров', exact=True).is_visible()
         page.locator('#digest-phrase').click()
-        page.locator('.rd-digest').get_by_text('Локалният модел не е наличен; показан е списъкът с факти.').wait_for()
+        page.locator('.rd-digest').get_by_text('Езиковият модел не е наличен; показан е списъкът с факти.').wait_for()
         page.locator('#rd-group').select_option(label='Състезатели')
         expect(page.locator('.rd-table tbody tr')).to_have_count(3)
         page.locator('#rd-group').select_option(label='Целият клуб')

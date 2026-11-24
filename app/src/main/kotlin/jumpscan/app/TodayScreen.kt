@@ -351,8 +351,8 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
 }
 
 internal fun MainActivity.recordLabel(record: JSONObject): String = when (record.getString("measure")) {
-    "jump_height" -> getString(R.string.records_height)
-    "flight_time" -> getString(R.string.records_flight)
+    "jump_height" -> getString(R.string.records_height) + recordQualifier(record)
+    "flight_time" -> getString(R.string.records_flight) + recordQualifier(record)
     "balance_stance" -> getString(R.string.ft_balance)
     "sprint_time" -> getString(R.string.ft_speed)
     "agility_time" -> getString(R.string.ft_agility)

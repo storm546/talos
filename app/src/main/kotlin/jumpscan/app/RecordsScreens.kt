@@ -61,9 +61,10 @@ private fun MainActivity.recordsScreen(data: JSONObject) {
     text(getString(R.string.records_intro), 14)
     val all = data.getJSONArray("records").objects()
     if (all.isEmpty()) notice(getString(R.string.records_empty))
-    all.firstOrNull { it.getString("measure") == "jump_height" }?.let { height ->
+    all.filter { it.getString("measure") == "jump_height" }.forEach { height ->
         val head = row(top = 14, center = true)
-        section(R.string.records_height, head).layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+        section(R.string.records_height, head).apply { text = getString(R.string.records_height) + recordQualifier(height) }
+            .layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
         newChip(height, head)
         // The previous best is drawn as a tick on the same ruler.
         val previous = height.optJSONObject("previous")?.getDouble("value")
@@ -75,7 +76,7 @@ private fun MainActivity.recordsScreen(data: JSONObject) {
         val group = settingsGroup()
         timed.forEachIndexed { index, record ->
             if (index > 0) divider(group, inset = false)
-            val label = if (record.getString("measure") == "flight_time") getString(R.string.records_flight)
+            val label = if (record.getString("measure") == "flight_time") getString(R.string.records_flight) + recordQualifier(record)
                 else getString(R.string.records_hold, record.getString(if (locale.language == "bg") "name_bg" else "name_en"))
             recordRow(label, record, group)
         }
@@ -204,4 +205,12 @@ private fun MainActivity.leaderboardScreen(data: JSONObject, message: String?) {
             }
         }
     }
+}
+
+/** " · front · 30 fps" for jump records, which the server keeps apart per camera view and frame-rate class. */
+internal fun MainActivity.recordQualifier(record: JSONObject): String {
+    val view = record.optString("view").takeIf { it == "front" || it == "side" } ?: return ""
+    val fps = record.optInt("fps_class", 0)
+    return " · " + getString(if (view == "side") R.string.records_view_side else R.string.records_view_front) +
+        (if (fps > 0) " · $fps fps" else "")
 }

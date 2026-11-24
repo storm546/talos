@@ -15,8 +15,8 @@ Object.assign(dictionary.bg, {
   rdGroup:'Група', rdAllGroups:'Целият клуб', rdSort:'Подреждане', rdSortStatus:'По готовност', rdSortName:'По име',
   rdSortLoad:'По натоварване', rdSortJump:'По скок',
   rdDigest:'Сутрешен преглед', rdDigestEmpty:'Няма какво да се отбележи тази сутрин.',
-  rdPhrase:'Оформи с локалния модел', rdPhrased:'Оформено от локалния модел само от фактите по-долу.',
-  rdNoModel:'Локалният модел не е наличен; показан е списъкът с факти.', rdFacts:'Факти',
+  rdPhrase:'Оформи с езиковия модел', rdPhrased:'Оформено от езиковия модел само от фактите по-долу.',
+  rdNoModel:'Езиковият модел не е наличен; показан е списъкът с факти.', rdFacts:'Факти',
   rdNot100:'Не е на 100%', rdFact_missing_checkin:'Няма отчет: ', rdFact_below_usual:'Под обичайното: ', rdFact_load_spike:'Натоварване над обичайното: ',
   rdNote:'Информация за спортиста и треньора, не медицински съвет. Всеки показател се сравнява с последните 28 дни на самия спортист (поне 7 стойности); промяна се отчита само над 0,5 × стандартното отклонение и типичната грешка. За пулса в покой и вариабилността на пулса се сравнява средното за последните 7 дни (днешната стойност и поне 3 общо), за да не решава една сутрин. Сънят се сравнява с нужните часове за възрастта и с редовността. Натоварването е RPE × минути за всяка тренировка; показани са сборът за последните 7 дни и обичайната седмица за последните 28 дни. Съотношението 7/28 дни е второстепенно: само сравнение с обичайното, не прогноза и не оценка на риск, а ползата му е спорна в литературата.'
 });
@@ -35,8 +35,8 @@ Object.assign(dictionary.en, {
   rdGroup:'Group', rdAllGroups:'Whole club', rdSort:'Sort', rdSortStatus:'By readiness', rdSortName:'By name',
   rdSortLoad:'By load', rdSortJump:'By jump',
   rdDigest:'Morning digest', rdDigestEmpty:'Nothing to note this morning.',
-  rdPhrase:'Phrase with the local model', rdPhrased:'Phrased by the local model from the facts below only.',
-  rdNoModel:'The local model is not available; the list of facts is shown.', rdFacts:'Facts',
+  rdPhrase:'Phrase with the language model', rdPhrased:'Phrased by the language model from the facts below only.',
+  rdNoModel:'The language model is not available; the list of facts is shown.', rdFacts:'Facts',
   rdNot100:'Not 100%', rdFact_missing_checkin:'Not checked in: ', rdFact_below_usual:'Below usual: ', rdFact_load_spike:'Load above usual: ',
   rdNote:'Information for athlete and coach, not medical advice. Each measure is compared with the athlete’s own last 28 days (at least 7 values); a change counts only beyond 0.5 × SD and the typical error. Resting heart rate and heart rate variability compare the mean of the last 7 days (today’s value and at least 3 in all), so one morning does not decide. Sleep is compared with the hours needed for the age and with regularity. Load is RPE × minutes per session; shown are the last 7 days’ total and the usual week over the last 28 days. The 7/28-day ratio is secondary: it only compares with what is usual, it is not a forecast or a risk score, and its use is disputed in the literature.'
 });
