@@ -247,6 +247,9 @@ def load_foods(db):
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [(int(r["fdc_id"]), r["name_bg"], r["name_en"], float(r["kcal"]), float(r["protein_g"]),
           float(r["carbs_g"]), float(r["fat_g"]), float(r["fibre_g"]), r["source"]) for r in read_foods_csv()])
+    # Bundled names can be corrected in foods.csv; existing databases pick the new Bulgarian name up at startup.
+    db.executemany("UPDATE foods SET name_bg = ? WHERE fdc_id = ? AND name_bg IS NOT ?",
+                   [(r["name_bg"], int(r["fdc_id"]), r["name_bg"]) for r in read_foods_csv()])
     # USDA portions and micronutrients for the bundled foods come from the catalogue, matched by FDC id, once.
     missing = [row[0] for row in db.execute("SELECT fdc_id FROM foods WHERE fdc_id IS NOT NULL AND servings IS NULL")]
     if missing:
