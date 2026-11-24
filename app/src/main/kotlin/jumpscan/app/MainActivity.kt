@@ -554,7 +554,7 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     if (current()) {
                         placeholders?.let { sessions.removeView(it) }
-                    status.text = if (rows.isEmpty()) getString(R.string.sessions_empty) else ""
+                        status.text = if (rows.isEmpty()) getString(R.string.sessions_empty) else ""
                         selectedSession?.let { chosen ->
                             rows.firstOrNull { it.id == chosen.id }?.let { fresh ->
                                 if (fresh.cancelled) { selectedSession = null; jumpHome(); return@runOnUiThread }
@@ -1079,7 +1079,7 @@ class MainActivity : Activity() {
                 catch (_: IllegalArgumentException) { throw AppError(R.string.manual_analysis_error) }
             }, {
                 analysis = it
-                    rememberFlight(it, replace = current.metrics.jumpHeightCm != null)
+                rememberFlight(it, replace = current.metrics.jumpHeightCm != null)
                 edits = null
                 uploadedId = null
                 queuedId = null
