@@ -88,11 +88,7 @@ internal fun MainActivity.formHome(message: String? = null) {
         .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10) }
     lastForm?.let { result -> button(getString(R.string.last_result), parent = links) { formResult(result.metrics, result) }
         .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10); if (links.childCount > 1) marginStart = dp(8) } }
-    text(getString(R.string.ui_form_validated_note), 13).apply {
-        compoundDrawablePadding = dp(10)
-        setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("info", currentTextColor), null, null, null)
-        setPadding(0, dp(14), 0, 0)
-    }
+    howMeasured(getString(R.string.ui_form_validated_note))
     val replay = BuildConfig.DEBUG && File(filesDir, LIVE_REPLAY_FILE).isFile
     if (replay) text(getString(R.string.ui_replay_hint), 13)
     for (group in formGroups) {

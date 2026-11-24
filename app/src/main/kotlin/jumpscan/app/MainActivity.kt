@@ -192,7 +192,7 @@ class MainActivity : Activity() {
 
     internal fun stage(height: Int) = LinearLayout.LayoutParams(-1, dp(height)).apply { marginStart = -dp(18); marginEnd = -dp(18) }
 
-    internal fun layout(title: String, name: String, headline: Boolean = true) {
+    internal fun layout(title: String, name: String, headline: Boolean = true, menu: ((View) -> Unit)? = null) {
         screen = name
         progress = null
         progressText = null
@@ -232,26 +232,49 @@ class MainActivity : Activity() {
         setContentView(shell)
         page.arrive()
         shell.requestApplyInsets()
-        val backable = name !in listOf("home", "form", "tools", "profile", "login", "busy", "guide", "frames")
+        val tab = name in listOf("home", "form", "tools", "profile")
+        val backable = !tab && name !in listOf("login", "busy", "guide", "frames")
+        // Conventional app bar: back arrow and a one-line title on nested screens; tabs get a one-line title.
+        // Only Today (its own greeting) and the pre-sign-in screens keep the wordmark.
+        var titleParent = page
         if (backable) {
-            val header = row(center = true).apply { setPadding(0, 0, 0, dp(4)) }
-            header.addView(android.widget.ImageView(this).apply {
+            titleParent = row(center = true).apply { setPadding(0, 0, 0, dp(4)) }
+            titleParent.addView(android.widget.ImageView(this).apply {
                 setImageDrawable(lineIcon("back", ink))
                 scaleType = android.widget.ImageView.ScaleType.CENTER
-                setPadding(dp(7), dp(7), dp(7), dp(7))
+                setPadding(dp(12), dp(12), dp(12), dp(12))
                 contentDescription = getString(R.string.nav_back)
                 isClickable = true
                 isFocusable = true
                 background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(getColor(R.color.hover)),
                     null, shape(Color.TRANSPARENT, 0))
                 setOnClickListener { onBackPressed() }
-            }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(6) })
-            wordmark(header)
-        } else wordmark(page)
-        if (headline) text(title, 40).apply {
+            }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = -dp(12); marginEnd = dp(4) })
+        } else if (!tab || name == "home") {
+            titleParent = row(center = true)
+            wordmark(titleParent)
+            titleParent.addView(View(this), LinearLayout.LayoutParams(0, 0, 1f))
+        }
+        if (menu != null) titleParent.addView(ImageView(this).apply {
+            setImageDrawable(lineIcon("overflow", ink))
+            scaleType = ImageView.ScaleType.CENTER
+            contentDescription = getString(R.string.more_options)
+            isClickable = true
+            isFocusable = true
+            background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(getColor(R.color.hover)), null, null)
+            setOnClickListener { menu(it) }
+        }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = -dp(12) })
+        if (!backable) titleParent = page
+        if (headline) TextView(this).apply {
+            text = title
+            typeSize(if (backable) 21 else 28)
             instrumentType(display = true)
-            setPadding(0, dp(9), 0, dp(6))
+            setTextColor(ink)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            if (!backable) setPadding(0, dp(if (tab) 4 else 9), 0, dp(6))
             if (Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
+            titleParent.addView(this, LinearLayout.LayoutParams(if (backable) 0 else -1, -2, if (backable) 1f else 0f))
         }
     }
 
@@ -356,7 +379,7 @@ class MainActivity : Activity() {
                     }
                 }
                 prefs.edit().putString("server", address).putString("token", newToken)
-                    .putString("name", name).putLong("user_id", id).apply()
+                    .putString("name", name).putString("email", emailValue).putLong("user_id", id).apply()
                 if (analysis != null) result() else home()
                 sendPending(automatic = true)
             }, { login(it, showServer = connection.visibility == View.VISIBLE, server = address) })
@@ -425,22 +448,18 @@ class MainActivity : Activity() {
 
     internal fun profile() {
         layout(getString(R.string.ui_profile), "profile")
-        val account = card()
-        val head = row(account, center = true)
-        iconTile("profile", head)
-        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        head.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
+        val account = card().apply { gravity = Gravity.CENTER_HORIZONTAL }
+        iconTile("profile", account).layoutParams = LinearLayout.LayoutParams(dp(64), dp(64))
+        fun line(value: String, size: Int) = text(value, size, parent = account).apply {
+            gravity = Gravity.CENTER_HORIZONTAL; if (size > 14) instrumentType(display = true)
+        }
         if (token().isEmpty()) {
-            text(getString(R.string.not_signed_in), 18, parent = column).apply {
-                instrumentType(display = true); setPadding(0, 0, 0, 0)
-            }
-            text(getString(R.string.login_intro), 13, parent = column).setPadding(0, dp(2), 0, 0)
+            line(getString(R.string.not_signed_in), 18).setPadding(0, dp(10), 0, 0)
+            line(getString(R.string.login_intro), 13)
             button(getString(R.string.sign_in), primary = true, parent = account) { login() }
         } else {
-            text(prefs.getString("name", "").orEmpty(), 18, parent = column).apply {
-                instrumentType(display = true); setPadding(0, 0, 0, 0)
-            }
-            text(base(), 13, parent = column).setPadding(0, dp(2), 0, 0)
+            line(prefs.getString("name", "").orEmpty(), 18).setPadding(0, dp(10), 0, 0)
+            prefs.getString("email", null)?.let { line(it, 13).setPadding(0, 0, 0, 0) }
         }
         val settings = getSharedPreferences("instrument", android.content.Context.MODE_PRIVATE)
         val options = listOf("dark" to R.string.dark_mode, "light" to R.string.light_mode, "system" to R.string.system_mode)
@@ -453,9 +472,9 @@ class MainActivity : Activity() {
         settingRow("diagnostics", getString(R.string.diagnostics), diagnosticsProgress(), group) { diagnostics() }
         if (token().isNotEmpty()) {
             divider(group)
-            settingRow("server", getString(R.string.server_url), base(), group) { leaveProfile(showServer = true) }
-            divider(group)
             settingRow("signout", getString(R.string.sign_out), null, group, subtle = true) { leaveProfile(showServer = false) }
+            eyebrow(getString(R.string.profile_advanced)).setPadding(0, dp(22), 0, 0)
+            settingRow("server", getString(R.string.server_url), base(), settingsGroup()) { leaveProfile(showServer = true) }
         }
         if (token().isNotEmpty()) pendingControls()
     }
@@ -480,7 +499,7 @@ class MainActivity : Activity() {
 
     private fun signOutLocal() {
         clearFlightMemory(); showExperimental = false
-        prefs.edit().remove("token").remove("name").remove("user_id").apply()
+        prefs.edit().remove("token").remove("name").remove("email").remove("user_id").apply()
         selectedSession = null
         resultSession = null
         analysis = null

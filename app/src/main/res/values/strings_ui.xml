@@ -77,4 +77,8 @@
     <string name="flight_reference">Baseline · %1$s %2$s</string>
     <string name="flight_target">Target · %1$d reps</string>
     <string name="flight_takeoff">Take-off</string>
+    <string name="how_measured">How is this measured?</string>
+    <string name="expanded">Expanded</string>
+    <string name="collapsed">Collapsed</string>
+    <string name="profile_advanced">Advanced</string>
 </resources>
