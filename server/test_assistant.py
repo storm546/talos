@@ -707,3 +707,24 @@ def test_minor_athletes_do_not_reach_an_external_model(api, auth, fake_model, mo
     assert chat(client, auth("athlete2")).status_code == 200  # adults keep the assistant
     assert assistant_api.model_is_external("http://192.168.0.150:18080/v1") is False
     assert assistant_api.model_is_external("http://localhost:8080/v1") is False
+
+
+def test_staff_tools_never_send_a_minors_data_to_an_external_model(api, auth, fake_model, monkeypatch):
+    client, path = api
+    minor = user_id(path, "athlete4")
+    with main.database(path) as db:
+        db.execute("UPDATE users SET under_18 = 1 WHERE id = ?", (minor,))
+        db.commit()
+    monkeypatch.setenv("JUMPSCAN_LLM_URL", "https://integrate.api.nvidia.com/v1")
+    observed = fake_model(calls(("athlete_summary", {"athlete_id": minor}), ("team_summaries", {}),
+                                ("list_checkins", {"athlete_id": minor})), "Done.")
+    assert chat(client, auth("coach")).status_code == 200
+    summary, team, checkins = results(observed, 1)
+    assert summary["status"] == 403 and checkins["status"] == 403
+    assert all(row.get("id") != minor and row.get("athlete_id") != minor for row in team["data"])
+    # With a local model the coach sees the minor as before, so the filter above is what removed them.
+    monkeypatch.setenv("JUMPSCAN_LLM_URL", "http://127.0.0.1:1/v1")
+    observed = fake_model(calls(("athlete_summary", {"athlete_id": minor}), ("team_summaries", {})), "Done.")
+    assert chat(client, auth("coach")).status_code == 200
+    summary, team = results(observed, 1)
+    assert "data" in summary and any(row.get("id") == minor or row.get("athlete_id") == minor for row in team["data"])

@@ -423,3 +423,36 @@ def test_seeded_board_shows_every_state():
             assert {"good", "normal", "take_care", "still_learning"} <= statuses, statuses
             assert any(not row["checked_in"] for row in rows)
             assert any(row["load_ready"] for row in rows) and any(row["jump"]["value"] is not None for row in rows)
+
+
+def test_external_model_never_receives_a_minors_digest_facts(api, auth, monkeypatch):
+    client, path = api
+    sent = []
+
+    class Reply:
+        content = b"{}"
+        def raise_for_status(self): pass
+        def json(self): return {"choices": [{"message": {"content": "Summary."}}]}
+
+    class Client:
+        def __init__(self, **options): pass
+        def __enter__(self): return self
+        def __exit__(self, *error): return False
+        def post(self, url, headers=None, json=None):
+            sent.append(json)
+            return Reply()
+
+    monkeypatch.setenv("JUMPSCAN_LLM_URL", "https://integrate.api.nvidia.com/v1")
+    monkeypatch.setenv("JUMPSCAN_LLM_MODEL", "cloud")
+    monkeypatch.setattr(readiness_api, "httpx", SimpleNamespace(
+        Client=Client, Timeout=readiness_api.httpx.Timeout, HTTPError=readiness_api.httpx.HTTPError))
+    minor = user_id(path, "athlete7")
+    with main.database(path) as db:
+        db.execute("UPDATE users SET under_18 = 1 WHERE id = ?", (minor,))
+        db.execute("DELETE FROM checkins WHERE athlete_id = ? AND day = ?", (minor, day()))
+        db.commit()
+    result = client.get("/api/team/digest?phrased=true&language=en", headers=auth("coach")).json()
+    assert any(fact["athlete_id"] == minor for fact in result["facts"])  # the coach still sees every fact
+    payload = json.dumps(sent)
+    assert sent and f'"athlete_id": {minor}' not in payload and f'"athlete_id": {minor},' not in payload
+    assert result["phrased_by"] == "external_model"

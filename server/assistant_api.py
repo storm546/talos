@@ -185,6 +185,24 @@ MINOR_CLOUD_DETAIL = ("The assistant uses an external (cloud) language model, so
                       "Асистентът използва външен (облачен) езиков модел и не е достъпен за спортисти под 18 години.")
 
 
+def minor_ids(db):
+    return {row[0] for row in db.execute("SELECT id FROM users WHERE role = 'athlete' AND under_18 = 1")}
+
+
+def without_minors(value, minors):
+    """Drop every record that belongs to an athlete under 18 (by athlete_id, or a user row by id) from a result."""
+    if isinstance(value, list):
+        return [without_minors(item, minors) for item in value
+                if not (isinstance(item, dict) and (item.get("athlete_id") in minors or
+                                                    ("name" in item and item.get("id") in minors)))]
+    if isinstance(value, dict):
+        return {key: without_minors(item, minors) for key, item in value.items()}
+    return value
+
+
+MINOR_DATA_DETAIL = "Data of athletes under 18 is not sent to an external (cloud) language model."
+
+
 def model_client():
     url = os.environ.get("JUMPSCAN_LLM_URL", "").strip()
     model = os.environ.get("JUMPSCAN_LLM_MODEL", "").strip()
@@ -532,6 +550,10 @@ def install(app, h, operations):
             return {"error": "Unknown tool"}
         try:
             args = tool.arguments(raw)
+            # Privacy: with an external model, nothing about a minor goes into the conversation, whoever asks.
+            minors = minor_ids(db) if model_is_external() else set()
+            if args.get("athlete_id") in minors:
+                return {"status": 403, "error": MINOR_DATA_DETAIL}
             result = invoke(name, tool, args, user, db)
         except ValidationError as error:
             kind = error.errors(include_input=False, include_url=False, include_context=False)[0]["type"]
@@ -541,7 +563,7 @@ def install(app, h, operations):
         except HTTPException as error:
             return {"status": error.status_code, "error": error.detail}
         if tool.body is None:
-            return {"data": result}
+            return {"data": without_minors(result, minors) if minors else result}
         action = {"tool": name, "args": args, "human_summary": describe_action(name, tool, args)}
         actions.append(action)
         return {"pending_confirmation": action["human_summary"]}

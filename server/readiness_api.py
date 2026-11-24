@@ -476,11 +476,16 @@ def install(app, h):
             if key not in digest_cache:  # regenerate only when the facts change; keep the cache small
                 if len(digest_cache) >= 64:
                     digest_cache.pop(next(iter(digest_cache)))
-                text = phrase_digest(facts, language)
+                # Privacy: an external model never receives facts about athletes under 18.
+                sent = facts
+                if assistant_api.model_is_external():
+                    minors = assistant_api.minor_ids(db)
+                    sent = [fact for fact in facts if fact["athlete_id"] not in minors]
+                text = phrase_digest(sent, language) if sent else None
                 if text is None:
                     return result
                 digest_cache[key] = text
-            result["text"], result["phrased_by"] = digest_cache[key], "local_model"
+            result["text"], result["phrased_by"] = digest_cache[key], "external_model" if assistant_api.model_is_external() else "local_model"
         return result
 
     return {"list_training_sessions": list_sessions, "readiness": readiness, "training_load": load,
