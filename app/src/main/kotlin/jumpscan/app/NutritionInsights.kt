@@ -271,6 +271,7 @@ private fun MainActivity.insightPage(day: String, days: Int, data: Insight, mess
         text(getString(R.string.insight_weight_legend), 12)
     }
     val kg = decimalField(R.string.nutr_weight_kg, weights.firstOrNull { it.optString("day") == day }?.let { number(it, "kg") }.orEmpty())
+    healthWeightButton(kg)
     button(getString(R.string.nutr_weight_save)) {
         val value = decimal(kg.value())
         if (value == null || value !in 20.0..400.0) kg.error = getString(R.string.nutr_invalid_weight)

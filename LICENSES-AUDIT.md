@@ -74,6 +74,7 @@ Other server-side items:
 | com.google.mediapipe:tasks-vision | 1.2.3 | Apache-2.0 | yes | OK |
 | androidx.activity:activity | 1.9.3 | Apache-2.0 | yes | OK |
 | androidx.camera:camera-core, camera-camera2, camera-lifecycle | 1.4.2 | Apache-2.0 | yes | OK |
+| androidx.health.connect:connect-client (read-only Health Connect client, SPEC 10.5; pulls kotlinx-coroutines and Guava, both Apache-2.0) | 1.1.0-beta01 | Apache-2.0 | yes | OK |
 | Transitive libraries of the above (AndroidX, protobuf, Guava and similar) | not enumerated | expected Apache-2.0 / BSD | yes | CHECK: run `./gradlew :app:dependencies --configuration releaseRuntimeClasspath` on the build kit and confirm each |
 | com.google.mlkit:barcode-scanning (bundled, offline model) | 17.3.0 | ML Kit Terms of Service (Google APIs Terms); not an open-source licence | yes | CHECK: proprietary terms, not GPL-compatible in the FSF sense; the model runs on the device and sends no images. Confirm with the organisers that a GPL entry may link it, or replace it (e.g. ZXing, Apache-2.0) |
 | Android Gradle Plugin | 8.7.3 | Apache-2.0 | build only | OK |
