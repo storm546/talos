@@ -275,7 +275,8 @@ def off_food(product, code):
 def open_food_facts(code):
     """The product for a barcode: a normalised food, None when unknown or incomplete; Unavailable on failure."""
     try:
-        with httpx.Client(timeout=5.0, trust_env=False, headers={"User-Agent": USER_AGENT,
+        # Open Food Facts often answers in 6-15 s from here; the app waits 30 s, so allow 25 s.
+        with httpx.Client(timeout=httpx.Timeout(25.0, connect=5.0), trust_env=False, headers={"User-Agent": USER_AGENT,
                                                                 "Accept": "application/json"}) as client:
             response = client.get(OFF_URL.format(code=code), params={"fields": OFF_FIELDS})
             if response.status_code == 404:
