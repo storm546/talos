@@ -22,7 +22,9 @@ class FormStreamTest {
         assertEquals(FormExercises.all.size, FormExercises.all.map { it.id }.distinct().size)
         for (entry in entries) {
             val (rest, full) = ranges.getValue(entry.id)
-            val partial = (entry.signal.up + entry.signal.down) / 2
+            // Adaptive counting judges the excursion from the athlete's own rest: three quarters of min_range is partial.
+            val partial = if (entry.signal.adaptive) rest + Math.signum(full - rest) * .75 * entry.signal.minRange
+                else (entry.signal.up + entry.signal.down) / 2
             val frames = buildList {
                 fun pose(value: Double, missing: Boolean = false) = add(geometry(entry.id, value, size * 50L, missing))
                 fun cycle(peak: Double, gap: Boolean = false) {
@@ -139,6 +141,62 @@ class FormStreamTest {
         val result = stream.finish()
         assertEquals(3, result.summary.repetitionCount)
         assertEquals(0, result.summary.unclearCount)
+    }
+
+    @Test
+    fun adaptiveCountingFollowsTheAthletesOwnRestAndRange() {
+        // Lateral raise resting at 45 degrees (above the catalogue's 35-degree rest level) and lifting to 95: the
+        // absolute levels never see a rest, the athlete's own rest does. Excursion 50 >= min_range 40.
+        fun set(values: List<Double>, id: String = "lateral_raise") = values.mapIndexed { index, value -> geometry(id, value, index * 50L) }
+        fun rep(rest: Double, peak: Double) = List(10) { rest } + List(12) { rest + (peak - rest) * (it + 1) / 12 } +
+            List(4) { peak } + List(12) { rest + (peak - rest) * (11 - it) / 12 }
+        val raised = FormAnalyzer.analyze(set(rep(45.0, 95.0) + rep(45.0, 95.0) + rep(45.0, 95.0) + List(10) { 45.0 }),
+            "lateral_raise", null, 1f, JumpAnalyzer.View.FRONT)
+        assertEquals(3, raised.summary.repetitionCount)
+        assertEquals(0, raised.summary.unclearCount)
+        // Excursion 30 (between half and all of min_range) is partial, not a repetition; 15 is no movement at all.
+        val short = FormAnalyzer.analyze(set(rep(45.0, 75.0) + rep(45.0, 60.0) + List(10) { 45.0 }), "lateral_raise", null, 1f,
+            JumpAnalyzer.View.FRONT)
+        assertEquals(listOf("partial"), short.repetitions.map { it.status })
+        // A set that begins at the top of a raise: its first movement is a return, reported as incomplete_start.
+        val late = FormAnalyzer.analyze(set(List(6) { 95.0 } + List(12) { 95.0 - 50.0 * (it + 1) / 12 } +
+            rep(45.0, 95.0) + List(10) { 45.0 }), "lateral_raise", null, 1f, JumpAnalyzer.View.FRONT)
+        assertEquals(1, late.summary.repetitionCount)
+        assertEquals(listOf("incomplete_start"), late.repetitions.first().reasons)
+        // A jump that ends before the athlete is back counts nothing and is reported as incomplete_end.
+        val cut = FormAnalyzer.analyze(set(rep(.30, 1.70).dropLast(6), "jumping_jack"), "jumping_jack", null, 1f, JumpAnalyzer.View.FRONT)
+        assertEquals(0, cut.summary.repetitionCount)
+        assertEquals(listOf("incomplete_end"), cut.repetitions.single().reasons)
+    }
+
+    @Test
+    fun bestLimbRowFollowsTheVisibleArmAndAlternatingCurlsCountInProfile() {
+        // Row seen from the front: the far (right) arm disappears behind the body while it rows. Averaging both arms
+        // would lose every repetition; following the better-seen arm counts all three.
+        val (rest, full) = ranges.getValue("bent_over_row")
+        val values = (1..3).flatMap { List(10) { rest } + List(12) { i -> rest + (full - rest) * (i + 1) / 12 } + List(4) { full } +
+            List(12) { i -> rest + (full - rest) * (11 - i) / 12 } } + List(10) { rest }
+        val row = values.mapIndexed { index, value ->
+            val frame = geometry("bent_over_row", value, index * 50L)
+            val hidden = value < rest - 10
+            val image = frame.landmarks.mapIndexed { joint, point ->
+                if (hidden && joint in listOf(14, 16)) point.copy(visibility = 0f) else point }
+            frame.copy(landmarks = image, worldLandmarks = image)
+        }
+        assertEquals(3, FormAnalyzer.analyze(row, "bent_over_row", null, 1f, JumpAnalyzer.View.FRONT).summary.repetitionCount)
+        // Alternating curls seen in profile still count each arm (5 + 5), not only the near one.
+        val (down, up) = ranges.getValue("biceps_curl")
+        fun curl() = List(8) { down } + List(10) { down + (up - down) * (it + 1) / 10 } + List(3) { up } +
+            List(10) { down + (up - down) * (9 - it) / 10 }
+        val arms = (0 until 10).flatMap { rep -> curl().map { value -> if (rep % 2 == 0) value to down else down to value } } +
+            List(8) { down to down }
+        val curls = arms.mapIndexed { index, (left, right) ->
+            val l = geometry("biceps_curl", left, index * 50L)
+            val r = geometry("biceps_curl", right, index * 50L)
+            val points = l.landmarks.mapIndexed { joint, point -> if (joint >= 12 && joint % 2 == 0) r.landmarks[joint] else point }
+            Frame(index * 50L, points, points)
+        }
+        assertEquals(10, FormAnalyzer.analyze(curls, "biceps_curl", null, 1f, JumpAnalyzer.View.SIDE).summary.repetitionCount)
     }
 
     @Test
