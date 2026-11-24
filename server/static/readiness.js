@@ -101,7 +101,7 @@ function digestPanel(digest) {
     const item = node('li');
     let detail = '';
     if (fact.kind === 'below_usual') detail = t('rd_' + fact.status) + (fact.factors.length ? ' · ' + factorNames(fact.factors) : '');
-    if (fact.kind === 'load_spike') detail = formatNumber(fact.acute_load) + ' / ' + formatNumber(fact.chronic_weekly_load) + ' · ' + t('rd_' + fact.band);
+    if (fact.kind === 'load_spike') detail = t('rdLoad') + ' ' + formatNumber(fact.acute_load) + ' / ' + formatNumber(fact.chronic_weekly_load) + ' · ' + t('rd_' + fact.band);
     if (fact.kind === 'missing_checkin' && fact.nudged) detail = t('rdNudged');
     item.append(node('span', t('rdFact_' + fact.kind) + fact.name), node('span', detail, 'muted'));
     list.append(item);

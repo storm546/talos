@@ -183,7 +183,7 @@
     <string name="film_again">Заснемете отново</string>
     <string name="frame_instructions">Отбележете първия кадър с ходилата във въздуха и първия кадър с допир до земята. При скок от платформа отбележете отскока след първото стъпване на пода.</string>
     <string name="frame_time">%1$d мс</string>
-    <string name="edge_times">Отскок: %1$s\nПриземяване: %2$s</string>
+    <string name="edge_times">Отскок в: %1$s\nПриземяване в: %2$s</string>
     <string name="manual_flight">Време на полет: %1$d мс · Височина на отскока: %2$.1f см</string>
     <string name="edge_error">Задайте двата кадъра. Приземяването трябва да е след отскока, до 1000 мс по-късно.</string>
     <string name="set_takeoff">Задайте отскок</string>
@@ -313,7 +313,7 @@
     <string name="nutr_no_targets">Няма зададени дневни цели.</string>
     <string name="nutr_energy">Енергия (ккал)</string>
     <string name="energy_target">Цел %1$s ккал</string>
-    <string name="meal_timeline">Хранения</string>
+    <string name="meal_timeline">Ястия през деня</string>
     <string name="nutr_protein">Белтъчини (г)</string>
     <string name="nutr_carbs">Въглехидрати (г)</string>
     <string name="nutr_fat">Мазнини (г)</string>

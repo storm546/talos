@@ -183,7 +183,7 @@
     <string name="film_again">Film again</string>
     <string name="frame_instructions">Mark the first frame with the feet off the ground, then the first frame touching the ground. For a drop jump, mark the rebound take-off.</string>
     <string name="frame_time">%1$d ms</string>
-    <string name="edge_times">Take-off: %1$s\nLanding: %2$s</string>
+    <string name="edge_times">Take-off at: %1$s\nLanding at: %2$s</string>
     <string name="manual_flight">Flight: %1$d ms · Height: %2$.1f cm</string>
     <string name="edge_error">Set both frames. Landing must follow take-off by at most 1000 ms.</string>
     <string name="set_takeoff">Set take-off</string>

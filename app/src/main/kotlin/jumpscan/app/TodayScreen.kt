@@ -240,8 +240,12 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
                 "still_learning" -> R.string.rd_summary_still_learning; "no_data" -> R.string.rd_summary_no_data
                 else -> R.string.rd_summary_normal
             }))
+            val shown = readiness.getJSONArray("factors").objects().filter { !it.isNull("value") && it.getString("key") != "adjustment" }.take(4)
+            // The chips show numbers only; one caption names them in the same order so nothing is unlabelled.
+            if (shown.isNotEmpty()) line(shown.joinToString(" · ") { getString(factorLabels.getValue(it.getString("key"))) }, 12)
+                .setPadding(0, dp(10), 0, 0)
             val strip = row(panel)
-            readiness.getJSONArray("factors").objects().filter { !it.isNull("value") && it.getString("key") != "adjustment" }.take(4).forEach { factor ->
+            shown.forEach { factor ->
                 val (fill, ink) = when (factor.getString("state")) {
                     "worse" -> R.color.notice to R.color.warning; "better" -> R.color.ready_surface to R.color.ready
                     else -> R.color.segment_selected to R.color.on_hero

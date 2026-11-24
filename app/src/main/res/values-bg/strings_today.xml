@@ -59,7 +59,7 @@
     <string name="shortcut_workout">Тренировка</string>
     <string name="shortcut_scan">Сканирай храна</string>
     <string name="shortcut_timer">Интервален таймер</string>
-    <string name="shortcut_jump">Скоков тест</string>
+    <string name="shortcut_jump">Тест със скок</string>
     <string name="tool_scan_food">Сканирай храна</string>
     <string name="tool_scan_food_note">Баркод направо в днешния дневник</string>
     <string name="timer_voice">Гласови подсказки: кръгове, последни 10 секунди, край на почивката</string>
