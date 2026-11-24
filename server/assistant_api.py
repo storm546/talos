@@ -217,7 +217,11 @@ def model_client():
 def model_chain():
     """The configured model, then the `JUMPSCAN_LLM_FALLBACK` models (comma-separated `url|model|keyfile`, key file
     optional) in order. Malformed entries and unreadable key files are skipped."""
-    chain = [model_client()]
+    return [model_client()] + fallback_models()
+
+
+def fallback_models():
+    chain = []
     for entry in os.environ.get("JUMPSCAN_LLM_FALLBACK", "").split(","):
         parts = [part.strip() for part in entry.split("|")]
         if len(parts) in (2, 3) and parts[0] and parts[1]:
@@ -491,6 +495,21 @@ def describe_action(name, tool, args):
     return summary
 
 
+def count_request(db, user_id):
+    """20 requests per user in 10 minutes, shared by the assistant and the food photo routes (SPEC 10.6)."""
+    with db:
+        db.execute("BEGIN IMMEDIATE")
+        now = time.time()
+        prune(db, now)
+        count, oldest = db.execute("SELECT COUNT(*), MIN(requested_at) FROM assistant_requests WHERE user_id = ?",
+                                   (user_id,)).fetchone()
+        if count < 20:
+            db.execute("INSERT INTO assistant_requests VALUES (?, ?)", (user_id, now))
+    if count >= 20:
+        wait = max(1, ceil(oldest + WINDOW - now))
+        raise HTTPException(429, "Assistant request limit reached; try again later.", headers={"Retry-After": str(wait)})
+
+
 def install(app, h, operations):
     tools = build_tools(h, operations)
     definitions = [{"type": "function", "function": {
@@ -506,17 +525,7 @@ def install(app, h, operations):
         proposal_id: opaque_id
 
     def rate_limit(user=Depends(h.current_user), db=Depends(h.get_db)):
-        with db:
-            db.execute("BEGIN IMMEDIATE")
-            now = time.time()
-            prune(db, now)
-            count, oldest = db.execute("SELECT COUNT(*), MIN(requested_at) FROM assistant_requests WHERE user_id = ?",
-                                       (user["id"],)).fetchone()
-            if count < 20:
-                db.execute("INSERT INTO assistant_requests VALUES (?, ?)", (user["id"], now))
-        if count >= 20:
-            wait = max(1, ceil(oldest + WINDOW - now))
-            raise HTTPException(429, "Assistant request limit reached; try again later.", headers={"Retry-After": str(wait)})
+        count_request(db, user["id"])
         return user
 
     def admit_work(user=Depends(rate_limit)):

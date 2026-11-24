@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from . import assistant_api, measurements_api, readiness_api, records_api, today_api, training_nutrition_api, week_api
+from . import assistant_api, food_vision_api, measurements_api, readiness_api, records_api, today_api, training_nutrition_api, week_api
 from .input_bounds import Offset, SQLITE_MAX, SqliteInt, SqlitePath
 from .response_data import complete_json, spooled_response
 
@@ -882,7 +882,9 @@ class RequestBodyLimit:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        limit = 64 * 1024 if (scope.get("method"), scope.get("path")) == ("POST", "/api/form") else 16 * 1024
+        route = (scope.get("method"), scope.get("path"))
+        limit = (64 * 1024 if route == ("POST", "/api/form") else
+                 food_vision_api.BODY_LIMIT if route[0] == "POST" and route[1] in food_vision_api.PHOTO_PATHS else 16 * 1024)
         too_large = JSONResponse(status_code=413, content={"detail": "Request body too large"})
         for name, value in scope["headers"]:
             if name.lower() == b"content-length":
@@ -1874,6 +1876,7 @@ def create_app(db_path=None):
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"X-Accel-Buffering": "no"})
 
+    food_vision_api.install(app, sys.modules[__name__], training_tools)
     assistant_api.install(app, sys.modules[__name__], {**training_tools, "list_checkins": checkin_rows, **{
         operation.__name__: operation for operation in (
             athletes, athlete_summary, jumps, list_form_sets, list_sessions, session_report,

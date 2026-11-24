@@ -3,4 +3,6 @@
     <cache-path name="reports" path="diagnostic-reports/" />
     <!-- Record share cards (SPEC 10.3), drawn on the phone and handed to the share sheet only. -->
     <cache-path name="shared" path="shared/" />
+    <!-- A meal or pantry photo from the camera app, read once and deleted (SPEC 10.6). -->
+    <cache-path name="food" path="food-photo/" />
 </paths>
