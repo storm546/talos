@@ -20,6 +20,7 @@ internal fun todayFixture(): JSONObject = JSONObject("""{"day":"${todayLocal()}"
   {"key":"wellbeing","value":18,"unit":"points","state":"better","baseline":{"n":20,"needed":7}},
   {"key":"sleep","value":83,"unit":"score","state":"usual","sleep":{"score":83,"hours":8.3}}]},
  "checkin":{"done":true,"wellbeing":18,"out_of":25},
+ "findings":[{"card":"readiness","tone":"good","title":"Recovered well","text":"Better than usual: wellbeing 18/25."}],
  "plan":{"items":[{"plan_id":1,"plan":"Strength","exercise":"Back squat","sets":3,"reps":6,"reps_max":8,"load_kg":60}],"more":0,"logged":false},
  "training":{"sessions":[{"id":1,"kind":"gym","minutes":60,"rpe":7,"load":420,"source":"session"}],"total_load":420,
   "acute_chronic":{"ready":true,"ratio":1.07,"band":"similar","still_learning":false}},
@@ -98,6 +99,7 @@ internal fun todayChecks(test: Instrumentation) {
             val widget = TodayWidget.views(context).apply(context, FrameLayout(context))
             val words = texts(widget)
             check(words.any { host.getString(R.string.rd_good) in it } && host.getString(R.string.widget_checkin_done) in words &&
+                "Recovered well" in words &&
                 words.any { "1480 / 2200" in it }) { "widget: $words" }
         }
     } finally {

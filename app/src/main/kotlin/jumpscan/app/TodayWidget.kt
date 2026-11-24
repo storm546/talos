@@ -10,7 +10,7 @@ import android.view.View
 import android.widget.RemoteViews
 
 /**
- * The "Today" home-screen widget (SPEC 10.2): readiness, check-in done or not, kcal eaten of target. It draws the
+ * The "Today" home-screen widget (SPEC 10.2): readiness, the main finding, check-in done or not, kcal eaten of target. It draws the
  * cached `today` answer; the system asks for an update at most every 30 minutes, which also fetches a fresh one.
  */
 class TodayWidget : AppWidgetProvider() {
@@ -22,7 +22,7 @@ class TodayWidget : AppWidgetProvider() {
                 val token = account.getString("token", "").orEmpty()
                 val server = account.getString("server", null)
                 if (token.isNotEmpty() && server != null)
-                    runCatching { context.saveToday(org.json.JSONObject(api(server, "/api/me/today?day=${todayLocal()}", token = token))) }
+                    runCatching { context.saveToday(org.json.JSONObject(api(server, "/api/me/today?day=${todayLocal()}&language=${if (context.resources.configuration.locales[0].language == "bg") "bg" else "en"}", token = token))) }
                 refresh(context)
             } finally { done.finish() }
         }.start()
@@ -47,6 +47,7 @@ class TodayWidget : AppWidgetProvider() {
             if (today == null) {
                 views.setTextViewText(R.id.widget_readiness, context.getString(if (signedIn) R.string.today_no_data else R.string.widget_signed_out))
                 views.setViewVisibility(R.id.widget_checkin, View.GONE)
+                views.setViewVisibility(R.id.widget_finding, View.GONE)
                 views.setViewVisibility(R.id.widget_kcal, View.GONE)
                 views.setViewVisibility(R.id.widget_check_in, View.GONE)
                 return views
@@ -59,6 +60,11 @@ class TodayWidget : AppWidgetProvider() {
                 "normal" -> R.string.rd_normal
                 else -> R.string.rd_no_data
             }))
+            // The finding that matters most: something to watch first, else the first good one (SPEC 10.9).
+            val notes = today.optJSONArray("findings")?.let { array -> List(array.length()) { array.getJSONObject(it) } }.orEmpty()
+            val top = notes.firstOrNull { it.optString("tone") == "watch" } ?: notes.firstOrNull { it.optString("tone") == "good" }
+            views.setTextViewText(R.id.widget_finding, top?.optString("title").orEmpty())
+            views.setViewVisibility(R.id.widget_finding, if (top == null) View.GONE else View.VISIBLE)
             val checked = today.optJSONObject("checkin")?.optBoolean("done") == true
             views.setTextViewText(R.id.widget_checkin, context.getString(if (checked) R.string.widget_checkin_done else R.string.widget_checkin_missing))
             views.setViewVisibility(R.id.widget_checkin, View.VISIBLE)

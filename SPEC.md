@@ -1241,6 +1241,8 @@ a label. The language model is used where it helps.
   that opens the assistant with a prepared question (technique: the camera analysis via `list_form_sets`; food: what
   to eat for the rest of the day; training: what workout today). The assistant answers formally (Вие) in plain text
   for the phone; the app also strips stray Markdown.
+- **Widget:** the Today home-screen widget shows the most important finding (the first to watch, else the first good
+  one) under readiness; its own fetch asks for the phone's language.
 - A "not feeling 100%" flag turns the recovery advice into "follow the lighter plan" instead of a harder session.
 - **Assistant:** a read tool `today_findings` returns the same findings, so questions such as "how am I doing" or
   "what should I focus on" start from the app's own conclusions. The model calls (briefing, coach digest) now allow
