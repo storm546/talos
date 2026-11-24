@@ -111,9 +111,9 @@ private fun MainActivity.recordsScreen(data: JSONObject) {
                 newChip(estimate, line)
             }
         }
-        text(getString(R.string.records_estimate_note), 13)
     }
-    text(getString(R.string.records_excluded, data.getInt("excluded_jumps")), 13)
+    howMeasured(*listOfNotNull(getString(R.string.records_estimate_note).takeIf { strength.isNotEmpty() },
+        getString(R.string.records_excluded, data.getInt("excluded_jumps"))).toTypedArray())
     button(getString(R.string.leaderboard_title), look = ActionTone.TONAL) { leaderboard() }
 }
 

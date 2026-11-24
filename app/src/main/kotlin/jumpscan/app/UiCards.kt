@@ -130,6 +130,40 @@ internal fun MainActivity.statusChip(value: String, fill: Int, foreground: Int, 
     parent.addView(this, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
 }
 
+/** "How is this measured?": a row that expands in place to show the method and its limits, which stay on the screen. */
+internal fun MainActivity.howMeasured(vararg notes: String, parent: LinearLayout = page) {
+    val head = row(parent, center = true).apply {
+        minimumHeight = dp(48)
+        isClickable = true
+        isFocusable = true
+        foreground = RippleDrawable(ColorStateList.valueOf(getColor(R.color.hover)), null, shape(Color.TRANSPARENT, 0))
+    }
+    val label = text(getString(R.string.how_measured), 14, getColor(R.color.accent), head).apply {
+        instrumentType(display = true)
+        compoundDrawablePadding = dp(10)
+        setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("info", currentTextColor), null, null, null)
+        layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+    }
+    val chevron = android.widget.ImageView(this).apply {
+        setImageDrawable(lineIcon("chevron", getColor(R.color.muted)))
+        rotation = 90f
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+    head.addView(chevron, LinearLayout.LayoutParams(dp(18), dp(18)))
+    val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+    parent.addView(body, LinearLayout.LayoutParams(-1, -2))
+    notes.forEach { text(it, 13, parent = body) }
+    fun state() {
+        val open = body.visibility == View.VISIBLE
+        chevron.animate().rotation(if (open) -90f else 90f).setDuration(180).start()
+        if (android.os.Build.VERSION.SDK_INT >= 30)
+            head.stateDescription = getString(if (open) R.string.expanded else R.string.collapsed)
+    }
+    head.contentDescription = label.text
+    state()
+    head.setOnClickListener { body.visibility = if (body.visibility == View.VISIBLE) View.GONE else View.VISIBLE; state(); body.arrive() }
+}
+
 /** A horizontal row. Centred rows must not give children top margins; LinearLayout then clips their bottoms. */
 internal fun MainActivity.row(parent: LinearLayout = page, top: Int = 0, center: Boolean = false) = LinearLayout(this).apply {
     if (center) gravity = Gravity.CENTER_VERTICAL
@@ -406,6 +440,7 @@ internal fun Context.lineIcon(name: String, tint: Int) = getDrawable(when (name)
     "home" -> R.drawable.ic_home
     "index" -> R.drawable.ic_index
     "more" -> R.drawable.ic_more
+    "overflow" -> R.drawable.ic_overflow
     "back" -> R.drawable.ic_back
     "chevron" -> R.drawable.ic_chevron
     "appearance" -> R.drawable.ic_appearance

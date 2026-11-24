@@ -77,4 +77,8 @@
     <string name="flight_reference">Начално ниво · %1$s %2$s</string>
     <string name="flight_target">Цел · %1$d повторения</string>
     <string name="flight_takeoff">Оттласкване</string>
+    <string name="how_measured">Как се измерва?</string>
+    <string name="expanded">Разгънато</string>
+    <string name="collapsed">Свито</string>
+    <string name="profile_advanced">Разширени</string>
 </resources>

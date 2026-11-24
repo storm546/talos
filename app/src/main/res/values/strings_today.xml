@@ -14,6 +14,9 @@
     <string name="today_hidden">Hidden cards</string>
     <string name="today_show">Show on Today</string>
     <string name="today_arrange">Arrange the %1$s card</string>
+    <string name="today_arrange_all">Arrange cards</string>
+    <string name="more_options">More options</string>
+    <string name="today_refresh">Refresh</string>
     <string name="today_move_up">Move up</string>
     <string name="today_move_down">Move down</string>
     <string name="today_hide">Hide card</string>

@@ -66,8 +66,13 @@ private fun clockOf(at: Long) = java.time.Instant.ofEpochMilli(at).atZone(java.t
     .format(DateTimeFormatter.ofPattern("HH:mm"))
 
 internal fun MainActivity.home(message: String? = null) {
-    layout(getString(R.string.ui_today), "home", headline = false)
     val signedIn = token().isNotEmpty()
+    layout(getString(R.string.ui_today), "home", headline = false, menu = if (!signedIn) null else { anchor ->
+        android.widget.PopupMenu(this, anchor).apply {
+            menu.add(R.string.today_refresh).setOnMenuItemClickListener { pullRefresh(); true }
+            menu.add(R.string.today_arrange_all).setOnMenuItemClickListener { arrangeAll(); true }
+        }.show()
+    })
     val hour = LocalTime.now().hour
     val greeting = getString(when { hour < 12 -> R.string.today_morning; hour < 18 -> R.string.today_afternoon; else -> R.string.today_evening })
     val name = getSharedPreferences("account", Context.MODE_PRIVATE).getString("name", "").orEmpty().substringBefore(' ')
@@ -103,6 +108,27 @@ internal fun MainActivity.home(message: String? = null) {
         }
     }
     pendingControls()
+    refreshToday()
+    // Pull down at the top of the page to reload; the system overscroll stretch is the visual, the status line the answer.
+    val scroll = page.parent as android.widget.ScrollView
+    var lastY = Float.NaN
+    var pulled = 0f
+    scroll.setOnTouchListener { _, event ->
+        when (event.actionMasked) {
+            android.view.MotionEvent.ACTION_MOVE -> {
+                pulled = if (!lastY.isNaN() && scroll.scrollY == 0) pulled + event.rawY - lastY else 0f
+                lastY = event.rawY
+                if (pulled > dp(96)) { pulled = Float.NEGATIVE_INFINITY; pullRefresh() }
+            }
+            android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> { lastY = Float.NaN; pulled = 0f }
+        }
+        false
+    }
+}
+
+private fun MainActivity.pullRefresh() {
+    page.findViewWithTag<android.widget.TextView>("today-status")?.text = getString(R.string.today_loading)
+    page.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
     refreshToday()
 }
 
@@ -189,7 +215,7 @@ private fun MainActivity.openCard(key: String) = when (key) {
     else -> jumpHome()
 }
 
-/** One Today card: a tappable surface with its title, an arrange button and the section's numbers. */
+/** One Today card: a tappable surface with its title and the section's numbers; arranging lives in the header menu. */
 internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: LinearLayout): LinearLayout {
     val hero = key == "readiness"
     val panel = card(parent, hero = hero).apply {
@@ -206,13 +232,6 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
         layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
         if (android.os.Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
     }
-    if (token().isNotEmpty()) head.addView(ImageView(this).apply {
-        setImageDrawable(lineIcon("more", getColor(if (hero) R.color.on_hero else R.color.muted)))
-        scaleType = ImageView.ScaleType.CENTER
-        contentDescription = getString(R.string.today_arrange, getString(cardTitle(key)))
-        background = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(getColor(R.color.hover)), null, null)
-        setOnClickListener { arrangeSheet(key) }
-    }, LinearLayout.LayoutParams(dp(48), dp(48)))
     val section = data?.opt(if (key == "messages") "unread" else key)?.takeIf { it != JSONObject.NULL }
     fun line(value: String, size: Int = 14, color: Int = getColor(if (hero) R.color.on_hero else R.color.muted)) = text(value, size, color, panel)
     fun big(value: String, color: Int = ink) = panel.addView(Measurement(this).apply {
@@ -373,6 +392,27 @@ private fun MainActivity.phoneTools() {
     val all = toolGroups().flatMap { it.second }.associateBy { it.key }
     toolRow(*listOf("timer", "calculators", "cardio", "form").mapNotNull { all[it] }
         .map { tool -> UiTile(tool.label, tool.icon) { openTool(tool) } }.toTypedArray())
+}
+
+/** The header menu's "Arrange cards": pick a visible card, then move or hide it in its own sheet. */
+private fun MainActivity.arrangeAll() {
+    val dialog = Dialog(this)
+    val panel = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(22), dp(16), dp(22), dp(24))
+        background = raisedSurface()
+    }
+    section(R.string.today_arrange_all, panel)
+    val group = settingsGroup(panel)
+    todayOrder().filter { it !in hiddenCards() }.forEachIndexed { index, key ->
+        if (index > 0) divider(group)
+        settingRow(cardIcon(key), getString(cardTitle(key)), null, group) { dialog.dismiss(); arrangeSheet(key) }
+            .contentDescription = getString(R.string.today_arrange, getString(cardTitle(key)))
+    }
+    dialog.setContentView(android.widget.ScrollView(this).apply { addView(panel) })
+    dialog.window?.apply { setGravity(Gravity.BOTTOM); setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)); setLayout(-1, -2) }
+    dialog.show()
+    panel.arrive()
 }
 
 private fun MainActivity.arrangeSheet(key: String) {
