@@ -28,13 +28,13 @@ internal fun todayFixture(): JSONObject = JSONObject("""{"day":"${todayLocal()}"
  "records":[{"measure":"jump_height","value":38.6,"unit":"cm","date":"${todayLocal()}T07:10:00+00:00"}],
  "next_session":null,"unread":2}""")
 
-private fun texts(view: View): List<String> = when (view) {
+internal fun texts(view: View): List<String> = when (view) {
     is TextView -> listOf(view.text.toString())
     is ViewGroup -> (0 until view.childCount).flatMap { texts(view.getChildAt(it)) }
     else -> emptyList()
 }
 
-private fun Instrumentation.screenOf(host: MainActivity, expected: String): String {
+internal fun Instrumentation.screenOf(host: MainActivity, expected: String): String {
     val state = MainActivity::class.java.getDeclaredField("screen").apply { isAccessible = true }
     var actual = ""
     val end = SystemClock.uptimeMillis() + 15000

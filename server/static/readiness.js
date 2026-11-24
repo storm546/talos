@@ -17,7 +17,7 @@ Object.assign(dictionary.bg, {
   rdDigest:'Сутрешен преглед', rdDigestEmpty:'Няма какво да се отбележи тази сутрин.',
   rdPhrase:'Оформи с локалния модел', rdPhrased:'Оформено от локалния модел само от фактите по-долу.',
   rdNoModel:'Локалният модел не е наличен; показан е списъкът с факти.', rdFacts:'Факти',
-  rdFact_missing_checkin:'Няма отчет: ', rdFact_below_usual:'Под обичайното: ', rdFact_load_spike:'Натоварване над обичайното: ',
+  rdNot100:'Не е на 100%', rdFact_missing_checkin:'Няма отчет: ', rdFact_below_usual:'Под обичайното: ', rdFact_load_spike:'Натоварване над обичайното: ',
   rdNote:'Информация за спортиста и треньора, не медицински съвет. Всеки показател се сравнява с последните 28 дни на самия спортист (поне 7 стойности); промяна се отчита само над 0,5 × стандартното отклонение и типичната грешка. За пулса в покой и вариабилността на пулса се сравнява средното за последните 7 дни (днешната стойност и поне 3 общо), за да не решава една сутрин. Сънят се сравнява с нужните часове за възрастта и с редовността. Натоварването е RPE × минути за всяка тренировка; показани са сборът за последните 7 дни и обичайната седмица за последните 28 дни. Съотношението 7/28 дни е второстепенно: само сравнение с обичайното, не прогноза и не оценка на риск, а ползата му е спорна в литературата.'
 });
 Object.assign(dictionary.en, {
@@ -37,7 +37,7 @@ Object.assign(dictionary.en, {
   rdDigest:'Morning digest', rdDigestEmpty:'Nothing to note this morning.',
   rdPhrase:'Phrase with the local model', rdPhrased:'Phrased by the local model from the facts below only.',
   rdNoModel:'The local model is not available; the list of facts is shown.', rdFacts:'Facts',
-  rdFact_missing_checkin:'Not checked in: ', rdFact_below_usual:'Below usual: ', rdFact_load_spike:'Load above usual: ',
+  rdNot100:'Not 100%', rdFact_missing_checkin:'Not checked in: ', rdFact_below_usual:'Below usual: ', rdFact_load_spike:'Load above usual: ',
   rdNote:'Information for athlete and coach, not medical advice. Each measure is compared with the athlete’s own last 28 days (at least 7 values); a change counts only beyond 0.5 × SD and the typical error. Resting heart rate and heart rate variability compare the mean of the last 7 days (today’s value and at least 3 in all), so one morning does not decide. Sleep is compared with the hours needed for the age and with regularity. Load is RPE × minutes per session; shown are the last 7 days’ total and the usual week over the last 28 days. The 7/28-day ratio is secondary: it only compares with what is usual, it is not a forecast or a risk score, and its use is disputed in the literature.'
 });
 state.readiness = {group:'', sort:'status', phrased:false};
@@ -65,6 +65,7 @@ function factorNames(keys) { return keys.map(key => t('rd_' + key)).join(', '); 
 function statusCell(row) {
   const cell = node('td');
   cell.append(node('span', t('rd_' + row.status), 'rd-status rd-' + row.status));
+  if (row.not_100) cell.append(node('span', t('rdNot100'), 'badge rd-not-100'));
   if (row.worse.length) cell.append(node('small', t('rdWorse') + factorNames(row.worse)));
   else if (row.better.length) cell.append(node('small', t('rdBetter') + factorNames(row.better)));
   if (row.status === 'still_learning' && row.learning.length) cell.append(node('small', t('rdLearning') + factorNames(row.learning)));

@@ -43,7 +43,7 @@
     <string name="today_ratio_learning">Съотношение 7 / 28 дни: още се учи</string>
     <string name="today_weight_empty">Още няма претегляне. Запишете едно, за да започне тенденцията.</string>
     <string name="today_weight_trend">Тенденция %1$s кг · претегляне %2$s</string>
-    <string name="today_records_empty">Тази седмица няма нови рекорди. Продължавай да записваш; Талос ще ги забележи.</string>
+    <string name="today_records_empty">Тази седмица няма нови рекорди. Продължавай да записваш; Talos ще ги забележи.</string>
     <string name="today_session_empty">Няма планирана тренировка в клуба.</string>
     <string name="today_messages_none">Няма непрочетени съобщения.</string>
     <string name="today_messages_unread">Непрочетени от треньора: %1$d</string>
