@@ -141,7 +141,7 @@ Landmarker (тежък модел за видео, лек за живо прос
 
 ### 4.6 Описание на приложението
 
-Системата работи на https://jumpscan.stormlabs.cloud (сървър и уеб панел; приложение 1.4.0-beta15).
+Системата работи на https://jumpscan.stormlabs.cloud (сървър и уеб панел; приложение 1.4.0-beta16).
 Тестовите акаунти за всяка роля са в `testovi-akaunti.md`, паролата е `demo1234`, данните са
 синтетични. Локално: `pip install -r server/requirements.txt`, `python -m server.seed` и `uvicorn
 server.main:app`; за постоянна работа има `Dockerfile`, `docker-compose.yml` и systemd услуга
