@@ -53,6 +53,13 @@ internal fun MainActivity.openTool(tool: Tool) {
 
 internal fun MainActivity.openTool(key: String) = Tools[key]?.let { openTool(it) } ?: home()
 
+/** "Ask the assistant" with a prepared question about what is on screen (SPEC 10.9). */
+internal fun MainActivity.askButton(draft: String) =
+    button(getString(R.string.ask_assistant), look = ActionTone.TONAL) { assistantScreen(draft = draft) }.apply {
+        setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("assistant", green), null, null, null)
+        compoundDrawablePadding = dp(8)
+    }
+
 /** A section's tools as one list of rows under an eyebrow. */
 internal fun MainActivity.toolList(title: Int, tools: List<Tool>, parent: LinearLayout = page) {
     eyebrow(getString(title), parent)

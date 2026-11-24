@@ -171,4 +171,8 @@
     <string name="today_ask">Ask about it</string>
     <string name="today_sleep">Sleep</string>
     <string name="today_ask_draft">Given today\'s summary, what should I focus on today?</string>
+    <string name="ask_assistant">Ask the assistant</string>
+    <string name="ask_form_draft">Explain the camera technique analysis of my %1$s set from %2$s and what I should work on.</string>
+    <string name="ask_food_draft">Look at my food on %1$s: what should I eat for the rest of the day to reach my targets?</string>
+    <string name="ask_training_draft">Given my readiness and recent training, what workout should I do today?</string>
 </resources>

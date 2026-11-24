@@ -22,7 +22,7 @@ internal fun MainActivity.assistantScreen(message: String? = null, draft: String
         text(getString(R.string.assistant_you), 14, green, prompt)
         text(question, parent = prompt)
         text(getString(R.string.assistant_title), 14, green)
-        text(answer)
+        text(plainReply(answer))
     }
     if (message != null) notice(message, caution = true)
     val api = featureApi()
@@ -119,3 +119,6 @@ private fun MainActivity.describeAction(action: JSONObject): String? {
         else -> null
     }
 }
+
+/** Models sometimes answer in Markdown even when asked not to; the phone shows plain text. */
+internal fun plainReply(text: String) = text.replace("**", "").replace(Regex("(?m)^#{1,6} "), "").replace(Regex("(?m)^\\|[-| :]+\\|$\\n?"), "")

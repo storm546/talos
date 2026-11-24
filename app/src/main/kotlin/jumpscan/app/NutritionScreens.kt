@@ -180,6 +180,7 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
             saveFeature(FeatureWrite.COMPLETE, JSONObject(), day) { _, result -> nutritionHome(day, result) }
         }
     } else button(getString(R.string.nutr_summary)) { nutritionHome(day) }
+    askButton(getString(R.string.ask_food_draft, localDate(day, locale)))
     toolList(R.string.section_food_more, Tools.food)
     pendingControls()
 }

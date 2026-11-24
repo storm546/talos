@@ -145,6 +145,7 @@ private fun MainActivity.workoutChoices(templates: List<JSONObject>, plans: List
         }
     }
     text(getString(R.string.workout_start_note), 13).setPadding(0, dp(16), 0, 0)
+    askButton(getString(R.string.ask_training_draft))
     toolList(R.string.section_training_more, Tools.training)
 }
 

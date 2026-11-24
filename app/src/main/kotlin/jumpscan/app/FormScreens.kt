@@ -245,6 +245,10 @@ internal fun MainActivity.formResult(metrics: JSONObject, result: FormResult? = 
         if (result.status == R.string.saved_pending) pendingControls()
         text(getString(R.string.no_video_upload), 13)
     }
+    // The assistant reads saved sets only (SPEC 10.9).
+    if (token().isNotEmpty() && (result == null || result.status == R.string.feature_saved)) askButton(getString(R.string.ask_form_draft,
+        exercise.label(bg).lowercase(locale), metrics.optString("created_at").takeIf { it.length >= 10 }?.let { localDate(it.take(10), locale) }
+            ?: getString(R.string.ui_today).lowercase(locale)))
     val reps = metrics.getJSONArray("repetitions").objects()
     val medians = if (exercise.signal.legacy) repFields.keys.filter { !summary.isNull("median_$it") }.map { key ->
         Triple(repLabel(key), number(summary, "median_$key"), when {
