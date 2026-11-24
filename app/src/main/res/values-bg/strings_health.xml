@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hc_title">Health Connect</string>
+    <string name="hc_source">%1$s · от Health Connect</string>
+    <string name="hc_fill">Попълнете от Health Connect</string>
+    <string name="hc_state_missing">Не е инсталиран</string>
+    <string name="hc_state_update">Нужна е актуализация</string>
+    <string name="hc_state_connect">Свържете</string>
+    <string name="hc_state_connected">Свързано · %1$d от %2$d</string>
+    <string name="hc_allowed">Разрешени: %s.</string>
+    <string name="hc_allowed_none">Talos все още не може да чете нищо от Health Connect.</string>
+    <string name="hc_samsung_note">Samsung Health: отворете Настройки › Health Connect и разрешете споделянето. Samsung споделя крачки, тренировки, пулс и сън; не споделя пулс в покой и HRV, затова Talos оценява пулса в покой от нощния Ви пулс.</string>
+    <string name="hc_denied">Достъпът до Health Connect не е разрешен. Можете да го разрешите по-късно от Профил.</string>
+    <string name="hc_connected">Health Connect е свързан.</string>
+    <string name="hc_failed">Health Connect не можа да бъде прочетен.</string>
+    <string name="hc_unavailable">Health Connect не е наличен на този телефон.</string>
+    <string name="hc_nothing">В Health Connect още няма нови данни за това.</string>
+    <string name="hc_skipped">%1$s от Health Connect (%2$s) е извън допустимите граници и не е попълнено.</string>
+    <string name="hc_no_hrv">Samsung Health не споделя HRV с Health Connect; въведете го ръчно, ако го измервате.</string>
+    <string name="hc_resting_estimated">Пулс в покой, оценка от нощния пулс (уд./мин)</string>
+    <string name="hc_steps_today">Крачки днес: %s · от Health Connect</string>
+    <string name="hc_session_offer">%1$s: %2$s %3$d мин — добавете?</string>
+    <string name="hc_session_add">Добавете</string>
+    <string name="hc_session_dismiss">Пропуснете</string>
+    <string name="hc_session_note">От Health Connect: изберете вида и RPE, после запазете.</string>
+    <string name="hc_run">Бягане</string>
+    <string name="hc_walk">Ходене</string>
+    <string name="hc_bike">Колоездене</string>
+    <string name="hc_strength">Силова тренировка</string>
+    <string name="hc_swim">Плуване</string>
+    <string name="hc_workout">Тренировка</string>
+    <string name="hc_p_resting">пулс в покой</string>
+    <string name="hc_p_heart">пулс</string>
+    <string name="hc_p_hrv">HRV</string>
+    <string name="hc_p_sleep">сън</string>
+    <string name="hc_p_steps">крачки</string>
+    <string name="hc_p_weight">тегло</string>
+    <string name="hc_p_exercise">тренировки</string>
+    <string name="hc_privacy_title">Talos и Health Connect</string>
+    <string name="hc_privacy_text">Talos само чете от Health Connect и никога не записва в него. Чете пулс в покой, пулс, вариабилност на сърдечния ритъм (RMSSD), сън, крачки, тегло и тренировки.\n\nЗащо: за да попълни сутрешния Ви чек-ин (пулс в покой, HRV, час на лягане и ставане), теглото и днешните тренировки и да покаже днешните крачки на екран „Днес“. Когато пулс в покой не се споделя, Talos го оценява от пулса Ви през нощта и го отбелязва.\n\nКакво остава на телефона: всичко, прочетено от Health Connect, остава на този телефон, докато не натиснете „Запазете“ при чек-ин, тегло или тренировка. Само тези запазени числа отиват на сървъра на клуба, все едно сте ги въвели ръчно. Крачките никога не се изпращат.\n\nМожете да промените или оттеглите достъпа по всяко време от настройките на Health Connect.</string>
+    <string name="hc_close">Затворете</string>
+</resources>

@@ -93,7 +93,8 @@ internal fun MainActivity.readinessCheck() {
 }
 
 /** Sessions of one day with type, minutes and RPE; adding one goes through the offline queue. */
-internal fun MainActivity.sessionsScreen(day: String = todayLocal(), message: String? = null) {
+internal fun MainActivity.sessionsScreen(day: String = todayLocal(), message: String? = null, minutes: String = "",
+                                        healthStart: java.time.Instant? = null) {
     layout(getString(R.string.rd_sessions_title), "sessions")
     dayPicker(day) { sessionsScreen(it) }
     featureError(message)
@@ -121,6 +122,7 @@ internal fun MainActivity.sessionsScreen(day: String = todayLocal(), message: St
     }
     val form = card()
     section(R.string.rd_add_session, form)
+    if (healthStart != null) text(getString(R.string.hc_session_note), 14, parent = form)
     var kind = "practice"
     val choices = mutableListOf<RadioButton>()
     sessionKinds.chunked(3).forEach { chunk ->
@@ -135,11 +137,12 @@ internal fun MainActivity.sessionsScreen(day: String = todayLocal(), message: St
         }
         repeat(3 - chunk.size) { line.addView(android.view.View(this), LinearLayout.LayoutParams(0, 0, 1f)) }
     }
-    val minutes = field(getString(R.string.rd_minutes), "", InputType.TYPE_CLASS_NUMBER, form)
+    val minutesField = field(getString(R.string.rd_minutes), minutes, InputType.TYPE_CLASS_NUMBER, form)
     val rpe = field(getString(R.string.rd_rpe), "", InputType.TYPE_CLASS_NUMBER, form)
     button(getString(R.string.rd_save_session), primary = true, parent = form) {
-        val m = minutes.value().toIntOrNull(); val r = rpe.value().toIntOrNull()
+        val m = minutesField.value().toIntOrNull(); val r = rpe.value().toIntOrNull()
         if (m == null || m !in 0..600 || r == null || r !in 0..10) { snack(getString(R.string.rd_session_invalid)); return@button }
+        healthStart?.let { handleSession(it) }
         saveFeature(FeatureWrite.SESSION, JSONObject().put("day", day).put("kind", kind).put("minutes", m).put("rpe", r), day) { _, note ->
             sessionsScreen(day, note)
         }

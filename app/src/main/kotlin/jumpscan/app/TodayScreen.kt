@@ -107,6 +107,7 @@ internal fun MainActivity.home(message: String? = null) {
             settingRow(cardIcon(key), getString(cardTitle(key)), getString(R.string.today_show), group) { hideCard(key, false); home() }
         }
     }
+    healthToday(cards)
     pendingControls()
     refreshToday()
     // Pull down at the top of the page to reload; the system overscroll stretch is the visual, the status line the answer.
@@ -156,6 +157,14 @@ private fun sectionOf(key: String, data: JSONObject?): String? = when (key) {
     // The flag changes the readiness and plan cards too.
     "readiness", "plan" -> data?.opt(key)?.toString() + data?.opt("adjustment")
     else -> data?.opt(key)?.toString()
+}
+
+/** Draw one card again, for phone-only additions such as Health Connect steps. */
+internal fun MainActivity.redrawCard(cards: LinearLayout, key: String) {
+    @Suppress("UNCHECKED_CAST")
+    (cards.getTag(R.id.today_sections) as? MutableMap<String, String?>)?.remove(key)
+    cards.findViewWithTag<View>("card-$key")?.let { cards.removeView(it) }
+    drawToday(cards, cachedToday()?.first)
 }
 
 private fun MainActivity.drawToday(cards: LinearLayout, data: JSONObject?) {
@@ -244,6 +253,7 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
                 .layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10); if (index > 0) marginStart = dp(8) }
         }
     }
+    if (hero) healthSteps?.let { line(getString(R.string.hc_steps_today, String.format(locale, "%,d", it)), 13) }
     if (key == "jump") {
         line(getString(R.string.today_jump_note))
         actions(R.string.today_jump_record to { jumpHome() })

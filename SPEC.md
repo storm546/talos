@@ -1046,16 +1046,23 @@ only: Talos never writes to Health Connect. Data stays on the phone until the at
 training session, which then go to the server through the existing routes and offline queue (no server change).
 
 - **Library and manifest:** `androidx.health.connect:connect-client` (Apache-2.0; record it in LICENSES-AUDIT.md), the
-  read permissions for resting heart rate, heart rate variability (RMSSD), sleep sessions, steps, weight and exercise
-  sessions, the permissions-rationale activity Health Connect requires (it shows the privacy text: what is read, why,
+  read permissions for resting heart rate, heart rate, heart rate variability (RMSSD), sleep sessions, steps, weight and
+  exercise sessions, the permissions-rationale activity Health Connect requires (it shows the privacy text: what is read, why,
   that it stays on the phone until you save) and the Android 14 `VIEW_PERMISSION_USAGE` alias.
 - **Connect:** Profile gets a "Health Connect" row: availability state (not installed / needs update / available),
   "Свържете / Connect" that requests the permissions, which permissions are granted, and a short Samsung Health note
   ("In Samsung Health: Settings > Health Connect, allow it to share"). If Health Connect is missing or outdated on
   Android 9-13, the row opens its Play Store page.
-- **Check-in prefill:** the check-in screen gets "Попълни от Health Connect / Fill from Health Connect": resting heart
-  rate (the latest resting value from the last 24 h, rounded), HRV RMSSD in ms (night or morning value from the last
-  24 h), bedtime and wake time from the longest sleep session ending today (local time, HH:MM). Each prefilled field
+- **What Samsung Health shares (Samsung's Health Connect FAQ and Data SDK type list, checked by the orchestrator
+  2026-11-24):** steps, exercise, heart rate and sleep. It does not write resting heart rate or HRV (RMSSD) to Health
+  Connect; weight is not in Samsung's list (read if present, never relied on). The Samsung Health Data SDK is not used:
+  its licence forbids building it into another product (a clash with the GPL entry) and it needs Samsung approval.
+- **Check-in prefill:** the check-in screen gets "Попълнете от Health Connect / Fill from Health Connect": resting heart
+  rate (the latest `RestingHeartRateRecord` from the last 24 h; when there is none, an estimate from the heart rate
+  samples inside the sleep session below, see `jumpscan.core.NightHeartRate`), HRV RMSSD in ms (the latest
+  `HeartRateVariabilityRmssdRecord` of the last 24 h taken from 20:00 to 11:59 local time; when there is none the field
+  stays for manual entry with a one-line note that Samsung Health does not share HRV), bedtime and wake time from the
+  longest sleep session ending today (local time, HH:MM). Each prefilled field
   is marked "от Health Connect" and stays editable; nothing is saved until the athlete taps Save. Values outside the
   server's bounds are skipped with a note.
 - **Weigh-in prefill:** the latest weight from the last 7 days, same rules.
@@ -1064,6 +1071,30 @@ training session, which then go to the server through the existing routes and of
   athlete picks the type and RPE before it is saved through the existing training-session route.
 - **Steps:** today's steps shown on the Today readiness card as information (not uploaded).
 - **Honesty:** the source of every prefilled number is visible; readiness treats them like typed values.
+
+**Resting heart rate estimate (added 2026-11-24, orchestrator correction):** every 5-minute window that starts at a
+heart-rate sample during that sleep session (samples from the start up to, not including, start + 5 min) with at
+least 3 samples gives a mean; the lowest mean, rounded to a whole beat, is the estimate, and no qualifying window
+means no estimate. The field is then labelled "Пулс в покой, оценка от нощния пулс / Resting heart rate, estimated
+from night heart rate" plus "от Health Connect", and stays editable. The window and the 3-sample minimum are design
+choices with no reference measurement behind them; a phone without a watch records little or no night heart rate.
+
+**10.5 clarifications (implementation, 2026-11-24):**
+- Library: the only stable `connect-client` (1.1.0) needs compileSdk 36 and AGP 8.9.1; the app pins `1.1.0-beta01`,
+  the newest release that builds with compileSdk 35 and AGP 8.7.3. Moving to 1.1.0 needs both bumps.
+- The bounds are the server's: resting heart rate 25–150, HRV above 0 and at most 300 ms (rounded to 0.1), weight
+  20–400 kg (rounded to 0.1). A value outside them is skipped with a note naming the field and the value; it is never
+  clamped. A prefilled field's "от Health Connect" mark goes away as soon as the athlete changes the value.
+- "Talos already knows" a Health Connect exercise session when its start is within 5 minutes of a Talos workout's
+  `started_at` (read from `/api/workouts`, offline skipped) or of a session the athlete already added or turned down
+  on this phone (kept in app preferences, last 50). Training sessions on the server carry no start time, so a session
+  typed by hand is not matched. Sessions of 1–600 minutes are offered, newest three, above the Today cards; "Add" opens
+  the training-session form with the minutes filled and the athlete choosing type and RPE.
+- The source is "Samsung Health" when the record came from `com.sec.android.app.shealth`, otherwise "Health Connect".
+- Debug builds also declare the Health Connect write permissions, only so the instrumentation checks can insert fake
+  records; the release manifest declares read permissions only.
+- The rationale activity (`HealthRationaleActivity`) shows the privacy text and is also the target of the Android 14
+  `ViewPermissionUsageActivity` alias.
 
 Done when: the app builds; AppChecks cover availability handling, permission denial, and prefill mapping with fake
 Health Connect data (the API 34 emulator has Health Connect built in; insert test records from the test APK); the

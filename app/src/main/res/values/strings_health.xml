@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Health Connect and Samsung Health (SPEC 10.5). -->
+<resources>
+    <string name="hc_title">Health Connect</string>
+    <string name="hc_source">%1$s · from Health Connect</string>
+    <string name="hc_fill">Fill from Health Connect</string>
+    <string name="hc_state_missing">Not installed</string>
+    <string name="hc_state_update">Needs an update</string>
+    <string name="hc_state_connect">Connect</string>
+    <string name="hc_state_connected">Connected · %1$d of %2$d</string>
+    <string name="hc_allowed">Allowed: %s.</string>
+    <string name="hc_allowed_none">Talos cannot read anything from Health Connect yet.</string>
+    <string name="hc_samsung_note">Samsung Health: open Settings › Health Connect and allow it to share. Samsung shares steps, workouts, heart rate and sleep; it does not share resting heart rate or HRV, so Talos estimates resting heart rate from your night heart rate.</string>
+    <string name="hc_denied">Health Connect access was not allowed. You can allow it later in Profile.</string>
+    <string name="hc_connected">Health Connect connected.</string>
+    <string name="hc_failed">Health Connect could not be read.</string>
+    <string name="hc_unavailable">Health Connect is not available on this phone.</string>
+    <string name="hc_nothing">Health Connect has nothing new for this yet.</string>
+    <string name="hc_skipped">%1$s from Health Connect (%2$s) is outside the allowed range and was not filled.</string>
+    <string name="hc_no_hrv">Samsung Health does not share HRV with Health Connect; type it in if you measure it.</string>
+    <string name="hc_resting_estimated">Resting heart rate, estimated from night heart rate (bpm)</string>
+    <string name="hc_steps_today">Steps today: %s · from Health Connect</string>
+    <string name="hc_session_offer">%1$s: %2$s %3$d min — add?</string>
+    <string name="hc_session_add">Add</string>
+    <string name="hc_session_dismiss">Not this one</string>
+    <string name="hc_session_note">From Health Connect: choose the type and RPE, then save.</string>
+    <string name="hc_run">Running</string>
+    <string name="hc_walk">Walking</string>
+    <string name="hc_bike">Cycling</string>
+    <string name="hc_strength">Strength training</string>
+    <string name="hc_swim">Swimming</string>
+    <string name="hc_workout">Workout</string>
+    <string name="hc_p_resting">resting heart rate</string>
+    <string name="hc_p_heart">heart rate</string>
+    <string name="hc_p_hrv">HRV</string>
+    <string name="hc_p_sleep">sleep</string>
+    <string name="hc_p_steps">steps</string>
+    <string name="hc_p_weight">weight</string>
+    <string name="hc_p_exercise">workouts</string>
+    <string name="hc_privacy_title">Talos and Health Connect</string>
+    <string name="hc_privacy_text">Talos only reads from Health Connect and never writes to it. It reads resting heart rate, heart rate, heart rate variability (RMSSD), sleep, steps, weight and workouts.\n\nWhy: to fill your morning check-in (resting heart rate, HRV, bedtime and wake time), your weigh-in and today\'s training sessions, and to show today\'s steps on Today. When no resting heart rate is shared, Talos estimates it from your heart rate during the night and says so.\n\nWhat stays on the phone: everything read from Health Connect stays on this phone until you tap Save on a check-in, a weigh-in or a training session. Only those saved numbers go to your club server, as if you had typed them. Steps are never uploaded.\n\nYou can change or withdraw access at any time in the Health Connect settings.</string>
+    <string name="hc_close">Close</string>
+</resources>

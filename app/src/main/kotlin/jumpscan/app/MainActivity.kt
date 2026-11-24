@@ -54,6 +54,8 @@ class MainActivity : Activity() {
     private var test = "cmj"
     private var readinessRun = false // the current result is a morning readiness check (SPEC 9)
     private var nudges: NudgeStream? = null
+    internal var healthResult: ((Set<String>) -> Unit)? = null
+    internal var healthSteps: Long? = null // today's steps from Health Connect, shown on the readiness card only
     internal lateinit var page: LinearLayout
         private set
     private var previousTab = -1
@@ -473,6 +475,9 @@ class MainActivity : Activity() {
         if (token().isNotEmpty()) {
             divider(group)
             settingRow("signout", getString(R.string.sign_out), null, group, subtle = true) { leaveProfile(showServer = false) }
+        }
+        healthProfile()
+        if (token().isNotEmpty()) {
             eyebrow(getString(R.string.profile_advanced)).setPadding(0, dp(22), 0, 0)
             settingRow("server", getString(R.string.server_url), base(), settingsGroup()) { leaveProfile(showServer = true) }
         }
@@ -634,6 +639,7 @@ class MainActivity : Activity() {
         val rpe = field(getString(R.string.checkin_rpe), optional("rpe"), InputType.TYPE_CLASS_NUMBER)
         text(getString(R.string.checkin_optional), 14)
         section(R.string.rd_morning).setPadding(0, dp(18), 0, 0)
+        val healthSlot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; page.addView(this) }
         val restingHr = field(getString(R.string.rd_resting_hr_field), optional("resting_hr"), InputType.TYPE_CLASS_NUMBER)
         val hrv = decimalField(R.string.rd_hrv_field, optional("hrv_rmssd"))
         val clock = InputType.TYPE_CLASS_DATETIME or InputType.TYPE_DATETIME_VARIATION_TIME
@@ -642,6 +648,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL; sleepTimes.addView(this, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(8) }) })
         val wakeTime = field(getString(R.string.rd_wake_field), optional("wake_time"), clock, LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; sleepTimes.addView(this, LinearLayout.LayoutParams(0, -2, 1f)) })
+        healthCheckinButton(healthSlot, restingHr, hrv, bedtime, wakeTime)
         button(getString(R.string.checkin_save), primary = true) {
             val body = try { checkinBody(
                 groups.map { group ->
@@ -766,6 +773,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 40) return barcodeResult(resultCode, data?.getStringExtra("code"))
+        if (requestCode == HEALTH_REQUEST) return healthPermissionResult(resultCode, data)
         if (requestCode == FIELD_TOOL_REQUEST) return if (resultCode == RESULT_OK) cameraToolResult(data) else Unit
         if (requestCode == 10 && resultCode == RESULT_FIRST_USER) pickJumpVideo()
         if (requestCode == 10 && resultCode == RESULT_OK) {

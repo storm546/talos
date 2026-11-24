@@ -58,4 +58,7 @@ dependencies {
     implementation 'androidx.camera:camera-view:1.5.1'
     // Bundled barcode model: scanning works offline and sends no image anywhere.
     implementation 'com.google.mlkit:barcode-scanning:17.3.0'
+    // Read-only Health Connect client (SPEC 10.5). 1.1.0 (the only stable) needs compileSdk 36 and AGP 8.9.1;
+    // beta01 is the newest release that builds with compileSdk 35 and AGP 8.7.
+    implementation 'androidx.health.connect:connect-client:1.1.0-beta01'
 }
