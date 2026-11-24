@@ -758,7 +758,7 @@ class MainActivity : Activity() {
         catch (_: Exception) {
             val error = getString(R.string.no_video_app)
             if (request == 30) { pendingTrial = null; diagnostics(error) }
-            else if (request in 12..13) formHome(error) else if (request == 40) snack(getString(R.string.scan_camera_failed)) else jumpHome(error)
+            else if (request in 12..13) formHome(error) else if (request == 40) snack(getString(R.string.scan_camera_failed)) else if (request in FOOD_REQUESTS) snack(getString(R.string.food_no_app)) else jumpHome(error)
         }
     }
 
@@ -773,6 +773,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 40) return barcodeResult(resultCode, data?.getStringExtra("code"))
+        if (requestCode in FOOD_REQUESTS) return foodPhotoResult(requestCode, resultCode, data?.data)
         if (requestCode == HEALTH_REQUEST) return healthPermissionResult(resultCode, data)
         if (requestCode == FIELD_TOOL_REQUEST) return if (resultCode == RESULT_OK) cameraToolResult(data) else Unit
         if (requestCode == 10 && resultCode == RESULT_FIRST_USER) pickJumpVideo()

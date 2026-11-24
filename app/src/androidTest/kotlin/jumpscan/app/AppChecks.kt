@@ -70,6 +70,9 @@ class AppChecks : Instrumentation() {
             } else if (only == "health") {
                 targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
                 HealthStudio(this, requireNotNull(fixtureServer)).screens()
+            } else if (only == "food") {
+                targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
+                FoodStudio(this, requireNotNull(fixtureServer)).screens()
             } else if (only == "week") {
                 targetContext.getSharedPreferences("instrument", 0).edit().putString("appearance", themeName).commit()
                 WeekStudio(this, requireNotNull(fixtureServer)).screens()
@@ -93,6 +96,7 @@ class AppChecks : Instrumentation() {
                 todayChecks(this)
                 healthChecks(this)
                 weekChecks(this)
+                foodVisionChecks(this)
                 capture.policies()
                 diagnosticChecks()
             }

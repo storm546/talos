@@ -21,13 +21,15 @@ internal fun serverUrl(input: String): String {
     return value
 }
 
-// Only account, club and metrics JSON enter this function. Video and pose data stay on the device.
-internal fun api(base: String, path: String, method: String = "GET", token: String = "", body: JSONObject? = null): String {
+// Only account, club and metrics JSON enter this function, plus a meal or pantry photo the user chose to analyse
+// (SPEC 10.6). Video and pose data stay on the device.
+internal fun api(base: String, path: String, method: String = "GET", token: String = "", body: JSONObject? = null,
+    readTimeoutMs: Int = 30_000): String {
     val connection = URI(serverUrl(base) + path).toURL().openConnection() as HttpURLConnection
     try {
         connection.requestMethod = method
         connection.connectTimeout = 15_000
-        connection.readTimeout = 30_000
+        connection.readTimeout = readTimeoutMs
         connection.instanceFollowRedirects = false
         connection.setRequestProperty("Accept", "application/json")
         if (token.isNotEmpty()) connection.setRequestProperty("Authorization", "Bearer $token")

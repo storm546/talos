@@ -270,7 +270,7 @@ private fun MainActivity.editLog(day: String, log: JSONObject) {
 }
 
 /** A 2 x 2 meal choice; the long Bulgarian snack label wraps inside its half. */
-private fun MainActivity.mealGrid(selected: String, picked: (String) -> Unit) {
+internal fun MainActivity.mealGrid(selected: String, picked: (String) -> Unit) {
     text(getString(R.string.nutr_meal), 14).setPadding(0, dp(12), 0, dp(4))
     val choices = mutableListOf<RadioButton>()
     meals.entries.chunked(2).forEach { pair ->
@@ -306,6 +306,7 @@ internal fun MainActivity.foods(day: String = diaryDay, query: String? = null, r
     button(getString(R.string.nutr_search), primary = true) { searchFoods(day, search.value(), 0) }
     toolRow(UiTile(R.string.scan_short, "scan") { scanBarcode() }, UiTile(R.string.nutr_quick_add, "plus") { quickAdd(day) },
         UiTile(R.string.recipes_title, "recipe") { recipes(day) }, UiTile(R.string.ai_entry_short, "assistant") { aiEntry(day) })
+    toolRow(UiTile(R.string.food_photo_short, "camera") { foodPhoto(day) }, UiTile(R.string.cook_short, "food") { startCook(day) })
     section(if (query.isNullOrBlank()) R.string.nutr_recent else R.string.nutr_results).setPadding(0, dp(20), 0, dp(4))
     if (rows.isEmpty()) text(getString(if (query.isNullOrBlank()) R.string.nutr_no_recent else R.string.nutr_no_foods), 14)
     for (food in rows) foodRow(food, sourceLabel(food)) { foodLog(day, food) }
