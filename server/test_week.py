@@ -86,7 +86,7 @@ def test_week_facts_equal_the_routes_and_text_is_null_without_a_model(api, auth,
         assert client.post("/api/set-logs", headers=headers, json={
             "exercise_id": squat, "day": day(), "set_no": set_no, "reps": 5, "load_kg": load, "rpe": None}).status_code == 201
     jump(client, headers, 30)
-    jump(client, headers, 40)
+    jump(client, headers, 42, flight=410)  # beyond the smallest detectable change (11.3 cm, 96.6 ms)
     assert client.put(f"/api/me/weights/{day()}", json={"kg": 70.5}, headers=headers).status_code in (200, 201)
     result = get(client, headers, "/api/me/week")
     assert result["week"] == week and result["from"] == monday.isoformat()
@@ -95,7 +95,7 @@ def test_week_facts_equal_the_routes_and_text_is_null_without_a_model(api, auth,
     assert training["sessions"] == 2 and training["minutes"] == 90 and training["load"] == 570 and training["days"] == 1
     assert training["sets"] == 2 and training["volume_kg"] == 650
     assert training["top_exercises"] == [{"exercise": "Клякане със щанга", "sets": 2, "volume_kg": 650}]
-    assert [(r["measure"], r["value"]) for r in result["records"]][:1] == [("jump_height", 40)]
+    assert [(r["measure"], r["value"]) for r in result["records"]][:1] == [("jump_height", 42)]
     route = get(client, headers, f"/api/athletes/{athlete}/readiness", days=1, day=day())
     wellbeing = next(f["value"] for f in route["days"][0]["factors"] if f["key"] == "wellbeing")
     assert result["checkins"] == {"days": 1, "wellbeing_avg": wellbeing}
