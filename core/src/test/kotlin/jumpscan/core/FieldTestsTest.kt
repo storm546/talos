@@ -145,6 +145,79 @@ class FieldTestsTest {
     }
 
     @Test
+    fun balanceSwayVelocityAboveTheStillNoiseFloor() {
+        // Both feet down to 1440 ms with the hips jittering 0.004 every 40 ms (0.1 per s = 25% of the 0.4 leg per s);
+        // then the left foot is lifted until 4440 ms while the hips move 0.008 every 40 ms (0.2 per s = 50%/s).
+        val frames = (0..150).map { i ->
+            val t = i * 40L
+            val lifted = t in 1440..4440
+            stance(t, if (lifted) 0.1 else 0.0, (if (lifted) 0.008 else 0.004) * (i % 2))
+        }
+        val result = run(frames)!!
+        assertEquals("touch_down", result.endedBy)
+        // Leg lengths include the hip offset (hypot(0.004, 0.4) = 0.40002), hence the 0.01 tolerance.
+        assertEquals(25.0, result.noiseFloorPct!!, 0.01)
+        assertEquals(50.0, result.swayVelocityPct!!, 0.01)
+        assertEquals(25.0, result.swayAboveNoisePct!!, 0.01)
+        assertFalse(result.toJson().contains("velocity") || result.toJson().contains("noise")) // phone only: the server contract is unchanged
+        // Hips drifting more than 3% of leg length (0.012) never give a still window: no floor, no velocity above it.
+        val drifting = run((0..150).map { i -> val t = i * 40L
+            stance(t, if (t in 1440..4440) 0.1 else 0.0, if (t < 1440) 0.0005 * i else 0.0) })!!
+        assertNull(drifting.noiseFloorPct); assertEquals(0.0, drifting.swayVelocityPct!!, 1e-9); assertNull(drifting.swayAboveNoisePct)
+        // A floor above the stance speed reports zero, never a negative sway.
+        assertEquals(0.0, Balance.Result("L", 1000, 1.0, "stopped", 25.0, .9, 10.0, 12.0).swayAboveNoisePct!!, 1e-12)
+        assertEquals(50.0, Balance.speedPct(listOf(Triple(0L, 0.0, 0.0), Triple(500L, 0.03, 0.04), Triple(1000L, 0.0, 0.0)), 0.2)!!, 1e-9)
+    }
+
+    @Test
+    fun lineCrossingIsInterpolatedBetweenFrames() {
+        val detector = LineCrossing.Detector()
+        val activity = listOf(0.5, 0.0, 0.0, 0.0, 0.0, 0.2, 0.3, 0.0, 0.0, 0.0, 0.06, 0.0, 0.0, 0.0, 0.0, 0.13)
+        val crossings = activity.mapIndexedNotNull { i, a -> detector.feed(i * 100L, a)?.let { detector.crossingMs } }
+        // 0.0 at 400 ms to 0.2 at 500 ms reaches 0.12 at 460 ms; 0.0 at 1400 to 0.13 at 1500 reaches it at 1492.31.
+        assertEquals(460.0, crossings[0], 1e-9)
+        assertEquals(1400 + 100 * 0.12 / 0.13, crossings[1], 1e-9)
+        assertEquals(400 + 100 / 3.0, LineCrossing.interpolate(400, 0.06, 500, 0.06 + 0.18, 0.12), 1e-9) // a third of the way
+        assertEquals(500.0, LineCrossing.interpolate(400, 0.2, 500, 0.1, 0.12), 1e-9) // falling activity: the busy frame
+    }
+
+    @Test
+    fun interpolatedCrossingsOfARenderedBodyVaryLessWithFramePhase() {
+        // A dark body (luminance 20 on 200) moves right across the 40-pixel band, filling it in two 33 ms frames.
+        // For 30 frame phases, both estimates are compared with the moment 12% of the band is covered.
+        val band = 40; val rows = 10; val speed = band / 66.0 // pixels per ms
+        fun image(tMs: Double, enterMs: Double) = ByteArray(band * rows) { i ->
+            val x = i % band; if (x < (tMs - enterMs) * speed) 20.toByte() else 200.toByte() }
+        val frameErrors = mutableListOf<Double>(); val interpolatedErrors = mutableListOf<Double>()
+        for (phase in 0 until 30) {
+            val enter = 1000 + phase * 33.0 / 30
+            val truth = enter + 0.12 * band / speed
+            val detector = LineCrossing.Detector()
+            var previous = image(0.0, enter)
+            for (k in 1..60) {
+                val t = k * 33L
+                val current = image(t.toDouble(), enter)
+                val fired = detector.feed(t, LineCrossing.activity(previous, current))
+                previous = current
+                if (fired != null) { frameErrors += fired - truth; interpolatedErrors += detector.crossingMs - truth; break }
+            }
+        }
+        fun spread(e: List<Double>) = e.map { kotlin.math.abs(it - e.average()) }.average()
+        assertEquals(30, frameErrors.size)
+        println("rendered crossing: frame mean ${frameErrors.average()} spread ${spread(frameErrors)}; interpolated mean ${interpolatedErrors.average()} spread ${spread(interpolatedErrors)}")
+        assertTrue(spread(interpolatedErrors) < spread(frameErrors) / 2)
+        assertTrue(kotlin.math.abs(interpolatedErrors.average()) < kotlin.math.abs(frameErrors.average()))
+    }
+
+    @Test
+    fun cueTimeIsWhenTheFirstToneSampleIsPresented() {
+        // Frame 4800 was presented at 1.000 s; the tone starts at frame 2400 of a 48 kHz track, 50 ms earlier.
+        assertEquals(950_000_000L, LineCrossing.tonePresentedNs(4800, 1_000_000_000, 2400, 48_000))
+        // Not yet presented: frame 0 at 2.0 s, tone at frame 4410 of 44.1 kHz is 100 ms later; then moved to another clock.
+        assertEquals(2_100_000_000L + 7_000, LineCrossing.tonePresentedNs(0, 2_000_000_000, 4410, 44_100, 7_000))
+    }
+
+    @Test
     fun reactionTimeFalseStartAndTooSlow() {
         assertEquals(LineCrossing.Reaction.Time(66), LineCrossing.reaction(1000, listOf(900L to 0.0, 1033L to 0.01, 1066L to 0.05)))
         assertEquals(LineCrossing.Reaction.FalseStart, LineCrossing.reaction(1000, listOf(950L to 0.04, 1033L to 0.2)))

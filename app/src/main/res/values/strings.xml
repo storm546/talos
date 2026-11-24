@@ -102,6 +102,7 @@
     <string name="no_track">This video has no video track.</string>
     <string name="too_few_frames">This video has too few frames.</string>
     <string name="fps_error">Use a video between 10 and 480 frames per second.</string>
+    <string name="slow_motion_error">This video was recorded in slow motion or time-lapse: its capture rate differs from its playback rate, so every measured time would be wrong. Record at normal speed or use the in-app camera.</string>
     <string name="timestamps_error">This video\'s frame timestamps are too close together. Try another video.</string>
     <string name="decode_error">Cannot decode this video. Try an MP4 video from your camera.</string>
     <string name="orientation_error">Cannot decode this video\'s orientation. Try another video.</string>

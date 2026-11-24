@@ -134,6 +134,14 @@ internal fun videoSampleTimes(context: Context, uri: Uri, limitUs: Long, distinc
     } finally { extractor.release() }
 }
 
+/**
+ * Slow-motion guard: true when the container's capture frame rate differs from the rate of its sample timestamps by
+ * more than 3%. Such clips (slow motion or time lapse stored at the playback rate) would stretch or shrink every
+ * measured time. No rescaling until a phone test proves the rule; a missing capture rate passes.
+ */
+internal fun captureRateMismatch(captureFps: Double?, timestampFps: Double): Boolean =
+    captureFps != null && captureFps.isFinite() && captureFps > 0 && kotlin.math.abs(captureFps - timestampFps) > 0.03 * timestampFps
+
 internal fun checkedCaptureRate(timesUs: List<Long>, durationUs: Long, target: Int): Double? {
     if (timesUs.size < 2 || target !in listOf(60, 120, 240)) return null
     val span = timesUs.last() - timesUs.first()
@@ -179,6 +187,8 @@ private fun <T> withVideoPose(context: Context, uri: Uri, mode: String, maxMs: L
         val fps = (timesUs.size - 1) * 1_000_000.0 / (timesUs.last() - timesUs.first())
         if (!fps.isFinite() || fps !in 10.0..480.0) throw AppError(R.string.fps_error)
         timing.clipFps = fps
+        if (captureRateMismatch(metadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toDoubleOrNull(), fps))
+            throw AppError(R.string.slow_motion_error)
         if (captureFps != null && checkedCaptureRate(timesUs, duration * 1000, captureFps) == null) {
             throw AppError(R.string.jump_capture_timing)
         }

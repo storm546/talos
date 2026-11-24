@@ -32,8 +32,11 @@ internal fun sampleRun(start: Long): GpsTrack.Recorder = GpsTrack.Recorder("run"
     }
 }
 
-/** Offline queue contract of the field tools (SPEC 9.3). */
-internal fun fieldChecks(test: Instrumentation) {
+/**
+ * Offline queue contract of the field tools (SPEC 9.3), the slow-motion guard on a real clip and the cue tone's
+ * output timestamp on this device. Returns a line describing how the cue time was taken here.
+ */
+internal fun fieldChecks(test: Instrumentation): String {
     val root = test.targetContext.cacheDir.resolve("field-checks")
     try {
         val queue = PendingUploads(root, "https://club.example", 1)
@@ -46,6 +49,36 @@ internal fun fieldChecks(test: Instrumentation) {
         check(sent.size == names.size && sent.all { UUID.fromString(it.getString("client_id")) != null })
         check(sent.map { it.getString("kind") } == listOf("rom", "balance", "sprint", "agility", "reaction", "cardio"))
     } finally { root.deleteRecursively() }
+    slowMotionCheck(test)
+    return cueToneCheck()
+}
+
+/** A clip captured at 120 fps but stored with 30 fps timestamps is refused before any pose work. */
+private fun slowMotionCheck(test: Instrumentation) {
+    check(!captureRateMismatch(null, 30.0) && !captureRateMismatch(Double.NaN, 30.0) && !captureRateMismatch(30.0, 29.2) &&
+        captureRateMismatch(30.0, 31.0) && captureRateMismatch(120.0, 30.0) && captureRateMismatch(1.0, 30.0))
+    val file = File.createTempFile("slowmotion", ".mp4", test.targetContext.cacheDir)
+    try {
+        test.context.assets.open("slowmotion.mp4").use { source -> file.outputStream().use { source.copyTo(it) } }
+        val retriever = android.media.MediaMetadataRetriever()
+        val capture = try { retriever.setDataSource(file.path)
+            retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE) } finally { retriever.release() }
+        check(capture?.toDoubleOrNull() == 120.0) { "Fixture capture rate must read as 120, got $capture" }
+        val refused = runCatching { analyzeVideo(test.targetContext, android.net.Uri.fromFile(file), "cmj") {} }.exceptionOrNull()
+        check(refused is AppError && refused.resource == R.string.slow_motion_error) { "Slow-motion clip must be refused, got $refused" }
+    } finally { file.delete() }
+}
+
+/** The start tone reports when its first sample was presented, on the boot-time clock, within a second of the request. */
+private fun cueToneCheck(): String {
+    val done = java.util.concurrent.CountDownLatch(1)
+    var reported: Pair<Long, Boolean>? = null
+    val requested = SystemClock.elapsedRealtime()
+    playCueTone(100, boottime = true) { at, audio -> reported = at to audio; done.countDown() }
+    check(done.await(3, java.util.concurrent.TimeUnit.SECONDS)) { "The cue tone never reported its start" }
+    val (at, audio) = reported!!
+    check(at in requested - 5..requested + 1000) { "Cue time $at is not near the request $requested" }
+    return "Cue tone: ${if (audio) "AudioTrack output timestamp" else "request-time fallback (no timestamp)"}, ${at - requested} ms after the request."
 }
 
 /** Setup, live and result screens of every field tool against a seeded server, saved as files/<language>-field-<name>.png. */
@@ -87,8 +120,8 @@ internal class FieldStudio(private val test: Instrumentation, private val server
             test.runOnMainSync { tool.finish() }
             SystemClock.sleep(600)
         }
-        fun result(name: String, json: String) {
-            test.runOnMainSync { host.fieldResult(FieldRun(JSONObject(json))) }; shot(name, "field_result")
+        fun result(name: String, json: String, local: JSONObject = JSONObject()) {
+            test.runOnMainSync { host.fieldResult(FieldRun(JSONObject(json), local = local)) }; shot(name, "field_result")
         }
         try {
             test.runOnMainSync { host.toolsHub() }; shot("hub", "tools")
@@ -101,15 +134,15 @@ internal class FieldStudio(private val test: Instrumentation, private val server
             SystemClock.sleep(2500); shot("rom-saved", "field_result")
             test.runOnMainSync { host.balanceSetup() }; shot("balance-setup", "field_balance")
             live("balance-live", "balance")
-            result("balance-result", FIELD_SAMPLES[1])
+            result("balance-result", FIELD_SAMPLES[1], JSONObject().put("sway_velocity_pct", 9.4).put("noise_floor_pct", 3.1))
             test.runOnMainSync { host.speedSetup("sprint") }; shot("sprint-setup", "field_speed")
             live("sprint-live", "sprint") { putExtra("distance", 20.0) }
-            result("sprint-result", FIELD_SAMPLES[2])
+            result("sprint-result", FIELD_SAMPLES[2], JSONObject().put("cue_clock", "audio"))
             test.runOnMainSync { host.speedSetup("agility") }; shot("agility-setup", "field_speed")
             result("agility-result", FIELD_SAMPLES[3])
             test.runOnMainSync { host.speedSetup("reaction") }; shot("reaction-setup", "field_speed")
             live("reaction-live", "reaction")
-            result("reaction-result", FIELD_SAMPLES[4])
+            result("reaction-result", FIELD_SAMPLES[4], JSONObject().put("cue_clock", "audio"))
             test.runOnMainSync { CardioState.running = false; CardioState.recorder = null; host.cardioHome() }; shot("cardio-setup", "cardio")
             // A recorded run injected into the service state (GPS needs a real phone outdoors).
             val start = SystemClock.elapsedRealtime() - 217 * 4_000L

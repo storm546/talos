@@ -20,7 +20,7 @@
     <string name="ft_open_camera">Open camera</string>
     <string name="ft_balance_setup">Phone at hip height, 2–3 m away, facing you. Stand on one leg with both feet in view.</string>
     <string name="ft_balance_how">Lift one foot clearly off the floor. The clock starts after 0.3 s and stops when the foot touches down, the hips sway too far or you leave the picture; 60 s at most.</string>
-    <string name="ft_balance_limits">Sway is the average hip movement in % of leg length. It includes the pose model\'s own jitter, so compare with yourself on the same phone and distance.</string>
+    <string name="ft_balance_limits">Sway is the average hip movement in % of leg length; sway speed is the hip path per second above the noise measured while you stood still. Both include the pose model\'s own jitter, so compare with yourself on the same phone and distance.</string>
     <string name="ft_balance_other_leg">Repeat on the other leg to compare left and right.</string>
     <string name="ft_sprint">Sprint</string>
     <string name="ft_agility">Agility</string>
@@ -42,7 +42,7 @@
     <string name="ft_done">Done</string>
     <string name="ft_rom_live_side">Side-on to the camera. Move to your end range and hold still.</string>
     <string name="ft_rom_live_front">Face the camera. Raise the arms sideways and hold still.</string>
-    <string name="ft_balance_live">Face the camera, then lift one foot.</string>
+    <string name="ft_balance_live">Face the camera, stand still on both feet for a second, then lift one foot.</string>
     <string name="ft_reaction_live">Stand still and react to the tone.</string>
     <string name="ft_sprint_live_cue">Press Start; on the beep the athlete runs through the line.</string>
     <string name="ft_crossing_live">Press Start; the clock runs from the first crossing to the next.</string>
@@ -79,8 +79,11 @@
     <string name="ft_end_lost">pose lost</string>
     <string name="ft_end_stopped">stopped</string>
     <string name="ft_sway_line">Sway %1$s%% of leg length</string>
+    <string name="ft_sway_speed_line">Sway speed %1$s%% of leg length per second above the still noise (%2$s%%/s)</string>
+    <string name="ft_sway_speed_no_floor">Sway speed %1$s%% of leg length per second; the still noise was not measured (stand still on both feet for a second before lifting)</string>
     <string name="ft_precision_line">± %1$s ms (one frame at %2$s fps)</string>
     <string name="ft_cue_note">Started on the phone\'s tone: includes the reaction and the phone\'s unmeasured audio delay.</string>
+    <string name="ft_cue_note_audio">Started when the tone left the phone\'s audio output (measured by the phone): the time includes your reaction and the sound\'s travel to you.</string>
     <string name="ft_clock_note">This camera\'s frame clock is only roughly aligned with the phone clock; cue-started times are less exact.</string>
     <string name="ft_save">Save result</string>
     <string name="ft_again">Measure again</string>
