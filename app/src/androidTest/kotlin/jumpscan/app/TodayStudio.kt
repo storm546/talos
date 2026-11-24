@@ -68,13 +68,13 @@ internal fun todayChecks(test: Instrumentation) {
         }
         // What the fixture has: no steps, body, technique, consistency or next session.
         val drawn = setOf("readiness", "plan", "checkin", "sleep", "nutrition", "training", "weight", "records", "messages")
-        fun visual(order: List<String>) = order.filter { it == "readiness" } + order.filter { it in GLANCE && it in drawn } +
-            order.filter { it !in GLANCE && it != "readiness" && it in drawn }
+        fun visual(order: List<String>) = todayDrawOrder(order).filter { it in drawn && it != "sleep" }
         check(test.screenOf(host, "home") == "home")
         check(cardOrder() == visual(TODAY_CARDS)) { "default order: ${cardOrder()}" }
         var shown = emptyList<String>()
         test.runOnMainSync { shown = texts(host.page) }
-        for (expected in listOf(host.getString(R.string.rd_good), "Recovered well", "18", "Back squat", host.short(64.3),
+        test.runOnMainSync { check(host.page.findViewWithTag<View>("card-readiness").contentDescription.contains(host.getString(R.string.rd_good))) }
+        for (expected in listOf("Recovered well", "18", "Back squat", host.short(64.3),
                 host.getString(R.string.today_messages_unread, 2), host.getString(R.string.today_quick_photo)))
             check(shown.any { expected in it }) { "missing $expected in $shown" }
         // Hide and reorder are stored on the phone and survive a restart of the screen.

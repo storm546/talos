@@ -102,7 +102,7 @@ internal class FoodStudio(private val test: Instrumentation, private val server:
         try {
             check(test.screenOf(host, "home") == "home")
             // SPEC 10.9: Today's cards carry the server's findings; then the three parts and Profile.
-            test.foodWait("today findings") { host.page.findViewWithTag<View>("card-sleep") != null }
+            test.foodWait("today findings") { host.page.findViewWithTag<View>("card-readiness") != null }
             // The briefing answers within the model's time (up to a minute) or removes itself when there is no model.
             val end = SystemClock.uptimeMillis() + 75_000
             var settled = false

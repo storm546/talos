@@ -1248,6 +1248,12 @@ a label. The language model is used where it helps.
   show is left out. Tapping a tile opens a sheet with the full findings and "Open details". Today's plan, the next
   session and messages appear only when they have something. `/api/me/today` adds `training.daily` (7 daily loads),
   `weight.series` (trend, 28 days), `body` (latest Navy estimate, series) and `form` (latest camera set).
+- **Instrument panel (owner, 24.11 late: "UI still needs a lot of work"; direction chosen: instrument panel, see
+  DESIGN.md):** Today replaces the tile grid with: greeting and date in one line, action pills (meal photo first),
+  the readiness panel (a gauge with one arc segment per factor coloured by better / usual / worse, the vitals with
+  ▲/▼ against the usual, the finding), the model's summary as a three-line note, three rings (kcal of target,
+  protein of target, 7-day load against the usual week) and one surface of instrument rows (tone dot, label and
+  finding, sparkline, mono reading). Everything taps through to the finding sheet.
 - **Widget:** the Today home-screen widget shows the most important finding (the first to watch, else the first good
   one) under readiness; its own fetch asks for the phone's language.
 - A "not feeling 100%" flag turns the recovery advice into "follow the lighter plan" instead of a harder session.

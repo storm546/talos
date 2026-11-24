@@ -43,6 +43,7 @@ private class HealthFixture(private val test: Instrumentation) {
     // Wake at 06:55 today, or just before now early in the morning, so the sleep always ends today.
     val wake: Instant = ZonedDateTime.of(LocalDate.now(zone), java.time.LocalTime.of(6, 55), zone).toInstant()
         .let { if (it.isBefore(now.minus(Duration.ofMinutes(30)))) it else now.minus(Duration.ofMinutes(5)) }
+        .let { if (it.isBefore(today)) minOf(today.plusSeconds(30), now) else it }  // a run just after midnight
     val bed: Instant = wake.minus(Duration.ofMinutes(495))
     val workoutStart: Instant = now.minus(Duration.ofMinutes(60))
     private val client = HealthConnectClient.getOrCreate(context)

@@ -186,4 +186,16 @@
     <string name="today_s_unit">s</string>
     <string name="today_steps">Steps</string>
     <string name="today_quick_photo">Meal photo</string>
+    <string name="today_factors_count">%1$d of %2$d</string>
+    <string name="today_v_wellbeing">Wellbeing</string>
+    <string name="today_v_rhr">Resting HR</string>
+    <string name="today_v_hrv">HRV</string>
+    <string name="today_v_jump">Jump</string>
+    <string name="today_v_sleep">Sleep</string>
+    <string name="today_ring_kcal">kcal of %1$s</string>
+    <string name="today_ring_protein">protein, g of %1$s</string>
+    <string name="today_ring_load">load, 7 days · usual %1$s</string>
+    <string name="today_load_today">today</string>
+    <string name="today_exercises_unit">exercises</string>
+    <string name="today_briefing_by">Written by the language model from your findings</string>
 </resources>

@@ -186,4 +186,16 @@
     <string name="today_s_unit">с</string>
     <string name="today_steps">Крачки</string>
     <string name="today_quick_photo">Снимка на храна</string>
+    <string name="today_factors_count">%1$d от %2$d</string>
+    <string name="today_v_wellbeing">Самочувствие</string>
+    <string name="today_v_rhr">Пулс в покой</string>
+    <string name="today_v_hrv">Вариабилност</string>
+    <string name="today_v_jump">Скок</string>
+    <string name="today_v_sleep">Сън</string>
+    <string name="today_ring_kcal">ккал от %1$s</string>
+    <string name="today_ring_protein">протеин, г от %1$s</string>
+    <string name="today_ring_load">натоварване, 7 дни · обичайно %1$s</string>
+    <string name="today_load_today">днес</string>
+    <string name="today_exercises_unit">упр.</string>
+    <string name="today_briefing_by">Написано от езиковия модел по Вашите изводи</string>
 </resources>
