@@ -95,8 +95,10 @@ internal class StudioChecks(private val test: Instrumentation, private val movie
             }; shot("experimental", "form")
             test.runOnMainSync { host.techniqueHistory() }; shot("technique-history", "technique_history")
             val sets = JSONArray(api(server, "/api/form?limit=20", token = login.getString("token")))
-            val set = sets.getJSONObject(0)
-            test.runOnMainSync { host.formResult(set, FormResult(set)) }; shot("set-summary", "form_result")
+            if (sets.length() > 0) {  // the demo athlete may have no form sets in a fresh seed
+                val set = sets.getJSONObject(0)
+                test.runOnMainSync { host.formResult(set, FormResult(set)) }; shot("set-summary", "form_result")
+            }
             record("history-rulers") { test.runOnMainSync { open("history") }; shot("history") }
             test.runOnMainSync { host.trainingHome() }; shot("training")
             test.runOnMainSync { host.nutritionHome() }; shot("nutrition")
