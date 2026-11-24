@@ -54,7 +54,7 @@
     <string name="adj_change">Change</string>
     <string name="adj_rest_day">Rest day</string>
     <string name="adj_rest_note">You chose rest today. Your plan is back tomorrow.</string>
-    <string name="adj_lighter_note">Lighter today: one set fewer and 90%% of the load.</string>
+    <string name="adj_lighter_note" formatted="false">Lighter today: one set fewer and 90% of the load.</string>
     <string name="adj_failed">Could not save. Check the connection and try again.</string>
     <string name="share_record">Share</string>
     <string name="share_record_label">Share the record: %1$s</string>

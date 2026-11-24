@@ -267,7 +267,10 @@ internal fun MainActivity.todayCard(key: String, data: JSONObject?, parent: Line
             items.take(4).forEach { item ->
                 val reps = item.getInt("reps").let { low -> item.optInt("reps_max", low).let { if (it > low) "$low–$it" else "$low" } }
                 val load = if (item.isNull("load_kg")) "" else " · " + getString(R.string.feature_kg, short(item.getDouble("load_kg")))
-                valueRow(item.getString("exercise"), getString(R.string.today_sets_reps, item.getInt("sets"), reps) + load, panel)
+                // A single repetition per set is a hold (e.g. plank): "2 sets" reads better than "2 × 1".
+                val volume = if (reps == "1") getString(R.string.today_sets_only, item.getInt("sets"))
+                    else getString(R.string.today_sets_reps, item.getInt("sets"), reps)
+                valueRow(item.getString("exercise"), volume + load, panel)
             }
             val more = (plan?.optInt("more") ?: 0) + (items.size - 4).coerceAtLeast(0)
             if (more > 0) line(getString(R.string.today_plan_more, more), 13)

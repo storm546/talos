@@ -335,7 +335,7 @@
     <string name="nutr_updating">Оценката е обновена според завършените дни и тенденцията на теглото.</string>
     <string name="nutr_holding">Запазена е предишната оценка.</string>
     <string name="assistant_title">Помощник с изкуствен интелект</string>
-    <string name="assistant_intro">Питайте за данните си в Talos. Предложените промени се запазват само ако ги потвърдите.</string>
+    <string name="assistant_intro">Питайте за данните си в Talos. Предложените промени се запазват само ако ги потвърдите. Съобщенията Ви и данните, нужни за отговора, се изпращат на езиковия модел на клуба, който може да е облачна услуга; видео никога. Под 18 години асистентът работи само с модел на самия клуб.</string>
     <string name="assistant_you">Вие</string>
     <string name="assistant_message">Вашето съобщение</string>
     <string name="assistant_send">Изпратете</string>

@@ -65,4 +65,5 @@
     <string name="timer_voice">Voice cues: rounds, last 10 seconds, end of rest</string>
     <string name="voice_ten_seconds">10 seconds</string>
     <string name="voice_rest_over">Rest over</string>
+    <string name="today_sets_only">%1$d sets</string>
 </resources>

@@ -1,12 +1,12 @@
 # Talos
 
-**Накратко (BG).** Talos дава на спортен клуб тестване на механиката на приземяване без лаборатория.
+**Накратко (BG).** Talos е личен фитнес инструмент с честни измервания: телефонът измерва скока и движенията на самото устройство, клубният сървър показва на спортиста и треньора промяната спрямо собствената му база, а всяко число казва колко може да греши. В основата е тестване на механиката на приземяване без лаборатория.
 Спортистът заснема скок с телефона си; приложението намира позата на тялото и изчислява числата на самото
 устройство, а към сървъра на клуба отиват само числата. Видеото никога не напуска телефона. Треньорът
 вижда историята на всеки спортист и как тя се променя спрямо собствените му базови стойности. Числата
 са за проследяване на промяна и за разговор с треньор, не са медицинско измерване.
 
-Talos gives a sports club landing-mechanics testing without a lab. An athlete films a jump with a
+Talos is a personal fitness tool built on honest measurement: the phone measures the jump and the movements on the device, the club server shows athlete and coach the change against the athlete's own baseline, and every number says how wrong it can be. At its core is landing-mechanics testing without a lab. An athlete films a jump with a
 phone; the phone finds the body pose and computes the numbers on the device; only the numbers go to the
 club's server. The coach sees every athlete's history and how each one changes against their own
 baseline. The video never leaves the phone. The project is honest about accuracy: it publishes its own

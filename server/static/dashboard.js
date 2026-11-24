@@ -89,7 +89,7 @@ const dictionary = {
     unclear:'Неясно', repsCount:'Повторения', partialCount:'Частични', unclearCount:'Неясни', worstRep:'Най-слабо',
     side:'Страна', viewLabel:'Изглед', front:'Отпред', sideView:'Отстрани', unclear_reps:'Неясни повторения',
     hipBelowKnee:'Таз под коляното', noForm:'Още няма записи на техника.', formWarnNote:'Частичните и неясните повторения се броят отделно.',
-    assistantIntro:'Питайте за тренировки, хранене и тестове. Всяка промяна се потвърждава от Вас.',
+    assistantIntro:'Питайте за тренировки, хранене и тестове. Всяка промяна се потвърждава от Вас.'+' Съобщенията Ви и данните, нужни за отговора, се изпращат на езиковия модел на клуба, който може да е облачна услуга; видео никога. Под 18 години асистентът работи само с модел на самия клуб.',
     assistantPlaceholder:'Напишете съобщение…', messageLabel:'Съобщение', ask:'Попитайте', assistantReply:'Отговор',
     proposalTitle:'Предложени действия', proposalNote:'Нищо не се записва, докато не потвърдите.', confirm:'Потвърдете',
     assistantUnavailable:'Помощникът с изкуствен интелект не е наличен в момента. Опитайте по-късно.', assistantApplied:'Действията са приложени.',
@@ -184,7 +184,7 @@ const dictionary = {
     unclear:'Unclear', repsCount:'Reps', partialCount:'Partial', unclearCount:'Unclear', worstRep:'Worst',
     side:'Side', viewLabel:'View', front:'Front', sideView:'Side', unclear_reps:'Unclear reps',
     hipBelowKnee:'Hips below knee', noForm:'No form sets yet.', formWarnNote:'Partial and unclear repetitions are counted separately.',
-    assistantIntro:'Ask about training, nutrition and testing. Every change is confirmed by you.',
+    assistantIntro:'Ask about training, nutrition and testing. Every change is confirmed by you.'+' Your messages and the data needed to answer go to the club\'s language model, which may be a cloud service; never video. Under 18, the assistant works only with a model run by the club itself.',
     assistantPlaceholder:'Type a message…', messageLabel:'Message', ask:'Ask', assistantReply:'Reply',
     proposalTitle:'Proposed actions', proposalNote:'Nothing is saved until you confirm.', confirm:'Confirm',
     assistantUnavailable:'The AI assistant is unavailable right now. Try again later.', assistantApplied:'The actions were applied.',
@@ -587,7 +587,7 @@ function today(content) {
   for (const f of (r?.factors || []).filter(f => f.value != null).slice(0, 4)) {
     if (f.key === 'adjustment') { readiness.append(line(t('rd_adjustment'), t('adj_' + f.value) + ' · ' + t('adjMode_' + f.mode))); continue; }
     const state_ = {better:'rdBetter', worse:'rdWorse'}[f.state];
-    readiness.append(line(t('rd_' + f.key), (f.key === 'hrv' ? formatNumber(Math.exp(f.value)) + ' ms' : formatNumber(f.value) +
+    readiness.append(line(t('rd_' + f.key), (f.key === 'hrv' ? formatNumber(Math.exp(f.value)) + (state.language==='bg'?' мс':' ms') : formatNumber(f.value) +
       ({points:'', bpm:state.language==='bg'?' уд/мин':' bpm', cm:state.language==='bg'?' см':' cm', score:''}[f.unit] ?? '')) +
       ('week_values' in f ? ' · ' + t('rdWeekMean') : '') + (state_ ? ' · ' + t(state_).replace(/: $/, '') : '')));
   }
@@ -595,8 +595,9 @@ function today(content) {
   const plan = overviewCard(t('todayPlan'), p?.adjusted === 'rest' ? t('adjRestDay') : p?.items.length ? p.items[0].plan : null,
     p?.adjusted === 'rest' ? t('adjRestNote') : p?.items.length ? '' : t('todayRest'), 'history', 'card-subject');
   if (p?.adjusted === 'lighter') plan.append(node('span', t('adjLighterBadge'), 'badge'));
-  for (const item of p?.items || []) plan.append(node('p', item.exercise + ' · ' + item.sets + ' × ' + item.reps +
-    (item.reps_max > item.reps ? '–' + item.reps_max : '') + (item.load_kg == null ? '' : ' · ' + format(item.load_kg) + ' ' + t('recKg')), 'muted'));
+  for (const item of p?.items || []) plan.append(node('p', item.exercise + ' · ' + (item.reps === 1 && !(item.reps_max > 1)
+    ? item.sets + (state.language === 'bg' ? ' серии' : ' sets') : item.sets + ' × ' + item.reps +
+    (item.reps_max > item.reps ? '–' + item.reps_max : '')) + (item.load_kg == null ? '' : ' · ' + format(item.load_kg) + ' ' + t('recKg')), 'muted'));
   if (p?.more) plan.append(empty('+' + p.more));
   if (p?.logged) plan.append(node('span', t('tdLogged'), 'badge'));
   const c = data.checkin;

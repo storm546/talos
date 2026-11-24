@@ -690,3 +690,20 @@ def test_training_session_and_quick_food_are_proposed_then_confirmed(api, auth, 
                           (athlete_id,)).fetchone()[0] == 720
         assert db.execute("SELECT kcal FROM food_logs WHERE athlete_id = ? AND label = 'Ham and cheese sandwich'",
                           (athlete_id,)).fetchone()[0] == 450
+
+
+def test_minor_athletes_do_not_reach_an_external_model(api, auth, fake_model, monkeypatch):
+    client, path = api
+    athlete = auth("athlete4")
+    with main.database(path) as db:
+        db.execute("UPDATE users SET under_18 = 1 WHERE id = ?", (user_id(path, "athlete4"),))
+        db.commit()
+    observed = fake_model("Здравей.", "Hello.")
+    assert chat(client, athlete).status_code == 200  # the fixture's model is on 127.0.0.1: local
+    monkeypatch.setenv("JUMPSCAN_LLM_URL", "https://integrate.api.nvidia.com/v1")
+    response = chat(client, athlete)
+    assert response.status_code == 403 and "под 18" in response.json()["detail"]
+    assert len(observed) == 1  # the refused request never called the model (the adult call below is the second)
+    assert chat(client, auth("athlete2")).status_code == 200  # adults keep the assistant
+    assert assistant_api.model_is_external("http://192.168.0.150:18080/v1") is False
+    assert assistant_api.model_is_external("http://localhost:8080/v1") is False

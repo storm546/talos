@@ -53,7 +53,7 @@
     <string name="adj_change">Промяна</string>
     <string name="adj_rest_day">Ден за почивка</string>
     <string name="adj_rest_note">Избрахте почивка днес. Планът продължава утре.</string>
-    <string name="adj_lighter_note">По-леко днес: една серия по-малко и 90%% от тежестта.</string>
+    <string name="adj_lighter_note" formatted="false">По-леко днес: една серия по-малко и 90 % от тежестта.</string>
     <string name="adj_failed">Не се записа. Проверете връзката и опитайте отново.</string>
     <string name="share_record">Споделяне</string>
     <string name="share_record_label">Споделете рекорда: %1$s</string>

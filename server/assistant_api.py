@@ -2,10 +2,12 @@
 
 from dataclasses import dataclass
 from datetime import date, datetime
+import ipaddress
 import json
 from math import ceil
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 import re
 import secrets
 import time
@@ -165,6 +167,22 @@ def endpoint(url, model, key_file):
     if key_file:
         headers["Authorization"] = "Bearer " + Path(key_file).read_text(encoding="utf-8").strip()
     return url + "/chat/completions", model, headers
+
+
+def model_is_external(url=None):
+    """True when the configured model is not on this machine or the club's private network (a cloud service)."""
+    host = urlsplit(url or os.environ.get("JUMPSCAN_LLM_URL", "")).hostname or ""
+    if host == "localhost":
+        return False
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return bool(host)  # a host name is treated as external
+    return not (address.is_private or address.is_loopback)
+
+
+MINOR_CLOUD_DETAIL = ("The assistant uses an external (cloud) language model, so it is not available to athletes under 18. "
+                      "Асистентът използва външен (облачен) езиков модел и не е достъпен за спортисти под 18 години.")
 
 
 def model_client():
@@ -530,6 +548,9 @@ def install(app, h, operations):
 
     @app.post("/api/assistant")
     def chat(body: Chat, authorization: Annotated[str, Header()], user=Depends(admit_work), db=Depends(h.get_db)):
+        # Privacy (PHILOSOPHY 4.3): a minor's messages and data never go to an external model.
+        if user["role"] == "athlete" and user["under_18"] and model_is_external():
+            raise HTTPException(403, MINOR_CLOUD_DETAIL)
         user_id = user["id"]
         conversation_id = body.conversation_id or secrets.token_urlsafe(18)
         with db:
