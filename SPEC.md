@@ -1231,7 +1231,9 @@ a label. The language model is used where it helps.
   today's planned exercises to the club's model, which writes three or four sentences and one suggestion for today
   (formal Вие in Bulgarian). It may not add numbers, causes or medical words. The answer is cached per athlete, day,
   language and findings. No model, a failure, or an under-18 athlete with an external model gives `text: null`, and
-  the app hides the card. The card says the text is written by the model from the findings, and "Ask about it" opens
+  the app hides the card. Reading Today starts writing the briefing in the background, so it is usually ready when
+  the card asks; after the findings change (a food log, a check-in), the previous text of the same day comes back at
+  once with `stale: true` while the new one is written. The card says the text is written by the model from the findings, and "Ask about it" opens
   the assistant with a prepared question.
 - **Web dashboard:** the athlete's Today page shows the same findings under its cards (extra cards for sleep, body,
   technique and consistency when found) and reloads them when the language changes; the response carries `language`.

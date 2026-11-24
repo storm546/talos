@@ -122,6 +122,15 @@ class Context:
         return route(self.app, path)
 
 
+def assistant_api_ready():
+    """A model is configured; without one, Today does not start background briefing work."""
+    try:
+        insights.assistant_api.model_client()
+        return True
+    except HTTPException:
+        return False
+
+
 def install(app, h):
     @app.get("/api/me/today")
     def today(day: Annotated[str | None, Query(max_length=10)] = None, language: Literal["bg", "en"] = "bg",
@@ -144,6 +153,8 @@ def install(app, h):
             except Exception:  # one broken or forbidden section must not hide the others (SPEC 10.2)
                 result[name] = None
         result["findings"] = insights.findings(context, result, language) if user["role"] == "athlete" else []
+        if result["findings"] and assistant_api_ready():
+            insights.warm(user, result, language)
         return result
 
     @app.get("/api/me/briefing")
@@ -151,8 +162,8 @@ def install(app, h):
                  user=Depends(h.current_user), db=Depends(h.get_db)):
         """Today's findings phrased by the language model (SPEC 10.9); text is null when there is no model."""
         result = today(day=day, language=language, user=user, db=db)
-        text, phrased_by = insights.briefing(user, db, result, language)
-        return {"day": result["day"], "text": text, "phrased_by": phrased_by, "findings": result["findings"]}
+        text, phrased_by, stale = insights.briefing(user, db, result, language)
+        return {"day": result["day"], "text": text, "phrased_by": phrased_by, "stale": stale, "findings": result["findings"]}
 
     def today_findings(language="bg", user=None, db=None):
         """The assistant's read of the same findings (SPEC 10.9)."""

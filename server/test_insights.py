@@ -2,6 +2,7 @@
 
 import json
 import re
+import time
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -95,9 +96,20 @@ def test_briefing_phrases_only_findings_and_skips_minors_with_an_external_model(
     assert set(facts) == {"findings", "plan_today"} and facts["findings"] == [
         {k: f[k] for k in ("card", "tone", "title", "text")} for f in first["findings"]]
     assert "never mention injury" in sent[0]["messages"][0]["content"]
+    # New findings (a food log): the previous text comes back at once, marked stale, while a new one is written.
+    food = client.get("/api/foods", params={"q": "банан"}, headers=headers).json()
+    assert food and client.post("/api/food-logs", headers=headers, json={"day": day(), "meal": "snack", "food_id": food[0]["id"],
+                                                                         "grams": 120, "client_id": "f1"}).status_code == 201
+    stale = client.get("/api/me/briefing", params={"language": "en"}, headers=headers).json()
+    assert stale["text"] == "A steady day." and stale["stale"] is True
+    for _ in range(50):
+        if not insights._pending:
+            break
+        time.sleep(0.1)
+    assert len(sent) == 2 and client.get("/api/me/briefing", params={"language": "en"}, headers=headers).json()["stale"] is False
     monkeypatch.setenv("JUMPSCAN_LLM_URL", "https://integrate.api.nvidia.com/v1")
     with main.database(path) as db:
         db.execute("UPDATE users SET under_18 = 1 WHERE id = ?", (uid,))
         db.commit()
     minor = client.get("/api/me/briefing", params={"language": "bg"}, headers=headers).json()
-    assert minor["text"] is None and minor["findings"] and len(sent) == 1
+    assert minor["text"] is None and minor["findings"] and len(sent) == 2

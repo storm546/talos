@@ -9,6 +9,8 @@ import hashlib
 import json
 import math
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 
 from . import assistant_api
@@ -329,25 +331,71 @@ def findings(c, result, language):
     return out
 
 
-_cache = {}
+_cache, _latest, _pending = {}, {}, {}
+_lock = threading.Lock()
+_work = ThreadPoolExecutor(max_workers=2, thread_name_prefix="briefing")
 
 
-def briefing(user, db, result, language):
-    """The findings phrased by the club's language model; None when no model, or when an external model would
-    receive an under-18 athlete's data (SPEC 6.4)."""
+def _job(user, result, language):
+    """(cache key, facts, owner key) or None when this athlete gets no briefing."""
     found = result.get("findings") or []
     if not found or (user["under_18"] and assistant_api.model_is_external()):
-        return None, None
+        return None
     plan = [i["exercise"] for i in (result.get("plan") or {}).get("items", [])][:8]
     facts = {"findings": [{k: f[k] for k in ("card", "tone", "title", "text")} for f in found], "plan_today": plan}
     key = hashlib.sha256(json.dumps([user["id"], result["day"], language, facts], ensure_ascii=False).encode()).hexdigest()
-    if key not in _cache:
+    return key, facts, (user["id"], result["day"], language)
+
+
+def _phrase(key, facts, owner, language):
+    try:
         text = phrase(BRIEFING_PROMPT.format(
             language="in Bulgarian" if language == "bg" else "in English",
             address="Address the person formally with Вие." if language == "bg" else "Address the person as you."), facts)
-        if text is None:
-            return None, None
-        if len(_cache) >= 256:
-            _cache.pop(next(iter(_cache)))
-        _cache[key] = text
-    return _cache[key], "external_model" if assistant_api.model_is_external() else "local_model"
+        with _lock:
+            if text is not None:
+                if len(_cache) >= 256:
+                    _cache.pop(next(iter(_cache)))
+                _cache[key] = text
+                _latest[owner] = text
+        return text
+    finally:
+        with _lock:
+            _pending.pop(key, None)
+
+
+def warm(user, result, language):
+    """Start writing the briefing in the background when Today is read, so it is ready when asked for."""
+    job = _job(user, result, language)
+    if job is None:
+        return None
+    key, facts, owner = job
+    with _lock:
+        if key in _cache:
+            return None
+        if key not in _pending:
+            _pending[key] = _work.submit(_phrase, key, facts, owner, language)
+        return _pending[key]
+
+
+def briefing(user, db, result, language):
+    """The findings phrased by the club's language model: (text, phrased_by, stale). None when no model, or when an
+    external model would receive an under-18 athlete's data (SPEC 6.4). While a new text is being written after the
+    findings changed, the previous one of the same day is returned with stale=True."""
+    job = _job(user, result, language)
+    if job is None:
+        return None, None, False
+    key, facts, owner = job
+    by = "external_model" if assistant_api.model_is_external() else "local_model"
+    with _lock:
+        if key in _cache:
+            return _cache[key], by, False
+        previous = _latest.get(owner)
+    future = warm(user, result, language)
+    if previous is not None:
+        return previous, by, True
+    try:
+        text = future.result(timeout=90) if future else _cache.get(key)
+    except Exception:
+        text = None
+    return (text, by, False) if text else (None, None, False)
