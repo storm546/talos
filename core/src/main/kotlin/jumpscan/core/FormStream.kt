@@ -45,13 +45,19 @@ class FormStream(exercise: String, private val side: String?, private val aspect
         var rest: Long? = null
         var restValue = 0.0
         var cycle: Cycle? = null
-        fun clear() { cycle = null; rest = null; sample.clear() }
+        /** Adaptive counting only: highest value and first time since the last rest, and whether a rest was seen. */
+        var high = 0.0
+        var since = 0L
+        var rested = false
+        fun clear() { cycle = null; rest = null; sample.clear(); rested = false }
     }
     private val limbs = listOf(Limb(), Limb())
     private val cycle get() = limbs.firstNotNullOfOrNull { it.cycle }
     /** Completed or partial repetitions per limb, to merge one movement seen on both sides. */
     private val limbReps = mutableListOf<Pair<Int, LongRange>>()
-    private val eachLimb get() = signal.eachLimb && side == null && sideView == false
+    private val eachLimb get() = signal.eachLimb && side == null && (sideView == false || signal.adaptive)
+    /** One side drives the count: a requested side, the profile side, or the better-seen side (limbs = "best"). */
+    private val oneSide get() = side != null || ((sideView == true || signal.bestLimb) && !eachLimb)
     private var legacyTick = Long.MIN_VALUE / 2
     private var legacyReported = 0
     private var finished: FormMetrics? = null
@@ -63,6 +69,10 @@ class FormStream(exercise: String, private val side: String?, private val aspect
     companion object {
         /** Longest unobserved stretch between usable frames that a repetition or hold may bridge. */
         const val MAX_GAP_MS = 300L
+        /** Adaptive counting, as fractions of min_range or of the repetition's own excursion (tuned on training sets). */
+        private const val ADAPTIVE_START = 0.5
+        private const val ADAPTIVE_RETURN = 0.6
+        private const val ADAPTIVE_LEAVE = 0.2
         fun cameraView(frames: List<Frame>, aspect: Float): JumpAnalyzer.View = cameraView(frames, aspect, .5)
 
         private fun cameraView(frames: List<Frame>, aspect: Float, shoulderCutoff: Double): JumpAnalyzer.View {
@@ -174,11 +184,11 @@ class FormStream(exercise: String, private val side: String?, private val aspect
         fun confidence(geometry: FormGeometry) = geometry.required(signal.metric).minOf {
             it.visibility.takeIf(Float::isFinite)?.coerceIn(0f, 1f) ?: 0f
         }
-        if (side == null && sideView == true && cycle == null && !lastGate) {
+        if (side == null && oneSide && cycle == null && !lastGate) {
             selected = if (confidence(left) >= confidence(right)) 0 else 1
         }
-        val geometry = if (side != null || sideView == true) listOf(if (selected == 0) left else right) else listOf(left, right)
-        val signalGeometry = if (side != null || sideView == true) listOf(signalSides[selected]) else signalSides
+        val geometry = if (oneSide) listOf(if (selected == 0) left else right) else listOf(left, right)
+        val signalGeometry = if (oneSide) listOf(signalSides[selected]) else signalSides
         fun measure(metric: String, requireAll: Boolean = true, from: List<FormGeometry> = geometry): Double? {
             if (metric == "fppa" && sideView == true) return null
             val values = from.mapNotNull { it.measure(metric) }
@@ -219,7 +229,10 @@ class FormStream(exercise: String, private val side: String?, private val aspect
             reset()
             setCue("ready_position", events)
         } else {
-            raws.forEachIndexed { index, limbRaw -> if (limbRaw != null) step(limbs[index], index, time, limbRaw, checks, events, ::offBand) }
+            raws.forEachIndexed { index, limbRaw -> if (limbRaw != null) {
+                if (signal.adaptive) adaptiveStep(limbs[index], index, time, limbRaw, checks, events, ::offBand)
+                else step(limbs[index], index, time, limbRaw, checks, events, ::offBand)
+            } }
         }
         previous = time
     }
@@ -273,6 +286,58 @@ class FormStream(exercise: String, private val side: String?, private val aspect
                 }
             }
         }
+    }
+
+    /** A repetition is a rise of at least half of min_range above the lowest value since the last rest, ended by a
+     *  return of [ADAPTIVE_RETURN] of its own excursion; it is complete when the excursion reaches min_range. The rest
+     *  level is the athlete's own, so a set that never reaches the catalogue's absolute up/down levels still counts.
+     *  A stream whose first movement is a return began mid-repetition and reports incomplete_start. */
+    private fun adaptiveStep(limb: Limb, index: Int, time: Long, raw: Double, checks: Map<String, Double?>,
+        events: MutableList<FormEvent>, offBand: (Map<String, Double?>) -> String?) {
+        if (limb.sample.size == 3) limb.sample.removeFirst()
+        limb.sample.addLast(raw * direction)
+        val value = limb.sample.sorted()[limb.sample.size / 2]
+        val range = signal.minRange
+        val active = limb.cycle
+        if (active == null) {
+            if (limb.rest == null) { limb.rest = time; limb.restValue = value; limb.high = value; limb.since = time }
+            limb.high = maxOf(limb.high, value)
+            limb.restValue = minOf(limb.restValue, value)
+            if (value <= limb.restValue + ADAPTIVE_LEAVE * range) {
+                limb.rest = time
+                if (progress.cue in listOf("tracking_gap", "ready_position")) setCue(null, events)
+            }
+            if (!limb.rested && limb.high - value >= ADAPTIVE_RETURN * range) {
+                limb.rested = true
+                if (counted(index, limb.since, time)) unclear(limb.since, time, "incomplete_start", events)
+            }
+            if (value - limb.restValue >= ADAPTIVE_START * range) {
+                val start = checkNotNull(limb.rest)
+                limb.cycle = Cycle(start, false, limb.restValue, value, time, checks)
+                events += FormEvent.Start(start)
+                setCue(null, events)
+            }
+            return
+        }
+        if (value > active.peak) { active.peak = value; active.extreme = time; active.checks = checks }
+        val excursion = active.peak - active.base
+        if (!active.turned && active.peak - value >= 0.22 * range) {
+            active.turned = true
+            events += FormEvent.Extremum(active.extreme, signal.peakAtTop)
+        }
+        if (active.peak - value < ADAPTIVE_RETURN * excursion) return
+        if (active.extreme - active.start < signal.minPhaseMs || time - active.extreme < signal.minPhaseMs) {
+            if (counted(index, active.start, time)) unclear(active.start, time, "too_fast", events)
+        } else {
+            val full = excursion >= range
+            if (!active.turned) events += FormEvent.Extremum(active.extreme, signal.peakAtTop)
+            if (counted(index, active.start, time)) record(FormRepetition(reps.size + 1, if (full) "complete" else "partial",
+                if (full) emptyList() else listOf("below_min_depth"), active.start, active.extreme, time, null, null, null,
+                null, null, null, active.extreme - active.start, time - active.extreme, null, active.checks), events)
+            setCue(if (full) offBand(active.checks) else "below_min_depth", events)
+        }
+        limb.cycle = null
+        limb.rest = time; limb.restValue = value; limb.high = value; limb.since = time; limb.rested = true
     }
 
     /** True unless the other limb already recorded a repetition overlapping at least half of this one (both arms

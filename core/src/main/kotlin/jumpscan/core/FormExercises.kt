@@ -9,7 +9,12 @@ data class FormCheck(val key: String, val labelBg: String, val labelEn: String, 
 
 data class FormSignal(val metric: String, val up: Double, val down: Double, val minRange: Double,
     val gates: List<FormBand>, val peakAtTop: Boolean, val legacy: Boolean, val depthMin: Double?,
-    val openFlexion: Double?, val minPhaseMs: Long, val eachLimb: Boolean = false, val minVisibility: Float = 0.5f)
+    val openFlexion: Double?, val minPhaseMs: Long, val eachLimb: Boolean = false, val minVisibility: Float = 0.5f,
+    /** Follow the better-seen side in every camera view instead of averaging both (catalogue limbs = "best"). */
+    val bestLimb: Boolean = false,
+    /** Count a repetition as a rise of at least [minRange] above the athlete's own last rest, then a return, instead
+     *  of crossing the absolute [up]/[down] levels; those then only give the direction (catalogue count = "adaptive"). */
+    val adaptive: Boolean = false)
 
 /** [experimental] exercises have not passed the repetition benchmark (core/VALIDATION.md). The app lists them
  *  apart, collapsed and marked as not validated, with the one-line [reasonEn]/[reasonBg]. */
@@ -36,7 +41,8 @@ object FormExercises {
                     signal["support"] as? Map<*, *>).map(::band), signal["peak"] == "top", signal["legacy"] == true,
                 signal["depth_min"] as? Double, signal["open_flexion"] as? Double,
                 (signal["min_phase_ms"] as? Double)?.toLong() ?: 150, signal["limbs"] == "each",
-                (signal["min_visibility"] as? Double)?.toFloat() ?: 0.5f)
+                (signal["min_visibility"] as? Double)?.toFloat() ?: 0.5f, signal["limbs"] == "best",
+                signal["count"] == "adaptive")
             FormExercise(row.string("id"), row.string("name_bg"), row.string("name_en"), row.string("mode"),
                 row["sided"] as Boolean, row.string("view"),
                 signal(row["signal"] as Map<*, *>),
