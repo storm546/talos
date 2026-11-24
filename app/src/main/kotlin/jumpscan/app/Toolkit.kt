@@ -73,11 +73,10 @@ internal fun MainActivity.toolList(title: Int, tools: List<Tool>, parent: Linear
     }
 }
 
-/** A small letter-spaced label over a group, in the accent colour. */
-internal fun MainActivity.eyebrow(value: String, parent: LinearLayout = page) = text(value.uppercase(locale), 12, green, parent).apply {
+/** A group subheader: sentence case, muted, medium weight (DESIGN.md bans accent caps eyebrows). */
+internal fun MainActivity.eyebrow(value: String, parent: LinearLayout = page) = text(value, 14, getColor(R.color.muted), parent).apply {
     instrumentType(display = true)
-    letterSpacing = .12f
-    setPadding(0, dp(20), 0, dp(2))
+    setPadding(dp(4), dp(22), 0, dp(4))
     if (android.os.Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
 }

@@ -98,7 +98,7 @@ internal class FoodStudio(private val test: Instrumentation, private val server:
             test.foodWait(name, ready)
             shot("tab-$name"); scrollDown(0.85f); shot("tab-$name-2"); scrollDown(5f); shot("tab-$name-end")
         }
-        fun eyebrowShown(label: Int) = texts(host.page).any { it == host.getString(label).uppercase(host.resources.configuration.locales[0]) }
+        fun eyebrowShown(label: Int) = texts(host.page).any { it == host.getString(label) }
         try {
             check(test.screenOf(host, "home") == "home")
             // SPEC 10.9: Today's cards carry the server's findings; then the three parts and Profile.
