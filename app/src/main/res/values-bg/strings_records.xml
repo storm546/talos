@@ -24,7 +24,7 @@
     <string name="leaderboard_rank">%1$d.</string>
     <string name="leaderboard_your_place">Вашето място</string>
     <string name="leaderboard_not_ranked">Не сте в класацията за този период.</string>
-    <string name="leaderboard_opt_in">Покажи ме в класацията на клуба</string>
+    <string name="leaderboard_opt_in">Покажете ме в класацията на клуба</string>
     <string name="leaderboard_opt_in_note">Членовете на клуба виждат само малкото Ви име, първата буква на фамилията и най-добрия Ви скок. Нищо друго не се споделя и можете да се откажете по всяко време.</string>
     <string name="leaderboard_await_coach">Под 18 години сте, затова треньорът също трябва да потвърди, преди да се появите.</string>
     <string name="leaderboard_empty">Още няма класирани за този период.</string>

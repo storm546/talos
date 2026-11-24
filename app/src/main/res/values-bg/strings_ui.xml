@@ -41,8 +41,8 @@
     <string name="ui_form_eyebrow">%1$d УПРАЖНЕНИЯ · НА ЖИВО ИЛИ ОТ ЗАПИС</string>
     <string name="ui_form_experimental">Експериментални</string>
     <string name="ui_form_experimental_note">Още не са валидирани: броят на повторенията и времето на задържане може да са грешни. На живо и от запис работят както обикновено.</string>
-    <string name="ui_form_show_experimental">Покажи експерименталните упражнения (%1$d)</string>
-    <string name="ui_form_hide_experimental">Скрий експерименталните упражнения (%1$d)</string>
+    <string name="ui_form_show_experimental">Покажете експерименталните упражнения (%1$d)</string>
+    <string name="ui_form_hide_experimental">Скрийте експерименталните упражнения (%1$d)</string>
     <string name="ui_not_validated">Не е валидирано</string>
     <string name="ui_form_validated_note">В отделени тестове на живо броят на клековете беше точен в 21 от 22 серии и никога не се размина с повече от едно повторение. Времето на задържане в планк беше в рамките на 1 секунда или 10% от референтното време, което от двете е повече, във всичките 9 серии. Времето в правилна позиция при планк и останалите упражнения не са валидирани.</string>
     <string name="ui_replay_hint">Тестова версия: задръжте „На живо“, за да пуснете тестовия запис.</string>
