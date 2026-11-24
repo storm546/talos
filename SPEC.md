@@ -1037,3 +1037,35 @@ floor. Kit experiments 1-7 of the report run with their pass bars; results go to
   per second, and the result shows velocity minus floor (never below zero), or says the floor was not measured. Both
   stay on the phone: the server's balance fields are unchanged (uploading them needs a server field first).
 - Kit experiments: results and verdicts are in `core/VALIDATION.md` (Wave 6B) and the raw outputs in `logs/wave6/kit/`.
+
+### 10.5 Health Connect and Samsung Health (added 2026-11-24)
+
+Owner: "We need to get Samsung health and health connect working." Samsung Health on the owner's Galaxy A54 writes to
+Android Health Connect; Talos reads Health Connect (Samsung's own SDK needs partner approval, so it is not used). Read
+only: Talos never writes to Health Connect. Data stays on the phone until the athlete saves a check-in, a weigh-in or a
+training session, which then go to the server through the existing routes and offline queue (no server change).
+
+- **Library and manifest:** `androidx.health.connect:connect-client` (Apache-2.0; record it in LICENSES-AUDIT.md), the
+  read permissions for resting heart rate, heart rate variability (RMSSD), sleep sessions, steps, weight and exercise
+  sessions, the permissions-rationale activity Health Connect requires (it shows the privacy text: what is read, why,
+  that it stays on the phone until you save) and the Android 14 `VIEW_PERMISSION_USAGE` alias.
+- **Connect:** Profile gets a "Health Connect" row: availability state (not installed / needs update / available),
+  "Свържете / Connect" that requests the permissions, which permissions are granted, and a short Samsung Health note
+  ("In Samsung Health: Settings > Health Connect, allow it to share"). If Health Connect is missing or outdated on
+  Android 9-13, the row opens its Play Store page.
+- **Check-in prefill:** the check-in screen gets "Попълни от Health Connect / Fill from Health Connect": resting heart
+  rate (the latest resting value from the last 24 h, rounded), HRV RMSSD in ms (night or morning value from the last
+  24 h), bedtime and wake time from the longest sleep session ending today (local time, HH:MM). Each prefilled field
+  is marked "от Health Connect" and stays editable; nothing is saved until the athlete taps Save. Values outside the
+  server's bounds are skipped with a note.
+- **Weigh-in prefill:** the latest weight from the last 7 days, same rules.
+- **Workouts:** exercise sessions from Health Connect for today and yesterday that Talos does not already know (matched
+  by start time ±5 min) are offered as training sessions on Today ("Samsung Health: Бягане 42 мин — добавете?"); the
+  athlete picks the type and RPE before it is saved through the existing training-session route.
+- **Steps:** today's steps shown on the Today readiness card as information (not uploaded).
+- **Honesty:** the source of every prefilled number is visible; readiness treats them like typed values.
+
+Done when: the app builds; AppChecks cover availability handling, permission denial, and prefill mapping with fake
+Health Connect data (the API 34 emulator has Health Connect built in; insert test records from the test APK); the
+emulator screenshots show the Profile row, the prefilled check-in and a workout suggestion in light-bg; the real A54 with
+Samsung Health data is a documented owner check.
