@@ -8,6 +8,7 @@ import android.app.Fragment
 import android.os.Build
 import android.provider.MediaStore
 import android.widget.LinearLayout
+import android.widget.TextView
 import jumpscan.core.FormExercise
 import jumpscan.core.FormExercises
 import org.json.JSONObject
@@ -94,70 +95,67 @@ internal fun MainActivity.formHome(message: String? = null) {
     for (group in formGroups) {
         val members = FormExercises.validated.filter { formGroup(it.id) == group }
         if (members.isEmpty()) continue
-        section(group.label).setPadding(0, dp(20), 0, 0)
-        members.forEach { exerciseCard(it, group.icon, replay) }
+        eyebrow(getString(group.label))
+        val list = settingsGroup()
+        members.forEachIndexed { i, it -> if (i > 0) divider(list); exerciseCard(it, group.icon, replay, list) }
     }
     // Exercises that have not passed the repetition benchmark stay usable, but only behind an explicit opt-in.
     val experimental = FormExercises.all.filter { it.experimental }
     if (experimental.isNotEmpty()) {
-        section(R.string.ui_form_experimental).setPadding(0, dp(20), 0, 0)
+        eyebrow(getString(R.string.ui_form_experimental))
         text(getString(R.string.ui_form_experimental_note), 13)
         button(getString(if (showExperimental) R.string.ui_form_hide_experimental else R.string.ui_form_show_experimental,
             experimental.size)) { showExperimental = !showExperimental; formHome() }
-        if (showExperimental) experimental.forEach { exerciseCard(it, formIcon(it.id), replay) }
+        if (showExperimental) settingsGroup().let { list ->
+            experimental.forEachIndexed { i, it -> if (i > 0) divider(list); exerciseCard(it, formIcon(it.id), replay, list) }
+        }
     }
     toolList(R.string.section_history, if (token().isEmpty()) Tools.formHistory.filter { it.local } else Tools.formHistory)
 }
 
-private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, replay: Boolean) {
-    val panel = card()
+/** One exercise as a compact instrument row (DESIGN.md): icon, name and one fact line, "Live" pill, video button. */
+private fun MainActivity.exerciseCard(exercise: FormExercise, icon: String, replay: Boolean, parent: LinearLayout) {
+    val bg = locale.language == "bg"
+    val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(10), dp(10), dp(10)) }
+    parent.addView(panel, LinearLayout.LayoutParams(-1, -2))
     val head = row(panel, center = true)
-    iconTile(icon, head)
+    iconTile(icon, head).layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(12) }
     val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     head.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
-    text(exercise.label(locale.language == "bg"), 18, parent = column).apply {
-        instrumentType(display = true)
-        setPadding(0, 0, 0, 0)
-    }
-    val chips = row(column)
-    chip(getString(if (exercise.mode == "hold") R.string.ui_mode_hold else R.string.ui_mode_reps), chips)
-    if (exercise.experimental) chip(getString(R.string.ui_not_validated), chips, caution = true)
-    text(exerciseFacts(exercise), 13, parent = column).setPadding(0, dp(6), 0, 0)
-    if (exercise.experimental) text((if (locale.language == "bg") exercise.reasonBg else exercise.reasonEn).orEmpty(), 13,
-        getColor(R.color.warning), column).setPadding(0, dp(4), 0, 0)
+    text(exercise.label(bg), 16, getColor(R.color.ink), column).apply { instrumentType(display = true); setPadding(0, 0, 0, 0) }
+    text(getString(if (exercise.mode == "hold") R.string.ui_mode_hold else R.string.ui_mode_reps) + " · " + exerciseFacts(exercise), 12, parent = column)
+        .apply { setPadding(0, dp(1), 0, 0); maxLines = 2 }
+    if (exercise.experimental) text((if (bg) exercise.reasonBg else exercise.reasonEn).orEmpty(), 12, getColor(R.color.warning), column)
+        .apply { setPadding(0, dp(2), 0, 0); maxLines = 3 }
     var side = if (exercise.sided) formChoice.takeIf { it.exercise == exercise.id }?.side ?: "L" else null
+    fun choose() {
+        formChoice = FormChoice(exercise.id, side)
+        getSharedPreferences("account", android.content.Context.MODE_PRIVATE).edit()
+            .putString("exercise", exercise.id).putString("exercise_side", side).apply()
+    }
+    button(getString(R.string.ui_live), primary = true, parent = head) { choose(); openLiveForm(false) }.apply {
+        textSize = 13f; minHeight = dp(40); minimumHeight = dp(40); setPadding(dp(14), 0, dp(14), 0)
+        layoutParams = LinearLayout.LayoutParams(-2, dp(44)).apply { marginStart = dp(8) }
+        contentDescription = getString(R.string.ui_live_for, exercise.label(bg))
+        if (replay) setOnLongClickListener { choose(); openLiveForm(true); true }
+    }
+    iconButton("gallery", getString(R.string.ui_video_for, exercise.label(bg)), head) { choose(); formVideo() }
     if (exercise.sided) {
-        val sides = row(panel, 4)
-        val toggles = listOf("L" to R.string.form_left, "R" to R.string.form_right).mapIndexed { index, (value, label) ->
-            button(getString(label), parent = sides) { side = value }.apply {
-                layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(8); if (index > 0) marginStart = dp(8) }
-                contentDescription = getString(R.string.ui_side_choice, getString(label))
+        val sides = row(panel, 6).apply { setPadding(dp(52), 0, 0, 0) }
+        val toggles = listOf("L" to R.string.form_left, "R" to R.string.form_right).map { (value, label) ->
+            TextView(this).apply {
+                text = getString(label); textSize = 13f; gravity = android.view.Gravity.CENTER; setPadding(dp(14), 0, dp(14), 0)
+                contentDescription = getString(R.string.ui_side_choice, getString(label)); isClickable = true; isFocusable = true
+                sides.addView(this, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(8) })
             } to value
         }
         fun mark() = toggles.forEach { (toggle, value) ->
-            toggle.isSelected = value == side
-            toggle.background = shape(getColor(if (toggle.isSelected) R.color.hover else R.color.surface), 14,
-                getColor(if (toggle.isSelected) R.color.accent else R.color.line))
-            toggle.setTextColor(getColor(if (toggle.isSelected) R.color.accent else R.color.ink))
+            val on = value == side
+            toggle.background = shape(getColor(if (on) R.color.hover else android.R.color.transparent), 18, getColor(if (on) R.color.accent else R.color.line))
+            toggle.setTextColor(getColor(if (on) R.color.accent else R.color.ink))
         }
         toggles.forEach { (toggle, value) -> toggle.setOnClickListener { side = value; mark() } }
         mark()
-    }
-    val actions = row(panel, 4)
-    fun choose() {
-            formChoice = FormChoice(exercise.id, side)
-            getSharedPreferences("account", android.content.Context.MODE_PRIVATE).edit()
-                .putString("exercise", exercise.id).putString("exercise_side", side).apply()
-        }
-    button(getString(R.string.ui_live), primary = true, parent = actions) { choose(); openLiveForm(false) }.apply {
-        layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10) }
-        contentDescription = getString(R.string.ui_live_for, exercise.label(locale.language == "bg"))
-        setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon("form", getColor(R.color.hero)), null, null, null)
-        if (replay) setOnLongClickListener { choose(); openLiveForm(true); true }
-    }
-    button(getString(R.string.ui_from_video), parent = actions) { choose(); formVideo() }.apply {
-        layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { topMargin = dp(10); marginStart = dp(8) }
-        contentDescription = getString(R.string.ui_video_for, exercise.label(locale.language == "bg"))
     }
 }
 
