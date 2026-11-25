@@ -140,7 +140,7 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
         val value = totals.optDouble(key, 0.0); val aim = target.optDouble(key).takeIf { it > 0 }
         val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
         cell.addView(DayRing(this, aim?.let { value / it }, aim != null && key == "kcal" && value > aim * 1.1,
-            metricNumber(value, "kcal", locale)), LinearLayout.LayoutParams(dp(68), dp(68)))
+            metricNumber(value, "kcal", locale), value), LinearLayout.LayoutParams(dp(68), dp(68)))
         text(if (aim != null) getString(R.string.food_ring_of, getString(label).lowercase(locale), metricNumber(aim, "kcal", locale))
             else getString(label), 11, parent = cell).apply { gravity = Gravity.CENTER; maxLines = 2; setPadding(0, dp(4), 0, 0) }
         rings.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))

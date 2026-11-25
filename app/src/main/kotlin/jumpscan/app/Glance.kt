@@ -65,7 +65,10 @@ internal class FactorGauge(context: Context, private val states: List<String>, p
 }
 
 /** A ring for one of the day's totals: fill against its target, the reading in the middle. */
-internal class DayRing(context: Context, private val fraction: Double?, private val over: Boolean, private val reading: String) : View(context) {
+internal class DayRing(context: Context, private val fraction: Double?, private val over: Boolean, private val reading: String,
+                       private val count: Double? = null) : View(context) {
+    // With [count], the number in the middle counts up with the sweep and lands on [reading].
+    private val locale = resources.configuration.locales[0]
     private val pen = Paint(Paint.ANTI_ALIAS_FLAG)
     private var time = 1f
     init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
@@ -84,7 +87,8 @@ internal class DayRing(context: Context, private val fraction: Double?, private 
         pen.style = Paint.Style.FILL; pen.textAlign = Paint.Align.CENTER
         pen.typeface = resources.getFont(R.font.jetbrainsmono_regular); pen.color = context.getColor(R.color.ink)
         pen.textSize = r * (if (reading.length > 4) .36f else .44f)
-        canvas.drawText(reading, width / 2f, height / 2f + pen.textSize * .35f, pen)
+        val shown = if (count == null || time >= 1f) reading else metricNumber(count * time, "kcal", locale)
+        canvas.drawText(shown, width / 2f, height / 2f + pen.textSize * .35f, pen)
     }
 }
 
@@ -213,7 +217,7 @@ internal fun MainActivity.dayRings(data: JSONObject?, notes: (String) -> List<JS
     if (food == null && load == null) return
     val line = LinearLayout(this).apply { isBaselineAligned = false; setPadding(0, dp(12), 0, dp(2)) }
     parent.addView(line, LinearLayout.LayoutParams(-1, -2))
-    fun ring(key: String, tag: String?, fraction: Double?, over: Boolean, reading: String, caption: String) {
+    fun ring(key: String, tag: String?, fraction: Double?, over: Boolean, reading: String, caption: String, count: Double? = null) {
         val found = notes(key)
         val cell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, dp(6), 0, dp(6))
@@ -221,7 +225,7 @@ internal fun MainActivity.dayRings(data: JSONObject?, notes: (String) -> List<JS
             tappable(this@dayRings, 16) { if (found.isEmpty()) open(key) else findingSheet(caption, found) { open(key) } }
             contentDescription = "$caption: $reading. " + found.joinToString(". ") { it.optString("title") }
         }
-        cell.addView(DayRing(this, fraction, over, reading), LinearLayout.LayoutParams(dp(78), dp(78)))
+        cell.addView(DayRing(this, fraction, over, reading, count), LinearLayout.LayoutParams(dp(78), dp(78)))
         text(caption, 12, parent = cell).apply { gravity = Gravity.CENTER; maxLines = 2; setPadding(dp(2), dp(6), dp(2), 0) }
         line.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
     }
@@ -229,16 +233,16 @@ internal fun MainActivity.dayRings(data: JSONObject?, notes: (String) -> List<JS
         val eaten = food.getJSONObject("eaten"); val target = food.optJSONObject("target")
         val kcal = eaten.getDouble("kcal"); val goal = target?.optDouble("kcal")?.takeIf { it > 0 }
         ring("nutrition", "card-nutrition", goal?.let { kcal / it }, goal != null && kcal > goal * 1.1, metricNumber(kcal, "kcal", locale),
-            if (goal != null) getString(R.string.today_ring_kcal, metricNumber(goal, "kcal", locale)) else getString(R.string.unit_kcal))
+            if (goal != null) getString(R.string.today_ring_kcal, metricNumber(goal, "kcal", locale)) else getString(R.string.unit_kcal), kcal)
         val protein = eaten.getDouble("protein_g"); val proteinGoal = target?.optDouble("protein_g")?.takeIf { it > 0 }
         ring("nutrition", null, proteinGoal?.let { protein / it }, false, metricNumber(protein, "kcal", locale),
-            if (proteinGoal != null) getString(R.string.today_ring_protein, metricNumber(proteinGoal, "kcal", locale)) else getString(R.string.macro_protein))
+            if (proteinGoal != null) getString(R.string.today_ring_protein, metricNumber(proteinGoal, "kcal", locale)) else getString(R.string.macro_protein), protein)
     }
     if (load != null) {
         val acute = load.optJSONObject("acute_load")?.optDouble("load") ?: load.optJSONArray("daily").doubles().sum()
         val usual = load.optJSONObject("chronic_load")?.optDouble("weekly_load")?.takeIf { it.isFinite() && it > 0 }
         ring("training", "card-training", usual?.let { acute / it / 1.5 }, usual != null && acute > usual * 1.3, metricNumber(acute, "kcal", locale),
-            if (usual != null) getString(R.string.today_ring_load, metricNumber(usual, "kcal", locale)) else getString(R.string.today_load_7d))
+            if (usual != null) getString(R.string.today_ring_load, metricNumber(usual, "kcal", locale)) else getString(R.string.today_load_7d), acute)
     }
 }
 

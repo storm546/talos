@@ -226,7 +226,10 @@ def week(t, data):
     else:
         text += "."
     tone = GOOD if checkin["done"] >= checkin["days"] * 0.8 else INFO
-    return finding("week", tone, t("Постоянство", "Consistency"), text)
+    missed = checkin["days"] - checkin["done"]
+    title = (t("Всеки ден", "Every day") if missed == 0 else
+             t(f"Пропуснати {missed} дни", f"{missed} days missed") if missed > 1 else t("Пропуснат 1 ден", "1 day missed"))
+    return finding("week", tone, title, text)
 
 
 RECORD_NAMES = {"jump_height": ("височина на скока", "jump height"), "flight_time": ("време на полета", "flight time"),
@@ -257,7 +260,7 @@ def records(t, found):
         text += t(f" И още {more} тази седмица.", f" And {more} more this week.")
     elif not text.endswith("."):
         text += "."
-    return finding("records", GOOD, t("Нов рекорд", "New record"), text)
+    return finding("records", GOOD, name.capitalize(), text)
 
 
 def body(t, rows):
