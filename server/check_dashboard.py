@@ -326,6 +326,7 @@ def check():
                 page.locator('#language').select_option(language)
                 # Today reloads to get the findings in this language.
                 page.wait_for_function(f"() => state.todayData?.language === '{language}' && document.querySelector('#week')")
+                page.wait_for_timeout(800)  # the reload's render replaces #week; capture after it settles
                 for width in [1280, 390]:
                     page.set_viewport_size({'width': width, 'height': 960})
                     page.locator('#week').scroll_into_view_if_needed()
