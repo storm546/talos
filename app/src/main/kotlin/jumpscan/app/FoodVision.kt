@@ -164,8 +164,7 @@ private fun MainActivity.photoLabel(item: JSONObject): String = if (matched(item
 internal fun MainActivity.photoReview(day: String, items: List<JSONObject>, message: String? = null) {
     layout(getString(R.string.food_photo_review), "food_photo_review")
     featureError(message)
-    text("${mealName(diaryMeal)} · ${localDate(day, locale)}", 14)
-    notice(getString(R.string.food_photo_estimates))
+    text(localDate(day, locale) + " · " + getString(R.string.food_photo_estimates), 13)
     if (items.isEmpty()) {
         text(getString(R.string.food_photo_nothing), 15, getColor(R.color.ink))
         photoButtons()
@@ -179,7 +178,7 @@ internal fun MainActivity.photoReview(day: String, items: List<JSONObject>, mess
     fun grams(index: Int) = fields[index]?.let { decimal(it.value()) } ?: items[index].optDouble("grams", 0.0)
     fun kcal(index: Int) = items[index].optDouble("kcal", 0.0) * grams(index) / items[index].optDouble("grams", 1.0).coerceAtLeast(1.0)
     fun refresh() { total.text = getString(R.string.food_photo_total, kcalText(items.indices.filter { chosen[it] }.sumOf { kcal(it) })) }
-    section(R.string.ai_entry_proposal).setPadding(0, dp(16), 0, dp(4))
+    eyebrow(getString(R.string.ai_entry_proposal))
     items.forEachIndexed { index, item ->
         val line = row(center = true).apply { setPadding(0, dp(6), 0, dp(6)) }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }

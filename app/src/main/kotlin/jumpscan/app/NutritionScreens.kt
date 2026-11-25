@@ -266,23 +266,30 @@ private fun MainActivity.editLog(day: String, log: JSONObject) {
 }
 
 /** A 2 x 2 meal choice; the long Bulgarian snack label wraps inside its half. */
+/** The meal as one scrolling row of pills (DESIGN.md): one line instead of a 2×2 block of buttons. */
 internal fun MainActivity.mealGrid(selected: String, picked: (String) -> Unit) {
-    text(getString(R.string.nutr_meal), 14).setPadding(0, dp(12), 0, dp(4))
+    val scroll = android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+    page.addView(scroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+    val line = LinearLayout(this)
+    scroll.addView(line)
     val choices = mutableListOf<RadioButton>()
-    meals.entries.chunked(2).forEach { pair ->
-        val line = row(top = 6)
-        pair.forEachIndexed { index, (key, label) ->
-            choices += RadioButton(this).apply {
-                id = View.generateViewId()
-                text = getString(label)
-                textSize = 13f
-                segment()
-                maxLines = 2
-                setPadding(dp(10), dp(6), dp(10), dp(6))
-                isChecked = key == selected
-                setOnClickListener { choices.forEach { it.isChecked = it === this }; picked(key) }
-                line.addView(this, LinearLayout.LayoutParams(0, -2, 1f).apply { if (index > 0) marginStart = dp(8) })
+    meals.entries.forEachIndexed { index, (key, label) ->
+        choices += RadioButton(this).apply {
+            id = View.generateViewId()
+            text = getString(label)
+            textSize = 14f
+            segment()
+            maxLines = 1
+            minHeight = dp(44)
+            setPadding(dp(16), 0, dp(16), 0)
+            background = android.graphics.drawable.StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_checked), shape(getColor(R.color.accent), 22))
+                addState(intArrayOf(), shape(getColor(R.color.hover), 22))
             }
+            isChecked = key == selected
+            contentDescription = getString(R.string.nutr_meal) + ": " + getString(label)
+            setOnClickListener { choices.forEach { it.isChecked = it === this }; picked(key) }
+            line.addView(this, LinearLayout.LayoutParams(-2, dp(44)).apply { if (index > 0) marginStart = dp(8) })
         }
     }
 }
