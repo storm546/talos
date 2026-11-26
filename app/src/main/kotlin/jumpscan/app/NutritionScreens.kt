@@ -268,7 +268,7 @@ private fun MainActivity.editLog(day: String, log: JSONObject) {
 /** A 2 x 2 meal choice; the long Bulgarian snack label wraps inside its half. */
 /** The meal as one scrolling row of pills (DESIGN.md): one line instead of a 2×2 block of buttons. */
 internal fun MainActivity.mealGrid(selected: String, picked: (String) -> Unit) {
-    val scroll = android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+    val scroll = android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; isHorizontalFadingEdgeEnabled = true; setFadingEdgeLength(dp(40)) }
     page.addView(scroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
     val line = LinearLayout(this)
     scroll.addView(line)

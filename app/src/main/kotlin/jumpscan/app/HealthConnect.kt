@@ -150,18 +150,19 @@ internal fun MainActivity.connectHealth(done: () -> Unit) {
     }
 }
 
-/** The Profile row: availability, which data may be read, and the Samsung Health note. */
+/** The Profile row: availability, which data may be read, and the Samsung Health note once connected. */
 internal fun MainActivity.healthProfile() {
     eyebrow(getString(R.string.hc_title)).setPadding(0, dp(22), 0, 0)
     val value = statusRow("checkin", getString(R.string.hc_title), settingsGroup()) { connectHealth { profile() } }
     val allowed = text("", 13).apply { tag = "health-allowed" }
-    text(getString(R.string.hc_samsung_note), 13)
+    val samsung = text(getString(R.string.hc_samsung_note), 13).apply { visibility = android.view.View.GONE }
     when (healthStatus()) {
         HealthConnectClient.SDK_AVAILABLE -> {
             value.text = getString(R.string.hc_state_connect)
             later(value, { HealthReader(applicationContext).granted() }) { granted ->
                 val shown = healthTypes.filter { HealthPermission.getReadPermission(it.first) in granted.orEmpty() }
                 if (shown.isNotEmpty()) value.text = getString(R.string.hc_state_connected, shown.size, healthTypes.size)
+                if (shown.isNotEmpty()) samsung.visibility = android.view.View.VISIBLE
                 allowed.text = if (shown.isEmpty()) getString(R.string.hc_allowed_none)
                     else getString(R.string.hc_allowed, shown.joinToString(", ") { getString(it.second) })
             }

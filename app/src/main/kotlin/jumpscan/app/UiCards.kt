@@ -267,8 +267,8 @@ private fun MainActivity.settingRowCore(icon: String, title: String, parent: Lin
     }
     val value = text("", 13, getColor(R.color.muted), column).apply {
         setPadding(0, dp(3), 0, 0)
-        setSingleLine(true)
-        ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+        maxLines = 2
+        ellipsize = android.text.TextUtils.TruncateAt.END
         visibility = View.GONE
     }
     row.addView(android.widget.ImageView(this).apply {

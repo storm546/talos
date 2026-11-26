@@ -330,7 +330,7 @@ internal fun MainActivity.metricRows(keys: List<String>, data: JSONObject?, note
 
 /** Compact one-tap actions in a scrolling row; the first is the primary one. */
 internal fun MainActivity.actionChips(vararg entries: UiTile, parent: LinearLayout = page) {
-    val scroll = android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+    val scroll = android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; isHorizontalFadingEdgeEnabled = true; setFadingEdgeLength(dp(40)) }
     parent.addView(scroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
     val line = LinearLayout(this)
     scroll.addView(line)
