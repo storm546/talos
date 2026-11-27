@@ -184,7 +184,7 @@ class MainActivity : Activity() {
     internal fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     internal fun token() = prefs.getString("token", "").orEmpty()
     internal fun base() = prefs.getString("server", if (BuildConfig.DEBUG) "http://10.0.2.2:8000"
-        else "https://jumpscan.stormlabs.cloud").orEmpty()
+        else "https://talos.stormlabs.cloud").orEmpty()
     internal fun athleteId() = prefs.getLong("user_id", 0)
 
     private fun wordmark(parent: LinearLayout) = parent.addView(ImageView(this).apply {

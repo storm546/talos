@@ -1,8 +1,8 @@
 # Листовка (текст за една страница)
 
 Формат: А4, едностранно. Отпечатва се от `listovka-a4.html` (`node docs/build.cjs listovka-a4.html` дава
-`docs/out/listovka-a4.pdf`, една страница). Този файл е текстът ѝ. QR код (docs/img/qr-jumpscan.svg) към
-https://jumpscan.stormlabs.cloud
+`docs/out/listovka-a4.pdf`, една страница). Този файл е текстът ѝ. QR код (docs/img/qr-talos.svg) към
+https://talos.stormlabs.cloud
 
 ---
 
@@ -58,7 +58,7 @@ https://jumpscan.stormlabs.cloud
 
 ## Долен ред
 
-https://jumpscan.stormlabs.cloud · [ИМЕ НА АВТОРА] · [УЧИЛИЩЕ] · [ИМЕЙЛ ЗА КОНТАКТ] · Отворен код, GPL-3.0
+https://talos.stormlabs.cloud · [ИМЕ НА АВТОРА] · [УЧИЛИЩЕ] · [ИМЕЙЛ ЗА КОНТАКТ] · Отворен код, GPL-3.0
 
 ---
 

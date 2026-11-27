@@ -48,8 +48,9 @@ internal class FactorGauge(context: Context, private val states: List<String>, p
         val each = (240f - gap * (n - 1)) / n
         for (i in 0 until n) {
             val state = states.getOrNull(i)
-            pen.color = context.getColor(when (state) { "better" -> R.color.hero_good; "worse" -> R.color.signal; "usual" -> R.color.on_hero; else -> R.color.hero_top })
-            pen.alpha = if (state == "usual") 150 else 255
+            pen.color = context.getColor(when (state) { "better" -> R.color.hero_good; "worse" -> R.color.signal; else -> R.color.on_hero })
+            // Missing factors stay visible as a faint track, so an empty morning still reads as a gauge.
+            pen.alpha = when (state) { "usual" -> 150; "better", "worse" -> 255; else -> 45 }
             canvas.drawArc(box, 150f + i * (each + gap), each * time, false, pen)
         }
         pen.style = Paint.Style.FILL; pen.textAlign = Paint.Align.CENTER; pen.alpha = 255
@@ -174,7 +175,9 @@ internal fun MainActivity.vitalsPanel(data: JSONObject?, notes: List<JSONObject>
     }
     val top = row(panel, center = true)
     val gaugeStates = factors.filter { it.optString("key") != "sleep" }.map { if (it.isNull("value")) "missing" else it.optString("state") }
-    top.addView(FactorGauge(this, gaugeStates, readinessLabel(status),
+    // Before any of today's values arrive, a dash instead of a sentence squeezed into the arc.
+    val word = if (gaugeStates.all { it == "missing" }) "—" else readinessLabel(status)
+    top.addView(FactorGauge(this, gaugeStates, word,
         getString(R.string.today_factors_count, gaugeStates.count { it != "missing" }, gaugeStates.size)),
         LinearLayout.LayoutParams(dp(128), dp(122)))
     val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
