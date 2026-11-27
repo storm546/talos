@@ -41,8 +41,8 @@
     <string name="ui_form_eyebrow">%1$d EXERCISES · LIVE OR FROM VIDEO</string>
     <string name="ui_form_experimental">Experimental</string>
     <string name="ui_form_experimental_note">Not validated yet: repetition counts and hold times may be wrong. Live and From video work as usual.</string>
-    <string name="ui_form_show_experimental">Show experimental exercises (%1$d)</string>
-    <string name="ui_form_hide_experimental">Hide experimental exercises (%1$d)</string>
+    <string name="ui_form_show_experimental">%1$d more exercises still being checked</string>
+    <string name="ui_form_hide_experimental">Hide unchecked exercises (%1$d)</string>
     <string name="ui_not_validated">Not validated</string>
     <string name="ui_form_validated_note">In held-out live tests, squat counts were exact in 21 of 22 sets and never off by more than one. Plank hold times were within 1 second or 10% of the reference, whichever is greater, in all 9 sets. Plank technique time and all other exercises are not validated.</string>
     <string name="ui_replay_hint">Debug build: press and hold Live to replay the test recording.</string>
@@ -80,5 +80,5 @@
     <string name="how_measured">How is this measured?</string>
     <string name="expanded">Expanded</string>
     <string name="collapsed">Collapsed</string>
-    <string name="profile_advanced">Advanced</string>
+    <string name="profile_advanced">Settings</string>
 </resources>

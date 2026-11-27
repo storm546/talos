@@ -24,8 +24,9 @@ that carry meaning only, and motion only when data changes.
 - Text: `ink` (primary), `muted` (secondary); never below 12sp on a phone.
 - Accent: `accent` (orange) for the single primary action, ring fills and the current-value dot. Nothing else.
 - Signal: `ready` / `hero_good` = better or done; `warning` / `signal` = watch; `line` = neutral marker.
-- Type: Space Grotesk (words; 22 screen title, 17 panel title, 15 row label, 12 secondary); JetBrains Mono for
-  readings (17 row, 15 vitals, ring centre scales to the ring).
+- Type: Space Grotesk (words; 22 screen title, 17 panel title, 15 row label, 12 secondary); JetBrains Mono only for
+  large readouts (24sp and up: timers, measurements, ring centres); smaller numbers (row readings, vitals, dates,
+  totals) use Space Grotesk with tabular figures, so Cyrillic sentences and decimal commas never sit in mono.
 - Shape: 20dp leading panel, 22dp pill actions, 14dp sheets; 44–48dp touch targets.
 
 ## Components (`app/.../Glance.kt`)

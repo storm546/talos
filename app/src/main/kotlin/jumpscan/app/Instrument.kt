@@ -15,8 +15,10 @@ internal fun Context.instrumentTheme(): Context {
 }
 
 internal fun TextView.instrumentType(display: Boolean = false, numeric: Boolean = false) {
+    // Mono only for large readouts; small inline numbers and sentences read better in Space Grotesk with tabular figures.
+    val readout = numeric && textSize >= 24 * resources.displayMetrics.scaledDensity
     typeface = resources.getFont(when {
-        numeric -> R.font.jetbrainsmono_regular
+        readout -> R.font.jetbrainsmono_regular
         display -> R.font.spacegrotesk_bold
         else -> R.font.spacegrotesk_regular
     })

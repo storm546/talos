@@ -160,7 +160,8 @@
     <string name="section_camera_tests">Тестове с камерата</string>
     <string name="section_history">История и проверки</string>
     <string name="section_food_more">Още начини за записване и планиране</string>
-    <string name="section_training_more">Планове, таймери и рекорди</string>
+    <string name="section_training_more">План и напредък</string>
+    <string name="section_training_tools">Таймери и помощници</string>
     <string name="section_you">Тяло и самочувствие</string>
     <string name="tool_photo_note">Калории по снимка</string>
     <string name="tool_cook_note">Рецепти по снимка на хладилника</string>

@@ -285,33 +285,45 @@ private fun MainActivity.briefingCard() {
     line.addView(android.widget.ImageView(this).apply {
         setImageDrawable(lineIcon("assistant", getColor(R.color.accent))); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }, LinearLayout.LayoutParams(dp(18), dp(18)).apply { topMargin = dp(2); marginEnd = dp(10) })
-    val body = text(getString(R.string.today_briefing_loading), 14, getColor(R.color.muted), line).apply {
+    val body = text("", 14, getColor(R.color.ink), line).apply {
         maxLines = 3; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, 0, 0, 0)
         layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
     }
+    val foot = row(panel, center = true).apply { setPadding(dp(28), dp(2), 0, 0) }
+    // Today's last answer shows at once; with none yet the note stays hidden instead of showing a loading line.
+    val cache = getSharedPreferences("briefing", Context.MODE_PRIVATE)
+    val key = "${getSharedPreferences("account", Context.MODE_PRIVATE).getLong("user_id", 0)}-${todayLocal()}-${language()}"
+    val cached = cache.getString(key, null)
+    if (cached != null) showBriefing(panel, body, foot, cached) else panel.visibility = View.GONE
     val api = featureApi()
     val host = page
     // Its own thread: the model can take half a minute, and the panel must not wait behind it.
     briefingWork.submit {
         val answer = runCatching { api.obj("/api/me/briefing?day=${todayLocal()}&language=${language()}", readTimeoutMs = 75_000) }.getOrNull()
-        runOnUiThread { if (!isDestroyed && page === host && panel.isAttachedToWindow) showBriefing(panel, body, answer) }
+        val said = answer?.optString("text")?.takeIf { !answer.isNull("text") && it.isNotBlank() }
+        runOnUiThread {
+            if (isDestroyed || page !== host || !panel.isAttachedToWindow) return@runOnUiThread
+            if (said == null) { if (answer != null) (panel.parent as? LinearLayout)?.removeView(panel); return@runOnUiThread }
+            cache.edit().clear().putString(key, said).apply()
+            if (said != cached) showBriefing(panel, body, foot, said)
+        }
     }
 }
 
 private val briefingWork = java.util.concurrent.Executors.newSingleThreadExecutor()
 
-private fun MainActivity.showBriefing(panel: LinearLayout, body: android.widget.TextView, answer: JSONObject?) {
-    val said = answer?.optString("text")?.takeIf { !answer.isNull("text") && it.isNotBlank() }
-    if (said == null) { (panel.parent as? LinearLayout)?.removeView(panel); return }
+private fun MainActivity.showBriefing(panel: LinearLayout, body: android.widget.TextView, foot: LinearLayout, said: String) {
+    val first = panel.visibility != View.VISIBLE || body.text.isEmpty()
     body.text = said
-    body.setTextColor(getColor(R.color.ink))
     body.contentDescription = getString(R.string.today_briefing) + ": " + said
     body.setOnClickListener { body.maxLines = if (body.maxLines == 3) 20 else 3 }
-    val foot = row(panel, center = true).apply { setPadding(dp(28), dp(2), 0, 0) }
-    text(getString(R.string.today_briefing_by), 11, parent = foot).apply { layoutParams = LinearLayout.LayoutParams(0, -2, 1f); setPadding(0, 0, 0, 0) }
-    button(getString(R.string.today_ask), parent = foot, look = ActionTone.TEXT) { assistantScreen(draft = getString(R.string.today_ask_draft)) }
-        .apply { textSize = 13f; setPadding(dp(8), 0, 0, 0); layoutParams = LinearLayout.LayoutParams(-2, dp(40)) }
-    panel.arrive()
+    if (foot.childCount == 0) {
+        text(getString(R.string.today_briefing_by), 11, parent = foot).apply { layoutParams = LinearLayout.LayoutParams(0, -2, 1f); setPadding(0, 0, 0, 0) }
+        button(getString(R.string.today_ask), parent = foot, look = ActionTone.TEXT) { assistantScreen(draft = getString(R.string.today_ask_draft)) }
+            .apply { textSize = 13f; setPadding(dp(8), 0, 0, 0); layoutParams = LinearLayout.LayoutParams(-2, dp(40)) }
+    }
+    panel.visibility = View.VISIBLE
+    if (first) panel.arrive()
 }
 
 /** Phone-only tools for signed-out or offline use: each works without an account. */

@@ -467,27 +467,29 @@ class MainActivity : Activity() {
             line(prefs.getString("name", "").orEmpty(), 18)
             prefs.getString("email", null)?.let { line(it, 13).setPadding(0, 0, 0, 0) }
         }
-        val settings = getSharedPreferences("instrument", android.content.Context.MODE_PRIVATE)
-        val options = listOf("dark" to R.string.dark_mode, "light" to R.string.light_mode, "system" to R.string.system_mode)
-        val group = settingsGroup()
-        settingRow("appearance", getString(R.string.appearance),
-            getString(options.first { it.first == settings.getString("appearance", "dark") }.second), group) {
-            appearanceSheet()
-        }
-        divider(group)
-        settingRow("diagnostics", getString(R.string.diagnostics), diagnosticsProgress(), group) { diagnostics() }
-        if (token().isNotEmpty()) {
-            divider(group)
-            settingRow("signout", getString(R.string.sign_out), null, group, subtle = true) { leaveProfile(showServer = false) }
-        }
+        // Personal and club sections first; app settings and sign out last.
         if (token().isNotEmpty()) {
             toolList(R.string.section_you, Tools.you)
             toolList(R.string.tools_club, Tools.club)
         }
         healthProfile()
+        val settings = getSharedPreferences("instrument", android.content.Context.MODE_PRIVATE)
+        val options = listOf("dark" to R.string.dark_mode, "light" to R.string.light_mode, "system" to R.string.system_mode)
+        eyebrow(getString(R.string.profile_advanced)).setPadding(0, dp(22), 0, 0)
+        val group = settingsGroup()
+        settingRow("appearance", getString(R.string.appearance),
+            getString(options.first { it.first == settings.getString("appearance", "dark") }.second), group) {
+            appearanceSheet()
+        }
         if (token().isNotEmpty()) {
-            eyebrow(getString(R.string.profile_advanced)).setPadding(0, dp(22), 0, 0)
-            settingRow("server", getString(R.string.server_url), base(), settingsGroup()) { leaveProfile(showServer = true) }
+            divider(group)
+            settingRow("server", getString(R.string.server_url), base(), group) { leaveProfile(showServer = true) }
+        }
+        divider(group)
+        settingRow("diagnostics", getString(R.string.diagnostics), diagnosticsProgress(), group) { diagnostics() }
+        if (token().isNotEmpty()) settingsGroup().let { out ->
+            (out.layoutParams as LinearLayout.LayoutParams).topMargin = dp(16)
+            settingRow("signout", getString(R.string.sign_out), null, out, subtle = true) { leaveProfile(showServer = false) }
         }
         if (token().isNotEmpty()) pendingControls()
     }

@@ -24,12 +24,13 @@ internal object Tools {
         Tool("recipes", R.string.recipes_title, R.string.tool_recipes_note, "recipe") { recipes() },
         Tool("weight", R.string.tool_weight, R.string.tool_weight_note, "insights") { insights(days = 30) })
     val training = listOf(
-        Tool("plans", R.string.tool_plans, R.string.tool_plans_note, "index") { trainingHome() },
-        Tool("cardio", R.string.ft_cardio, R.string.tool_cardio_note, "route", local = true) { cardioHome() },
+        Tool("plans", R.string.tool_plans, R.string.tool_plans_note, "calendar") { trainingHome() },
+        Tool("records", R.string.records_title, R.string.tool_records_note, "trophy") { records() },
+        Tool("load", R.string.rd_sessions_title, R.string.rd_load_chart, "insights") { sessionsScreen() })
+    val trainingTools = listOf(
         Tool("timer", R.string.timer_title, R.string.tool_timer_note, "timer", local = true) { intervalTimer() },
         Tool("calculators", R.string.calc_title, R.string.tool_calc_note, "plates", local = true) { calculators() },
-        Tool("records", R.string.records_title, R.string.tool_records_note, "insights") { records() },
-        Tool("load", R.string.rd_sessions_title, R.string.rd_load_chart, "training") { sessionsScreen() })
+        Tool("cardio", R.string.ft_cardio, R.string.tool_cardio_note, "route", local = true) { cardioHome() })
     val you = listOf(
         Tool("checkin", R.string.checkin_title, R.string.tool_checkin_note, "checkin") { checkin() },
         Tool("body", R.string.body_title, R.string.tool_body_note, "insights") { body() },
@@ -37,14 +38,14 @@ internal object Tools {
     val club = listOf(
         Tool("sessions", R.string.tool_sessions, R.string.tool_sessions_note, "club") { clubHome() },
         Tool("feedback", R.string.feedback_title, R.string.tool_feedback_note, "assistant") { feedback() },
-        Tool("leaderboard", R.string.leaderboard_title, R.string.tool_leaderboard_note, "index") { leaderboard() })
+        Tool("leaderboard", R.string.leaderboard_title, R.string.tool_leaderboard_note, "podium") { leaderboard() })
     private val extra = listOf(
         Tool("photo", R.string.food_photo_title, R.string.tool_photo_note, "camera") { foodPhoto() },
         Tool("scan_food", R.string.tool_scan_food, R.string.tool_scan_food_note, "scan") { scanBarcode() },
         Tool("form", R.string.ui_technique, R.string.tool_form_note, "form", local = true) { formHome() },
         Tool("workout", R.string.workout_title, R.string.tool_workout_note, "training") { workoutStart() },
         Tool("nutrition", R.string.nutrition_title, R.string.tool_nutrition_note, "food") { nutritionHome() })
-    val all get() = cameraTests + formHistory + food + training + you + club + extra
+    val all get() = cameraTests + formHistory + food + training + trainingTools + you + club + extra
     operator fun get(key: String) = all.firstOrNull { it.key == key }
 }
 

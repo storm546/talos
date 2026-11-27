@@ -121,7 +121,7 @@ private fun MainActivity.workoutChoices(templates: List<JSONObject>, plans: List
         beginWorkout(getString(R.string.workout_default_title), null, null, emptyList())
     }
     divider(starts)
-    settingRow("route", getString(R.string.programs_title), getString(R.string.programs_note), starts) { programs() }
+    settingRow("index", getString(R.string.programs_title), getString(R.string.programs_note), starts) { programs() }
     for (plan in plans) {
         val items = planDays(plan, weekStart(today)).filter { it.first == today }.map { it.second }
         if (items.isEmpty()) continue
@@ -146,6 +146,7 @@ private fun MainActivity.workoutChoices(templates: List<JSONObject>, plans: List
     }
     askButton(getString(R.string.ask_training_draft))
     toolList(R.string.section_training_more, Tools.training)
+    toolList(R.string.section_training_tools, Tools.trainingTools)
 }
 
 private fun MainActivity.beginWorkout(title: String, templateId: Long?, planId: Long?, items: List<JSONObject>) {

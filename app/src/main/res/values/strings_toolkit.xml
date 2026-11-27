@@ -160,7 +160,8 @@
     <string name="section_camera_tests">Camera tests</string>
     <string name="section_history">History and checks</string>
     <string name="section_food_more">More ways to log and plan</string>
-    <string name="section_training_more">Plans, timers and records</string>
+    <string name="section_training_more">Plan and progress</string>
+    <string name="section_training_tools">Timers and helpers</string>
     <string name="section_you">Body and wellbeing</string>
     <string name="tool_photo_note">Calories from a photo</string>
     <string name="tool_cook_note">Recipes from a photo of the fridge</string>

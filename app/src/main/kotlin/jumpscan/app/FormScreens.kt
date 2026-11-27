@@ -99,18 +99,20 @@ internal fun MainActivity.formHome(message: String? = null) {
         val list = settingsGroup()
         members.forEachIndexed { i, it -> if (i > 0) divider(list); exerciseCard(it, group.icon, replay, list) }
     }
-    // Exercises that have not passed the repetition benchmark stay usable, but only behind an explicit opt-in.
+    toolList(R.string.section_history, if (token().isEmpty()) Tools.formHistory.filter { it.local } else Tools.formHistory)
+    // Exercises that have not passed the repetition benchmark stay usable, but only behind a quiet opt-in at the bottom.
     val experimental = FormExercises.all.filter { it.experimental }
     if (experimental.isNotEmpty()) {
-        eyebrow(getString(R.string.ui_form_experimental))
-        text(getString(R.string.ui_form_experimental_note), 13)
-        button(getString(if (showExperimental) R.string.ui_form_hide_experimental else R.string.ui_form_show_experimental,
-            experimental.size)) { showExperimental = !showExperimental; formHome() }
-        if (showExperimental) settingsGroup().let { list ->
-            experimental.forEachIndexed { i, it -> if (i > 0) divider(list); exerciseCard(it, formIcon(it.id), replay, list) }
+        if (showExperimental) {
+            eyebrow(getString(R.string.ui_form_experimental))
+            text(getString(R.string.ui_form_experimental_note), 13)
+            settingsGroup().let { list ->
+                experimental.forEachIndexed { i, it -> if (i > 0) divider(list); exerciseCard(it, formIcon(it.id), replay, list) }
+            }
         }
+        button(getString(if (showExperimental) R.string.ui_form_hide_experimental else R.string.ui_form_show_experimental,
+            experimental.size), look = ActionTone.TEXT) { showExperimental = !showExperimental; formHome() }
     }
-    toolList(R.string.section_history, if (token().isEmpty()) Tools.formHistory.filter { it.local } else Tools.formHistory)
 }
 
 /** One exercise as a compact instrument row (DESIGN.md): icon, name and one fact line, "Live" pill, video button. */
