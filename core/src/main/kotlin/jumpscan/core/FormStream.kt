@@ -61,6 +61,8 @@ class FormStream(exercise: String, private val side: String?, private val aspect
     private var legacyTick = Long.MIN_VALUE / 2
     private var legacyReported = 0
     private var finished: FormMetrics? = null
+    /** Per frame: time and the driving value of each side, kept only for the end-of-set recount. */
+    private val trace = mutableListOf<Triple<Long, Double?, Double?>>()
     var progress = FormProgress()
         private set
 
@@ -195,6 +197,7 @@ class FormStream(exercise: String, private val side: String?, private val aspect
             if (values.isEmpty() || (requireAll && values.size < from.size)) return null
             return if (metric == "fppa") values.maxOrNull() else values.average()
         }
+        if (signal.recount != null && !isHold) trace += Triple(time, signalSides[0].measure(signal.metric), signalSides[1].measure(signal.metric))
         quality += geometry.map(::confidence).average()
         val raws = if (eachLimb) signalGeometry.map { it.measure(signal.metric) }
             else listOf(measure(signal.metric, requireAll = !signal.metric.startsWith("rise:"), from = signalGeometry))
@@ -401,6 +404,12 @@ class FormStream(exercise: String, private val side: String?, private val aspect
         closeGap(last, events)
         limbs.forEachIndexed { index, limb -> limb.cycle?.let {
             if (counted(index, it.start, last)) unclear(it.start, last, if (it.open) "incomplete_start" else "incomplete_end", events) } }
+        signal.recount?.let { recount(it) }?.let { rebuilt ->
+            reps.clear(); reps += rebuilt
+            progress = progress.copy(complete = rebuilt.count { it.status == "complete" },
+                partial = rebuilt.count { it.status == "partial" },
+                unclear = rebuilt.count { it.status == "unclear" })
+        }
         val summary = FormSummary(progress.complete, progress.partial, progress.unclear, null, null, null, null, null,
             null, null, null, null, null, progress.holdMs.takeIf { isHold }, progress.inBandMs.takeIf { isHold })
         return FormMetrics(entry.id, side, if (sideView == true) "side" else "front", (count - 1) * 1000.0 / (last - first),
@@ -408,5 +417,80 @@ class FormStream(exercise: String, private val side: String?, private val aspect
                 if (quality / count < 0.7 || trackingLost) add("low_visibility")
                 if (progress.unclear > 0) add("unclear_reps")
             }, mode = entry.mode)
+    }
+
+    /** The whole set counted against its own range (see [FormRecount]); null keeps the live result: too few usable
+     *  frames, a range under half of min_range, or no repetition found. Checks come from the overlapping live repetition. */
+    private fun recount(r: FormRecount): List<FormRepetition>? {
+        if (trace.size < 8) return null
+        val t = trace.map { it.first.toDouble() }
+        val sides = listOf(trace.map { it.second }, trace.map { it.third })
+        fun percentile(values: List<Double>, p: Double): Double {
+            val v = values.sorted(); val x = (v.size - 1) * p / 100.0; val i = x.toInt()
+            return if (i + 1 < v.size) v[i] + (v[i + 1] - v[i]) * (x - i) else v[i]
+        }
+        // The requested side, else the side with the larger usable range (the left one on a tie).
+        val ranges = sides.map { v -> v.filterNotNull().let { if (it.size > 0.3 * t.size) percentile(it, 95.0) - percentile(it, 5.0) else 0.0 } }
+        val pick = if (side != null) selected else if (ranges[1] > ranges[0]) 1 else 0
+        val raw = sides[pick]
+        val known = raw.indices.filter { raw[it] != null }
+        if (known.size < 0.4 * raw.size || known.size < 8) return null
+        // Gaps filled linearly in time, constant beyond the first and last seen value.
+        val y = DoubleArray(raw.size) { i ->
+            raw[i] ?: run {
+                val after = known.firstOrNull { it > i }; val before = known.lastOrNull { it < i }
+                when {
+                    before == null -> raw[after!!]!!
+                    after == null -> raw[before]!!
+                    else -> raw[before]!! + (raw[after]!! - raw[before]!!) * (t[i] - t[before]) / (t[after] - t[before])
+                }
+            }
+        }
+        val steps = t.zipWithNext { a, b -> b - a }.sorted()
+        val dt = (if (steps.size % 2 == 1) steps[steps.size / 2] else (steps[steps.size / 2 - 1] + steps[steps.size / 2]) / 2)
+            .takeIf { it > 0 } ?: 66.0
+        val k = maxOf(1, Math.round(r.windowMs / dt).toInt())
+        val smooth = if (k == 1) y else DoubleArray(y.size) { i ->
+            (0 until k).sumOf { j -> y[(i - k / 2 + j).coerceIn(0, y.size - 1)] } / k
+        }
+        val z0 = smooth.map { it * direction }
+        val lo = percentile(z0, 5.0); val hi = percentile(z0, 95.0)
+        if (hi - lo < 0.5 * signal.minRange || hi - lo <= 0) return null
+        val z = z0.map { (it - lo) / (hi - lo) }
+        val out = mutableListOf<FormRepetition>()
+        val times = trace.map { it.first }
+        // Checks come from the live repetition that overlaps most; an unclear repetition carries no measurements.
+        fun checks(start: Long, end: Long) = reps.filter { it.status != "unclear" }
+            .maxByOrNull { minOf(it.endMs, end) - maxOf(it.startMs, start) }
+            ?.takeIf { minOf(it.endMs, end) > maxOf(it.startMs, start) }?.checks
+        fun add(status: String, reasons: List<String>, start: Long, bottom: Long, end: Long) {
+            out += if (status == "unclear") FormRepetition(out.size + 1, status, reasons, start, null, end,
+                null, null, null, null, null, null, null, null, null)
+            else FormRepetition(out.size + 1, status, reasons, start, bottom, end, null, null, null, null, null, null,
+                bottom - start, end - bottom, null, checks(start, end))
+        }
+        var state: Boolean? = null  // true = far from rest
+        var startedFar = false; var leave = times[0]; var peak = times[0]; var peakZ = Double.NEGATIVE_INFINITY
+        var restZ = Double.POSITIVE_INFINITY
+        for (i in z.indices) {
+            val v = z[i]
+            if (state == null) {
+                state = if (v < r.low) false else if (v > r.high) true else null
+                startedFar = state == true; leave = times[i]; restZ = v; continue
+            }
+            if (state == true && v > peakZ) { peakZ = v; peak = times[i] }
+            if (state == false && v < r.low) leave = times[i]
+            if (state == false) restZ = minOf(restZ, v)
+            if (state == false && v > r.high) { state = true; peakZ = v; peak = times[i] }
+            else if (state == true && v < r.low) {
+                if (startedFar && out.isEmpty()) add("unclear", listOf("incomplete_start"), times[0], peak, times[i])
+                // Measured against the set's own range, so a shallow set still needs min_range of real movement.
+                else if ((peakZ - restZ) * (hi - lo) >= signal.minRange) add("complete", emptyList(), leave, peak, times[i])
+                else add("partial", listOf("below_min_depth"), leave, peak, times[i])
+                state = false; leave = times[i]; peakZ = Double.NEGATIVE_INFINITY; restZ = v
+            }
+        }
+        if (state == true && out.isNotEmpty()) add("unclear", listOf("incomplete_end"), leave, peak, times.last())
+        return out.takeIf { it.isNotEmpty() }
     }
 }

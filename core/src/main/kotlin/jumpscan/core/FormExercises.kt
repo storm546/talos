@@ -14,7 +14,13 @@ data class FormSignal(val metric: String, val up: Double, val down: Double, val 
     val bestLimb: Boolean = false,
     /** Count a repetition as a rise of at least [minRange] above the athlete's own last rest, then a return, instead
      *  of crossing the absolute [up]/[down] levels; those then only give the direction (catalogue count = "adaptive"). */
-    val adaptive: Boolean = false)
+    val adaptive: Boolean = false,
+    /** Recount the whole set when it ends against the set's own range (catalogue "recount"); live counts stay provisional. */
+    val recount: FormRecount? = null)
+
+/** End-of-set recount: smooth over [windowMs], normalise to the set's 5th-95th percentile, then count a repetition as a
+ *  rise above [high] and a return below [low] (fractions of that range). Tuned on training sets only (form8). */
+data class FormRecount(val low: Double, val high: Double, val windowMs: Long)
 
 /** [experimental] exercises have not passed the repetition benchmark (core/VALIDATION.md). The app lists them
  *  apart, collapsed and marked as not validated, with the one-line [reasonEn]/[reasonBg]. */
@@ -42,7 +48,8 @@ object FormExercises {
                 signal["depth_min"] as? Double, signal["open_flexion"] as? Double,
                 (signal["min_phase_ms"] as? Double)?.toLong() ?: 150, signal["limbs"] == "each",
                 (signal["min_visibility"] as? Double)?.toFloat() ?: 0.5f, signal["limbs"] == "best",
-                signal["count"] == "adaptive")
+                signal["count"] == "adaptive",
+                (signal["recount"] as? Map<*, *>)?.let { FormRecount(it["low"] as Double, it["high"] as Double, (it["window_ms"] as Double).toLong()) })
             FormExercise(row.string("id"), row.string("name_bg"), row.string("name_en"), row.string("mode"),
                 row["sided"] as Boolean, row.string("view"),
                 signal(row["signal"] as Map<*, *>),

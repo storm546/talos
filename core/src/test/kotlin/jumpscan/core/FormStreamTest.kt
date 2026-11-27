@@ -170,6 +170,28 @@ class FormStreamTest {
     }
 
     @Test
+    fun recountUsesTheSetsOwnRangeAndKeepsMinRangeForDepth() {
+        // Lunges from 170 down to 105 degrees with a slow 6-degree wobble at the bottom: one movement each.
+        fun set(rest: Double, bottom: Double) = (0 until 3).flatMap {
+            List(10) { rest } + List(12) { rest + (bottom - rest) * (it + 1) / 12 } +
+                List(8) { bottom + if (it % 4 < 2) 6.0 else 0.0 } + List(12) { bottom + (rest - bottom) * (it + 1) / 12 }
+        } + List(10) { rest }
+        fun run(values: List<Double>) = FormAnalyzer.analyze(values.mapIndexed { i, v -> geometry("lunge", v, i * 50L) },
+            "lunge", "L", 1f, JumpAnalyzer.View.SIDE)
+        val deep = run(set(170.0, 105.0))
+        assertEquals(3, deep.summary.repetitionCount)
+        deep.repetitions.forEach { rep ->
+            assertEquals(rep.bottomMs!! - rep.startMs, rep.descentTimeMs)
+            assertEquals(rep.endMs - rep.bottomMs!!, rep.ascentTimeMs)
+        }
+        // 22 degrees of movement is below min_range 35: partial, even though it fills the set's own range.
+        val shallow = run(set(170.0, 148.0))
+        assertEquals(0, shallow.summary.repetitionCount)
+        assertEquals(3, shallow.summary.partialCount)
+        assertEquals(listOf("below_min_depth"), shallow.repetitions.first().reasons)
+    }
+
+    @Test
     fun bestLimbRowFollowsTheVisibleArmAndAlternatingCurlsCountInProfile() {
         // Row seen from the front: the far (right) arm disappears behind the body while it rows. Averaging both arms
         // would lose every repetition; following the better-seen arm counts all three.

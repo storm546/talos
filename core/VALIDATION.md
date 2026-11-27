@@ -1253,3 +1253,27 @@ training sets (MM-Fit people 1–4 and 19, Countix) are too few and too uniform 
 lateral-raise misses were not inspected, to keep the held-out split clean for a later round.
 
 Not verified: live counting with a phone camera (all "live" numbers replay tracked frames at about 15 fps).
+
+## Round form8: end-of-set recount for lunge (2026-11-27)
+
+Change: the catalogue may give a signal a `recount` (low and high levels as fractions of the set's own range, and a
+smoothing window). When the set ends, `FormStream` recounts the whole driving series: it fills gaps linearly, smooths
+it over the window, normalises it to the set's 5th–95th percentile, and counts a repetition as a rise above `high`
+followed by a return below `low`. A repetition with less than `min_range` of real movement stays partial
+(`below_min_depth`), so a set of shallow lunges is not counted as deep. The live count during the set is unchanged
+and provisional. Only lunge uses it (`low` 0.2, `high` 0.6, window 300 ms).
+
+Tuned on the training split only. Jumping jack and pull-up were also tried: on training, recorded improved (jumping
+jack 0.70 → 0.77, pull-up 0.52 → 0.55) but live fell (0.77 → 0.70, 0.48 → 0.45), so they were left unchanged.
+
+Held-out look 3, lunge only (exact / mean absolute error / false repetitions):
+
+| Lunge | Sets / people | Recorded before → after | Live before → after |
+|---|---:|---|---|
+| All | 36 / 25 | 0.22/2.44/1 → 0.64/0.81/2 | 0.53/1.42/0 → 0.67/0.72/2 |
+| MM-Fit | 15 / 5 | 0.13/3.40/0 → 0.87/0.13/0 | 0.80/1.20/0 → 0.80/0.33/0 |
+| Countix | 21 / 20 | 0.29/1.76/1 → 0.48/1.29/2 | 0.33/1.57/0 → 0.57/1.00/2 |
+
+Decision: lunge stays experimental. The MM-Fit recorded path meets the bar (15 sets, 5 people, exact 0.87, MAE
+0.13, no false repetitions), but the full held-out set and the live path do not. Its reason now quotes the live 67%.
+The held-out split has now been looked at three times; the next round needs new held-out data.
