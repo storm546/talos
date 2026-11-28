@@ -38,7 +38,7 @@
     <string name="workout_title">Workout</string>
     <string name="workout_default_title">Workout</string>
     <string name="workout_start">Start</string>
-    <string name="workout_streak">weeks in a row · this week %1$d of %2$d training days</string>
+    <string name="workout_streak">This week: %1$d of %2$d workouts</string>
     <string name="workout_empty">Empty workout</string>
     <string name="workout_empty_note">Add exercises as you go</string>
     <string name="workout_today_plan">Today\'s plan: %1$s</string>
@@ -206,4 +206,8 @@
     <string name="food_gauge_over">kcal over</string>
     <string name="food_left">%1$s left today</string>
     <string name="food_over">%1$s over the target</string>
+    <plurals name="workout_streak_weeks">
+        <item quantity="one">%d week in a row</item>
+        <item quantity="other">%d weeks in a row</item>
+    </plurals>
 </resources>

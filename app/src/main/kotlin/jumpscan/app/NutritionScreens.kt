@@ -159,7 +159,7 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
         else getString(R.string.unit_kcal)).apply {
         contentDescription = if (goal > 0) getString(if (left >= 0) R.string.food_left else R.string.food_over, kcalText(abs(left))) else kcalText(eaten)
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
-    }, LinearLayout.LayoutParams(-1, dp(210)))
+    }, LinearLayout.LayoutParams(-1, dp(190)))
     if (goal > 0) text(getString(R.string.food_ring_of, kcalText(eaten), kcalText(goal)), 13, parent = glance).apply {
         gravity = Gravity.CENTER; instrumentType(numeric = true); setPadding(0, 0, 0, dp(10)) }
     else text(getString(R.string.nutr_no_targets), 13, parent = glance).gravity = Gravity.CENTER

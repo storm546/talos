@@ -38,7 +38,7 @@
     <string name="workout_title">Тренировка</string>
     <string name="workout_default_title">Тренировка</string>
     <string name="workout_start">Започнете</string>
-    <string name="workout_streak">седмици поред · тази седмица %1$d от %2$d тренировки</string>
+    <string name="workout_streak">Тази седмица: %1$d от %2$d тренировки</string>
     <string name="workout_empty">Празна тренировка</string>
     <string name="workout_empty_note">Добавяте упражнения в движение</string>
     <string name="workout_today_plan">План за днес: %1$s</string>
@@ -206,4 +206,8 @@
     <string name="food_gauge_over">ккал отгоре</string>
     <string name="food_left">Остават %1$s за днес</string>
     <string name="food_over">%1$s над целта</string>
+    <plurals name="workout_streak_weeks">
+        <item quantity="one">%d седмица поред</item>
+        <item quantity="other">%d седмици поред</item>
+    </plurals>
 </resources>

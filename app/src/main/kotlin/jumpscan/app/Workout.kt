@@ -118,11 +118,19 @@ private fun MainActivity.workoutChoices(templates: List<JSONObject>, plans: List
     val today = LocalDate.now()
     // The gym streak from the last Today answer (Hevy and Strong keep the week's count on this tab).
     cachedToday()?.first?.optJSONObject("week")?.optJSONObject("consistency")?.optJSONObject("streak")?.let { streak ->
-        val line = row(card(), center = true)
+        val panel = card()
+        val line = row(panel, center = true)
         line.addView(StreakRing(this, streak.getInt("weeks"), streak.getInt("done"), streak.getInt("target")),
             LinearLayout.LayoutParams(dp(76), dp(76)).apply { marginEnd = dp(16) })
-        text(getString(R.string.workout_streak, streak.getInt("done"), streak.getInt("target")), 14, parent = line)
-            .apply { setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+        val words = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        line.addView(words, LinearLayout.LayoutParams(0, -2, 1f))
+        text(resources.getQuantityString(R.plurals.workout_streak_weeks, streak.getInt("weeks"), streak.getInt("weeks")), 20,
+            getColor(R.color.ink), words).setPadding(0, 0, 0, 0)
+        text(getString(R.string.workout_streak, streak.getInt("done"), streak.getInt("target")), 13, parent = words).setPadding(0, dp(2), 0, 0)
+        streak.optJSONArray("days")?.takeIf { it.length() == 7 }?.let { days ->
+            panel.addView(WeekStrip(this, (0 until 7).map { days.getBoolean(it) }, today.dayOfWeek.value - 1),
+                LinearLayout.LayoutParams(-1, dp(64)).apply { topMargin = dp(10) })
+        }
     }
     // One obvious way to start (Hevy's "Start Empty Workout"); today's plan comes first when there is one.
     val todayPlans = plans.mapNotNull { plan -> planDays(plan, weekStart(today)).filter { it.first == today }.map { it.second }
@@ -147,14 +155,21 @@ private fun MainActivity.workoutChoices(templates: List<JSONObject>, plans: List
     toolList(R.string.section_training_tools, Tools.trainingTools)
 }
 
-/** A routine card: its title, the exercises it holds, and its own Start button (Hevy routine cards). */
+/** A routine card (Hevy): title and the exercises it holds, a round glowing Start button; the whole card starts it too. */
 private fun MainActivity.startCard(title: String, items: List<JSONObject>, start: () -> Unit) {
-    val panel = card()
-    text(title, 18, getColor(R.color.ink), panel).apply { instrumentType(display = true); setPadding(0, 0, 0, dp(2)) }
-    text(items.joinToString(" · ") { it.optString("exercise") }.ifBlank {
-        resources.getQuantityString(R.plurals.workout_exercises, items.size, items.size) }, 13, parent = panel)
-        .apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
-    button(getString(R.string.workout_start), parent = panel, look = ActionTone.TONAL) { start() }
+    val panel = card().apply { isClickable = true; isFocusable = true; setOnClickListener { start() }; pressFeedback()
+        foreground = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(getColor(R.color.accent_pressed)), null,
+            shape(android.graphics.Color.WHITE, 16)) }
+    val line = row(panel, center = true)
+    val words = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    line.addView(words, LinearLayout.LayoutParams(0, -2, 1f))
+    text(title, 18, getColor(R.color.ink), words).apply { instrumentType(display = true); setPadding(0, 0, 0, dp(2)) }
+    text(resources.getQuantityString(R.plurals.workout_exercises, items.size, items.size), 12, getColor(R.color.accent), words).setPadding(0, 0, 0, dp(4))
+    text(items.joinToString(" · ") { it.optString("exercise") }, 13, parent = words)
+        .apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, 0, 0, 0) }
+    line.addView(PlayButton(this, getString(R.string.workout_start) + ": " + title, start),
+        LinearLayout.LayoutParams(dp(76), dp(76)).apply { marginStart = dp(4) })
+    panel.contentDescription = title
 }
 
 private fun MainActivity.beginWorkout(title: String, templateId: Long?, planId: Long?, items: List<JSONObject>) {
