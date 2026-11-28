@@ -45,12 +45,13 @@ def test_gym_streak_counts_full_weeks_and_an_open_week_does_not_break_it():
     monday = date(2026, 11, 23)
     days = lambda m, n: {(m + timedelta(days=i)).isoformat() for i in range(n)}
     two_weeks = days(monday - timedelta(weeks=1), 3) | days(monday - timedelta(weeks=2), 4)
-    assert week_api.streak(two_weeks, [], last) == {"weeks": 2, "done": 0, "target": 3}
+    assert week_api.streak(two_weeks, [], last) == {"weeks": 2, "done": 0, "target": 3, "days": [False] * 7}
     assert week_api.streak(two_weeks | days(monday, 3), [], last)["weeks"] == 3
     gap = days(monday - timedelta(weeks=1), 2) | days(monday - timedelta(weeks=2), 3)
     assert week_api.streak(gap, [], last)["weeks"] == 0
     plan = [(monday - timedelta(weeks=4), 8, {0, 3})]
-    assert week_api.streak(days(monday - timedelta(weeks=1), 2) | days(monday, 2), plan, last) == {"weeks": 2, "done": 2, "target": 2}
+    assert week_api.streak(days(monday - timedelta(weeks=1), 2) | days(monday, 2), plan, last) == {
+        "weeks": 2, "done": 2, "target": 2, "days": [True, True] + [False] * 5}
 
 
 def test_consistency_starts_on_the_first_day_with_data_and_counts_the_last_14_days(api, auth):

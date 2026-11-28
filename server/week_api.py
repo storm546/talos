@@ -130,7 +130,8 @@ def streak(training, plans, last):
     weeks, week = int(now["done"] >= now["target"]), monday - timedelta(weeks=1)
     while done(week) >= target(week):
         weeks, week = weeks + 1, week - timedelta(weeks=1)
-    return {"weeks": weeks, **now}
+    # This week day by day (Monday first), for the week strip on the phone.
+    return {"weeks": weeks, **now, "days": [(monday + timedelta(days=n)).isoformat() in training for n in range(7)]}
 
 
 # --- the weekly report ---
