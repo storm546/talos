@@ -308,8 +308,12 @@ internal fun MainActivity.metricRows(keys: List<String>, data: JSONObject?, note
             if (!f.isNull("hold_ms") && f.optDouble("hold_ms") > 0) add(key, short(f.getDouble("hold_ms") / 1000), getString(R.string.today_s_unit), sub = exercise)
             else add(key, f.optInt("reps").toString(), getString(R.string.today_reps_unit), sub = exercise)
         }
-        "week" -> data?.optJSONObject("week")?.optJSONObject("consistency")?.optJSONObject("checkin")?.let { c ->
-            add(key, "${c.getInt("done")}", "/ ${c.getInt("days")}")
+        "week" -> data?.optJSONObject("week")?.optJSONObject("consistency")?.let { consistency ->
+            val streak = consistency.optJSONObject("streak")
+            val c = consistency.optJSONObject("checkin")
+            if (streak != null) add(key, "${streak.getInt("weeks")}", getString(R.string.streak_unit),
+                sub = getString(R.string.streak_this_week, streak.getInt("done"), streak.getInt("target")))
+            else if (c != null) add(key, "${c.getInt("done")}", "/ ${c.getInt("days")}")
         }
         "records" -> (data?.opt("records") as? JSONArray)?.objects()?.firstOrNull()?.let { newest ->
             add(key, recordValue(newest), null, sub = recordLabel(newest))

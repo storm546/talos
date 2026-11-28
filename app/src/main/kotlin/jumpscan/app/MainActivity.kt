@@ -1,5 +1,6 @@
 package jumpscan.app
 
+import jumpscan.core.KneeCheck
 import android.app.Activity
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -874,11 +875,19 @@ class MainActivity : Activity() {
 
     private fun localHeights(test: String): List<Double> = prefs.getString("flight_$test", "").orEmpty().split(',').mapNotNull { it.toDoubleOrNull() }
 
+    /** Locally kept knee marks of recent jumps, newest first. */
+    private fun kneeMarks(): List<String> = prefs.getString("knee_marks", "").orEmpty().split(',').filter { it.isNotEmpty() }.reversed()
+
+    private fun kneeCheck(marks: List<String>) = KneeCheck.suggestCheckup(marks.map { mark ->
+        KneeCheck.Mark(mark.substringBefore('|').toDoubleOrNull(), mark.substringAfter('|').split(';').filter { it.isNotEmpty() }) })
+
     private fun rememberFlight(run: Analysis, replace: Boolean = false) {
         FlightStrip.from(run)?.let {
             val heights = localHeights(run.metrics.test)
             prefs.edit().putString("flight_strip", it.encode()).putString("flight_${run.metrics.test}",
-                ((if (replace && heights.isNotEmpty()) heights.dropLast(1) else heights) + it.heightCm).takeLast(7).joinToString(",")).apply()
+                ((if (replace && heights.isNotEmpty()) heights.dropLast(1) else heights) + it.heightCm).takeLast(7).joinToString(","))
+                .putString("knee_marks", ((if (replace) kneeMarks().drop(1) else kneeMarks()).reversed() +
+                    "${run.metrics.kneeAnkleRatio ?: ""}|${run.metrics.warnings.joinToString(";")}").takeLast(KneeCheck.JUMPS * 3).joinToString(",")).apply()
         }
     }
 
@@ -923,6 +932,7 @@ class MainActivity : Activity() {
         if (current.contactFound) edgePair(current, page, 150)
         if (hasFlight) {
             jumpHighlights(metrics, uploadedId, clientId, localHeights(current.metrics.test).dropLast(1), stage)
+            if (kneeCheck(kneeMarks())) notice(getString(R.string.knee_checkup), caution = true)
             metricWarnings(metrics)
             if (uploadedId == null && queuedId == null) button(getString(R.string.check_frames)) { editFrames(current) }
         }
@@ -1413,6 +1423,10 @@ class MainActivity : Activity() {
         work(getString(R.string.loading_history), { JSONArray(api(savedBase, "/api/jumps", token = savedToken)) }, { rows ->
             layout(getString(R.string.ui_jump_history), "history")
             text(getString(R.string.history_summary, rows.length()), 14)
+            if (KneeCheck.suggestCheckup(rows.objects().map { item -> (item.optJSONObject("metrics") ?: item).let { m ->
+                    KneeCheck.Mark(m.optDouble("knee_ankle_ratio").takeIf { !m.isNull("knee_ankle_ratio") && it.isFinite() },
+                        m.optJSONArray("warnings")?.let { w -> List(w.length()) { w.getString(it) } }.orEmpty()) } }))
+                notice(getString(R.string.knee_checkup), caution = true)
             if (rows.length() == 0) {
                 notice(getString(R.string.empty_history))
                 button(getString(R.string.record), primary = true) { recordJump() }

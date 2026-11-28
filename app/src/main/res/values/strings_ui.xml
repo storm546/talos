@@ -15,6 +15,10 @@
     <string name="ui_jump_history">Jump history</string>
     <string name="ui_form_history">Technique history</string>
     <string name="ui_workbench">Measure your jumps with your phone</string>
+    <string name="streak_unit">wk streak</string>
+    <string name="streak_this_week">%1$d of %2$d training days</string>
+    <string name="streak_line">Gym streak: %1$d weeks in a row · this week %2$d of %3$d training days</string>
+    <string name="knee_checkup">Your knees caved inwards on landing in your last 3 jumps. This is a screening hint, not a diagnosis: consider a check-up with a sports doctor or physiotherapist.</string>
     <string name="ui_reviews">Review before sharing</string>
     <string name="ui_flight">Flight time</string>
     <string name="ui_height">Jump height</string>

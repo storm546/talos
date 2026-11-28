@@ -100,7 +100,7 @@ def consistency(c, last):
         "BETWEEN ? AND ? UNION SELECT day FROM training_sessions WHERE athlete_id = ? AND day BETWEEN ? AND ?",
         span * 3)}
     if not checkins and not training:
-        return {"checkin": None, "training": None}
+        return {"checkin": None, "training": None, "streak": None}
     first = date.fromisoformat(min(checkins | training))
     plans = [(date.fromisoformat(p["starts_on"]), p["weeks"], {i["weekday"] for i in p["items"]})
              for p in c.get("/api/plans")(club_id=None, user=c.user, db=c.db)]
@@ -110,7 +110,27 @@ def consistency(c, last):
         weekdays = set().union(*(w for start, weeks, w in plans if start <= day < start + timedelta(weeks=weeks)))
         return len(weekdays) / 7 if weekdays else 3 / 7
 
-    return {"checkin": habit(checkins, first, last), "training": habit(training, first, last, frequency)}
+    return {"checkin": habit(checkins, first, last), "training": habit(training, first, last, frequency),
+            "streak": streak(training, plans, last)}
+
+
+def streak(training, plans, last):
+    """Gym streak: ISO weeks in a row with at least the target number of training days (the plan's weekdays
+    that week, else 3). The current week adds one once met and never breaks the streak while it is open."""
+    def target(monday):
+        sunday = monday + timedelta(days=6)
+        return len(set().union(*(w for start, weeks, w in plans
+                                 if start <= sunday and monday < start + timedelta(weeks=weeks)))) or 3
+
+    def done(monday):
+        return sum((monday + timedelta(days=n)).isoformat() in training for n in range(7))
+
+    monday = last - timedelta(days=last.weekday())
+    now = {"done": done(monday), "target": target(monday)}
+    weeks, week = int(now["done"] >= now["target"]), monday - timedelta(weeks=1)
+    while done(week) >= target(week):
+        weeks, week = weeks + 1, week - timedelta(weeks=1)
+    return {"weeks": weeks, **now}
 
 
 # --- the weekly report ---

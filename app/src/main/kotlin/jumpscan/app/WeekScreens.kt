@@ -27,6 +27,9 @@ private fun mondayOf(day: LocalDate) = day.minusDays(day.dayOfWeek.value - 1L)
 
 /** The two consistency habits as a percentage with the plain count beside it. */
 internal fun MainActivity.consistencyRows(consistency: JSONObject?, parent: LinearLayout) {
+    consistency?.optJSONObject("streak")?.let { s ->
+        text(getString(R.string.streak_line, s.getInt("weeks"), s.getInt("done"), s.getInt("target")), 15, green, parent)
+    }
     val line = row(parent)
     for ((index, entry) in listOf("checkin" to R.string.week_checkin, "training" to R.string.week_training_days).withIndex()) {
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
