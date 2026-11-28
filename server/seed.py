@@ -119,7 +119,9 @@ def seed(path=None, *, reset=False, readiness=True):
                     jump_height_cm=9.80665 * (flight_ms / 1000) ** 2 / 8 * 100,
                     knee_flexion_contact_l=20 + index / 2 + noise(0, 2), knee_flexion_contact_r=22 + index / 2 + noise(0, 2),
                     knee_flexion_peak_l=left, knee_flexion_peak_r=right, fppa_peak_l=5 + noise(0, 2), fppa_peak_r=6 + noise(0, 2),
-                    knee_ankle_ratio=.81 + variant * .02 + index * (.018 if variant == 1 else .003) + noise(0, .02),
+                    # athlete2's knees cave in more and more on landing, so the app suggests a check-up (KneeCheck).
+                    knee_ankle_ratio=(.66 - index * .015 if variant == 2 else
+                                      .81 + variant * .02 + index * (.018 if variant == 1 else .003)) + noise(0, .02),
                     flexion_asymmetry_pct=abs(left - right) / max(left, right) * 100,
                     quality=.78 if index == 6 else .95, warnings=["low_visibility"] if index == 6 else [],
                 )
