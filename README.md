@@ -4,7 +4,6 @@
 
 **[Опитайте на живо](https://talos.stormlabs.cloud)**  ·  [Документация](Talos-документация.pdf)  ·  [Презентация](Talos-презентация.pdf)  ·  [Диплянка](Talos-диплянка.pdf)  ·  [Изтеглете APK](https://github.com/storm546/talos/releases/latest)
 
-[![CI](https://github.com/storm546/talos/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 ![license](https://img.shields.io/badge/license-GPL--3.0-ff965b?style=flat-square)
 ![kotlin](https://img.shields.io/badge/Kotlin-Android-212428?style=flat-square&logo=kotlin&logoColor=white)
 ![mediapipe](https://img.shields.io/badge/MediaPipe-Pose-212428?style=flat-square)
@@ -133,7 +132,7 @@ docs/       документацията за турнира, проверкат
 - **Сървър:** 706 минаващи теста (pytest): роли и права, проверка на всяко поле, атаки, миграции на базата.
 - **Ядро:** 105 теста (JUnit): формули, броене, едно и също число на живо и от видео.
 - **Приложение:** проверки на емулатор за входа, всички екрани и двата езика.
-- **CI:** GitHub Actions пуска тестовете на сървъра и ядрото и сглобява приложението при всяко качване ([ci.yml](.github/workflows/ci.yml)).
+- **CI:** [ci.yml](.github/workflows/ci.yml) описва за GitHub Actions тестовете на сървъра и ядрото и сглобяването на приложението.
 
 ## Материали за журито
 
