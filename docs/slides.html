@@ -3,258 +3,282 @@
 <head>
 <meta charset="utf-8">
 <title>Talos — презентация</title>
-<!-- Defence deck, 13 slides at 16:9; `node docs/build.cjs slides.html` prints one slide per PDF page.
-     Talk plan and timings: scenarii-demo.md. Replace the bracketed fields before the defence. -->
+<!-- Defence deck, 15 slides at 16:9, in the app's own look (dark, one orange accent, Space Grotesk).
+     `node docs/build.cjs slides.html` prints one slide per PDF page. Talk plan and timings: scenarii-demo.md.
+     Screenshots: docs/img/scr-*.png, taken from 1.4.0-beta33 against the live server on 28.11.2026. -->
 <style>
+/* Inter Tight (OFL, docs/fonts): a grotesk with Cyrillic; Space Grotesk, the app's face, has no Cyrillic. */
+@font-face { font-family: "Grotesk"; src: url("fonts/inter-tight-cyrillic-wght-normal.woff2"); font-weight: 100 900;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "Grotesk"; src: url("fonts/inter-tight-latin-wght-normal.woff2"); font-weight: 100 900; }
+@font-face { font-family: "Mono"; src: url("../server/static/fonts/jetbrainsmono_regular.woff2"); }
 @page { size: 297mm 167.06mm; margin: 0; }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: #fff; }
-body { font-family: "Liberation Sans", "DejaVu Sans", Arial, sans-serif; color: #1d2b25; }
-.slide { width: 297mm; height: 167.06mm; padding: 13mm 16mm 11mm; position: relative; overflow: hidden; page-break-after: always; display: flex; flex-direction: column; }
+:root { --paper: #141619; --surface: #212428; --line: #34383d; --ink: #f4f1e9; --muted: #b6b4ae; --accent: #ff965b; --good: #98d7c8; }
+html, body { margin: 0; background: var(--paper); }
+body { font-family: "Grotesk", "Liberation Sans", sans-serif; color: var(--ink); }
+.slide { width: 297mm; height: 167.06mm; padding: 14mm 17mm 12mm; position: relative; overflow: hidden;
+  page-break-after: always; display: flex; flex-direction: column; background: var(--paper); }
 .slide:last-child { page-break-after: auto; }
-.kicker { font-size: 10pt; letter-spacing: 1.5pt; text-transform: uppercase; color: #176148; font-weight: 700; margin: 0 0 3mm; }
-h1 { font-size: 30pt; line-height: 1.15; margin: 0 0 6mm; letter-spacing: -0.3pt; }
-h2 { font-size: 18pt; margin: 0 0 3mm; color: #176148; }
-p, li { font-size: 17pt; line-height: 1.4; }
+.kicker { font-family: "Mono", monospace; font-size: 9.5pt; letter-spacing: 2pt; text-transform: uppercase; color: var(--accent); margin: 0 0 4mm; }
+h1 { font-size: 31pt; line-height: 1.1; margin: 0 0 7mm; letter-spacing: -0.6pt; font-weight: 700; max-width: 235mm; }
+h1 em { font-style: normal; color: var(--accent); }
+p, li { font-size: 15.5pt; line-height: 1.42; }
 p { margin: 0 0 3mm; }
-ul { margin: 0; padding-left: 6mm; } li { margin-bottom: 2.2mm; }
-.num { position: absolute; right: 16mm; bottom: 7mm; font-size: 9pt; color: #6b7a72; }
-.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; flex: 1; min-height: 0; }
-.cols3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7mm; }
-.card { background: #eef4f0; border-radius: 3mm; padding: 7mm; }
-.card b { display: block; font-size: 19pt; margin-bottom: 2mm; color: #176148; }
-.card p { font-size: 15.5pt; margin: 0; }
-.big { font-size: 48pt; font-weight: 700; color: #176148; line-height: 1; }
-.muted { color: #4b5b53; }
-.title { background: #176148; color: #fff; justify-content: center; }
-.title h1 { font-size: 44pt; margin-bottom: 4mm; }
-.title p { font-size: 18pt; }
-.title .proof { display: flex; gap: 8mm; align-items: center; margin-top: 7mm; padding: 5mm 7mm; border-left: 1.6mm solid #cfe6da; background: rgba(255,255,255,.10); max-width: 245mm; }
-.title .proof .n { font-size: 40pt; font-weight: 700; line-height: 1; white-space: nowrap; }
-.title .proof p { font-size: 15pt; line-height: 1.35; margin: 0; }
-.title .proof p + p { font-size: 13pt; opacity: .92; margin-top: 1.5mm; }
-.title .who { position: absolute; left: 16mm; bottom: 12mm; font-size: 12pt; line-height: 1.5; opacity: .92; }
-img.shot { max-height: 118mm; max-width: 100%; border: 0.4mm solid #cfd8d2; border-radius: 2mm; display: block; }
-.phone { border: 1.8mm solid #1d2b25; border-radius: 5mm; overflow: hidden; max-height: 122mm; }
-.phone img { display: block; height: 118mm; }
-table { border-collapse: collapse; font-size: 16pt; width: 100%; align-self: start; }
-th, td { border-bottom: 0.3mm solid #cfd8d2; padding: 2mm 3mm; text-align: left; }
-th { color: #4b5b53; font-size: 12.5pt; font-weight: 600; }
-td.r, th.r { text-align: right; }
-.formula { font-family: "Liberation Serif", serif; font-size: 28pt; margin: 2mm 0 4mm; }
-.note { margin-top: auto; font-size: 14pt; color: #4b5b53; }
+ul { margin: 0; padding: 0; list-style: none; }
+li { margin: 0 0 3.2mm; padding-left: 7mm; position: relative; }
+li::before { content: ""; position: absolute; left: 0; top: 3.6mm; width: 3mm; height: 0.8mm; background: var(--accent); }
+b { font-weight: 700; }
+.muted { color: var(--muted); }
+.num { position: absolute; right: 17mm; bottom: 8mm; font-family: "Mono", monospace; font-size: 8.5pt; color: var(--muted); }
+.mark { position: absolute; left: 17mm; bottom: 8mm; height: 3.6mm; opacity: .5; filter: invert(1); }
+.row { display: flex; gap: 9mm; flex: 1; min-height: 0; align-items: flex-start; }
+.grow { flex: 1; min-width: 0; }
+.phones { display: flex; gap: 6mm; align-items: flex-start; }
+.phone { border: 1.4mm solid #2c3035; border-radius: 6mm; overflow: hidden; background: #000; box-shadow: 0 3mm 9mm rgba(0,0,0,.45); flex: none; }
+.phone img { display: block; height: 104mm; }
+.phone.s img { height: 92mm; }
+.card { background: var(--surface); border-radius: 4mm; padding: 6mm 7mm; }
+.card h3 { margin: 0 0 3mm; font-size: 18pt; }
+.card p { font-size: 14.5pt; line-height: 1.45; margin: 0; color: var(--muted); }
+.tall .card { min-height: 62mm; padding: 8mm; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; }
+.stat { font-family: "Mono", monospace; font-size: 44pt; line-height: 1; color: var(--accent); letter-spacing: -1pt; }
+.stat small { font-size: 16pt; color: var(--muted); letter-spacing: 0; }
+.cap { font-size: 12.5pt; color: var(--muted); margin-top: 2mm; line-height: 1.35; }
+.note { margin-top: auto; font-size: 12.5pt; color: var(--muted); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5pt; }
+th, td { padding: 2.2mm 3mm; border-bottom: 0.3mm solid var(--line); text-align: left; }
+th { font-family: "Mono", monospace; font-size: 9.5pt; letter-spacing: 1pt; text-transform: uppercase; color: var(--muted); font-weight: 400; }
+td.r, th.r { text-align: right; font-family: "Mono", monospace; }
+td.hi { color: var(--accent); }
+.formula { font-family: "Mono", monospace; font-size: 30pt; color: var(--accent); margin: 2mm 0 4mm; }
+.shot { border-radius: 3mm; border: 0.4mm solid var(--line); display: block; }
+.light { background: #f3efe7; border-radius: 4mm; padding: 5mm; }
+/* Title */
+.title { justify-content: space-between; }
+.title .word { height: 12mm; filter: invert(1); align-self: flex-start; }
+.title h1 { font-size: 40pt; max-width: 150mm; margin: 0 0 5mm; }
+.title .lead { font-size: 16pt; color: var(--muted); max-width: 140mm; }
+.title .who { font-size: 12pt; color: var(--muted); line-height: 1.6; }
+.title .side { position: absolute; right: 22mm; top: 12mm; }
+.title .side .phone img { height: 140mm; }
+.title .kicker, .title .lead, .title h1 { max-width: 165mm; }
+.qr { background: #fff; padding: 2.4mm; border-radius: 2mm; width: 34mm; height: 34mm; }
+.qr img { width: 100%; height: 100%; display: block; }
 </style>
 </head>
 <body>
 
+<!-- 1 -->
 <section class="slide title">
-  <p class="kicker" style="color:#cfe6da">Национален есенен турнир „Джон Атанасов“ · Разпределени приложения</p>
-  <h1>Talos</h1>
-  <p>Личен фитнес инструмент с честни измервания: телефонът измерва, треньорът вижда промяната, всяко число казва колко може да греши.</p>
-  <div class="proof">
-    <span class="n">64 / 91</span>
-    <div>
-      <p><b>64 от 91 скока отпред получават число без предупреждение и нито едно не е грешно.</b></p>
-      <p>Отстрани: 58 верни и 2 грешни. Срещу силова платформа, девет души, всеки проверен с модел, който не го е виждал.</p>
-    </div>
+  <img class="word" src="../server/static/wordmark.svg" alt="Talos">
+  <div>
+    <p class="kicker">Турнир „Джон Атанасов“ 2026 · Разпределени приложения</p>
+    <h1>Фитнес инструмент, който казва <em>колко може да греши</em></h1>
+    <p class="lead">Телефонът измерва скока и движенията на самото устройство. Клубният сървър показва на спортиста и треньора промяната спрямо собствената му база.</p>
   </div>
   <div class="who">[ИМЕ НА АВТОРА] · [КЛАС] · [УЧИЛИЩЕ]<br>Ръководител: [ИМЕ НА РЪКОВОДИТЕЛЯ]</div>
+  <div class="side">
+    <div class="phone"><img src="img/scr-today.png" alt="Днес"></div>
+  </div>
 </section>
 
+<!-- 2 -->
 <section class="slide">
   <p class="kicker">Проблемът</p>
-  <h1>Скокът се оценява на око, а останалото е разпиляно</h1>
-  <div class="cols3" style="margin-top:4mm">
-    <div class="card"><b>Лаборатория</b><p>Маркери и силови платформи: точно, но скъпо и със специалист.</p></div>
-    <div class="card"><b>Клубът</b><p>Треньорът гледа на око; тренировки, хранене и самочувствие са в различни приложения или на хартия.</p></div>
-    <div class="card"><b>Видеото</b><p>Заснемането на непълнолетни и качването му някъде е риск за поверителността.</p></div>
+  <h1>Скокът се оценява <em>на око</em>, а всичко останало е разпиляно</h1>
+  <div class="grid3 tall">
+    <div class="card"><h3>Лабораторията е далеч</h3><p>Силова платформа и маркери дават точни числа, но струват хиляди и искат специалист.</p></div>
+    <div class="card"><h3>Клубът гледа на око</h3><p>Тренировки, хранене и самочувствие са в различни приложения или на хартия.</p></div>
+    <div class="card"><h3>Видеото е риск</h3><p>Заснемането на непълнолетни и качването на клипове някъде нарушава поверителността.</p></div>
   </div>
-  <p class="note">Въпросът: може ли телефонът, който всеки вече има, да даде числа, които клубът следи във времето?</p>
-  <span class="num">2</span>
+  <p class="note">Въпросът: може ли телефонът, който всеки вече има, да даде числа, които клубът следи във времето, без видеото да напуска телефона?</p>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">02</span>
 </section>
 
+<!-- 3 -->
+<section class="slide">
+  <p class="kicker">Решението</p>
+  <h1>Три части в едно приложение и общ клубен сървър</h1>
+  <div class="row">
+    <div class="phones">
+      <div class="phone s"><img src="img/scr-form.png" alt="Техника"></div>
+      <div class="phone s"><img src="img/scr-food.png" alt="Храна"></div>
+      <div class="phone s"><img src="img/scr-workout.png" alt="Тренировка"></div>
+    </div>
+    <div class="grow">
+      <ul>
+        <li><b>Техника:</b> тест със скок, броене и проверка на упражнения, обхват, баланс, спринт</li>
+        <li><b>Храна:</b> каталог с 13 588 храни, баркод, снимка, адаптивни цели</li>
+        <li><b>Тренировка:</b> серии с таймер, програми, калкулатори, рекорди</li>
+        <li><b>Днес:</b> готовност, сън, натоварване, всичко с извод с думи</li>
+      </ul>
+    </div>
+  </div>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">03</span>
+</section>
+
+<!-- 4 -->
 <section class="slide">
   <p class="kicker">Основният инструмент</p>
   <h1>Телефонът смята, сървърът помни, треньорът вижда промяната</h1>
-  <div class="cols3" style="margin-top:2mm">
-    <div class="card"><b>1 · Заснемете</b><p>Клип от 10 секунди, телефонът на височината на коленете.</p></div>
-    <div class="card"><b>2 · Анализирайте</b><p>Позата, ъглите, времето на полет и височината се смятат на самия телефон.</p></div>
-    <div class="card"><b>3 · Изпратете</b><p>Към сървъра отиват числата, не видеото. Треньорът вижда историята спрямо базовата стойност.</p></div>
+  <div class="row">
+    <div class="grow">
+      <div class="grid3" style="grid-template-columns:1fr; gap:4mm">
+        <div class="card"><h3>1 · Заснемете</h3><p>Клип от 10 секунди, телефонът на височината на коленете.</p></div>
+        <div class="card"><h3>2 · Телефонът анализира</h3><p>MediaPipe намира 33 точки на тялото във всеки кадър; ъглите, полетът и височината се смятат на устройството.</p></div>
+        <div class="card"><h3>3 · Изпраща се само числото</h3><p>Към клуба отива JSON с 14 полета. Няма поле за видео, снимка или точки от позата.</p></div>
+      </div>
+    </div>
+    <div class="phones">
+      <div class="phone s"><img src="img/scr-jump.png" alt="Тест със скок"></div>
+      <div class="phone s"><img src="img/scr-records.png" alt="Рекорди"></div>
+    </div>
   </div>
-  <p class="note"><b style="color:#176148">Видеото никога не напуска телефона.</b> Няма поле за видео, снимка или точки от позата.</p>
-  <span class="num">3</span>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">04</span>
 </section>
 
+<!-- 5 -->
 <section class="slide">
-  <p class="kicker">Три части и „Днес“</p>
-  <h1>Числата заедно с изводите от тях</h1>
-  <div class="cols" style="grid-template-columns: 1.5fr 1fr">
-    <ul>
-      <li><b>Днес</b> — готовност, сън, храна, тегло, натоварване, тяло, техника; всяка карта с извод с думи</li>
-      <li><b>Обобщение</b> — езиковият модел преразказва само изводите на сървъра и дава едно предложение</li>
-      <li><b>Техника</b> — камерата: упражнения, тест със скок, обхват, баланс, спринт</li>
-      <li><b>Храна</b> — снимка на чинията, баркод, рецепти по снимка на хладилника, адаптивни цели</li>
-      <li><b>Тренировка</b> — серии с таймер, готови програми, шаблони, калкулатори, рекорди</li>
-    </ul>
-    <div class="phone" style="align-self:start; justify-self:center"><img src="img/app-today.png" alt="Днес с изводите" style="height:90mm"></div>
+  <p class="kicker">Как се смята</p>
+  <h1>Височината идва от времето във въздуха</h1>
+  <div class="row">
+    <div class="grow">
+      <div class="formula">h = g · t² / 8</div>
+      <p>t е от първия кадър във въздуха до първия кадър на земята. Половината от полета тялото се издига, другата половина пада: h = ½ · g · (t/2)².</p>
+      <p class="muted">Пример: t = 360 ms → h ≈ 15,9 cm. При 60 кадъра в секунда един кадър е 16,7 ms, затова всяко число идва с допуск (± 4,3 cm на екрана).</p>
+      <p style="margin-top:5mm"><b>Сгъване на коляното:</b> ъгълът между бедрото и подбедрицата от триизмерните точки на модела; прав крак е 0°.</p>
+    </div>
+    <div class="phones"><div class="phone s"><img src="img/scr-jump-history.png" alt="История на скоковете"></div></div>
   </div>
-  <p class="note">Изводите са правила на сървъра; моделът не решава нищо, само ги казва по-кратко. Под 18 години данните не отиват към външен модел.</p>
-  <span class="num">4</span>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">05</span>
 </section>
 
+<!-- 6 -->
 <section class="slide">
-  <p class="kicker">Тренировка</p>
-  <h1>Залата: серии, почивка, калкулатори, рекорди</h1>
-  <div style="display:flex; gap:9mm; align-items:flex-start; flex:1; min-height:0">
-    <div class="phone"><img src="img/app-workout.png" alt="Тренировка с таймер за почивка" style="height:108mm"></div>
-    <div class="phone"><img src="img/app-records.png" alt="Лични рекорди" style="height:108mm"></div>
-    <ul style="flex:1">
-      <li>Таймерът за почивка тръгва след всяка серия и работи в услуга на преден план</li>
-      <li>Интервали, Табата, EMOM, AMRAP</li>
-      <li>Дискове, максимум (Епли, Бжицки), загрявка</li>
-      <li>Рекордите идват от вече записаните данни</li>
-    </ul>
-  </div>
-  <span class="num">5</span>
+  <p class="kicker">Треньорът</p>
+  <h1>Целият отбор на един екран, <em>на живо</em></h1>
+  <img class="shot" src="img/scr-web-board.png" alt="Табло на треньора" style="height:92mm; align-self:flex-start">
+  <p class="cap">Уеб панелът: кой се е отбелязал днес, последният скок на всеки спортист в обща скала, сесии, планове, класация. Нов резултат се появява без опресняване (Server-Sent Events).</p>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">06</span>
 </section>
 
-<section class="slide">
-  <p class="kicker">Хранене</p>
-  <h1>Дневник, баркод и адаптивни цели</h1>
-  <div class="cols" style="grid-template-columns: 1.5fr 1fr">
-    <ul>
-      <li>Каталог на USDA с 13 588 храни (CC0), порции, рецепти, микронутриенти</li>
-      <li>Баркод на телефона; сървърът търси в Open Food Facts (ODbL)</li>
-      <li>Описано с думи хранене → предложение от локалния модел → потвърждение</li>
-      <li>Разходът се оценява от собствените записи; цели с минимум 1500 kcal, без дефицит за непълнолетен без треньор</li>
-    </ul>
-    <div class="phone" style="align-self:start; justify-self:center"><img src="img/app-nutrition.png" alt="Хранителен дневник" style="height:90mm"></div>
-  </div>
-  <p class="note">Числата са за обсъждане с треньора, не са предписание.</p>
-  <span class="num">6</span>
-</section>
-
-<section class="slide">
-  <p class="kicker">Готовност и натоварване</p>
-  <h1>Всеки спортист спрямо собствените си 28 дни</h1>
-  <div class="cols" style="grid-template-columns: 1fr 1.25fr">
-    <ul>
-      <li>Пулс в покой, вариабилност на пулса, самочувствие, сутрешен скок, сън</li>
-      <li>„По-различно“ само над 0,5 SD и типичната грешка</li>
-      <li>Натоварване: RPE × минути, монотонност, отношение 7/28</li>
-      <li>„Още се учи“, докато няма 7 стойности</li>
-    </ul>
-    <img class="shot" src="img/dash-board.png" alt="Табло Готовност" style="max-height:80mm; object-fit:cover; object-position:top; justify-self:center">
-  </div>
-  <p class="note">Таблото на треньора: напомняне до спортистите без отчет и сутрешен преглед. Информация, не медицински съвет.</p>
-  <span class="num">7</span>
-</section>
-
+<!-- 7 -->
 <section class="slide">
   <p class="kicker">Архитектура</p>
   <h1>Разпределена система: какво къде работи</h1>
-  <img src="img/arhitektura.svg" alt="Архитектура" style="width:100%; max-height:84mm">
-  <div class="cols3" style="margin-top:2mm">
-    <p style="font-size:14pt"><b>Администратор</b> — всички клубове, потребители, дневник</p>
-    <p style="font-size:14pt"><b>Треньор</b> — само своя клуб</p>
-    <p style="font-size:14pt"><b>Спортист</b> — само своите данни</p>
+  <div class="row">
+    <div class="light" style="flex:none"><img src="img/arhitektura.svg" alt="Архитектура" style="width:165mm; display:block"></div>
+    <div class="grow">
+      <ul>
+        <li><b>Android:</b> Kotlin, MediaPipe, офлайн опашка</li>
+        <li><b>Ядро:</b> обща библиотека на Kotlin</li>
+        <li><b>Сървър:</b> FastAPI, SQLite, REST API, събития на живо</li>
+        <li><b>Уеб панел:</b> треньор и администратор</li>
+        <li><b>По избор:</b> езиков модел, Open Food Facts</li>
+      </ul>
+    </div>
   </div>
-  <span class="num">8</span>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">07</span>
 </section>
 
+<!-- 8 -->
 <section class="slide">
-  <p class="kicker">Как се смята</p>
-  <h1>Две формули носят повечето работа</h1>
-  <div class="cols">
-    <div>
-      <h2>Сгъване на коляното</h2>
-      <svg viewBox="0 0 200 150" style="height:62mm" aria-label="Ъгъл между бедро и подбедрица">
-        <line x1="60" y1="15" x2="105" y2="80" stroke="#176148" stroke-width="7" stroke-linecap="round"/>
-        <line x1="105" y1="80" x2="70" y2="140" stroke="#176148" stroke-width="7" stroke-linecap="round"/>
-        <circle cx="60" cy="15" r="6" fill="#1d2b25"/><circle cx="105" cy="80" r="6" fill="#1d2b25"/><circle cx="70" cy="140" r="6" fill="#1d2b25"/>
-        <line x1="105" y1="80" x2="150" y2="145" stroke="#9fb5a9" stroke-width="2" stroke-dasharray="5 4"/>
-        <path d="M 124 107 A 33 33 0 0 1 89 109" fill="none" stroke="#c46a1b" stroke-width="3"/>
-        <text x="128" y="132" font-size="16" fill="#c46a1b">θ</text>
-        <text x="20" y="20" font-size="13">таз</text><text x="115" y="78" font-size="13">коляно</text><text x="20" y="145" font-size="13">глезен</text>
-      </svg>
-      <p>θ = ъгълът между бедрото и подбедрицата от триизмерните точки на модела. Прав крак е 0°.</p>
-    </div>
-    <div>
-      <h2>Височина от времето на полет</h2>
-      <p class="formula">h = g · t² / 8</p>
-      <p>Времето t е от първия кадър във въздуха до първия кадър на земята. Половината полет тялото се издига, половината пада: h = ½·g·(t/2)².</p>
-      <p class="muted">t = 360 ms → h ≈ 15,9 cm</p>
-    </div>
+  <p class="kicker">Поверителност и сигурност</p>
+  <h1>Само числа, и само за който има право</h1>
+  <div class="grid3 tall">
+    <div class="card"><h3>Данните</h3><p>Видеото не се качва. Всяко поле се проверява; непознато поле → 422. Изтегляне и изтриване на собствените данни.</p></div>
+    <div class="card"><h3>Достъпът</h3><p>Три роли: администратор, треньор, спортист. Чужд клуб → 404. Пароли със scrypt и сол, токени пазени хеширани, дневник на действията.</p></div>
+    <div class="card"><h3>AI помощникът</h3><p>Локален или облачен модел, с правата на потребителя. Нищо не се записва без „Потвърдете“. Под 18 години данните не отиват към външен модел.</p></div>
   </div>
-  <span class="num">9</span>
+  <p class="note">HTTPS с Let's Encrypt; събитията на живо носят само вид и номер, без стойности. Без свързан модел всичко друго работи.</p>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">08</span>
 </section>
 
+<!-- 9 -->
+<section class="slide">
+  <p class="kicker">Точност на скока</p>
+  <h1>Измерено срещу лаборатория, <em>не обещано</em></h1>
+  <div class="row">
+    <div class="grow" style="flex:1.25">
+      <table>
+        <tr><th>9 души, 91 скока на изглед</th><th class="r">Отпред</th><th class="r">Отстрани</th></tr>
+        <tr><td>Верни числа без предупреждение</td><td class="r hi">64</td><td class="r hi">58</td></tr>
+        <tr><td>Грешни числа без предупреждение</td><td class="r hi">0</td><td class="r">2</td></tr>
+        <tr><td>С предупреждение → проверка на кадрите</td><td class="r">7</td><td class="r">0</td></tr>
+        <tr><td>Грешка в ъгъла на коляното (RMSE)</td><td class="r">17°</td><td class="r">10°</td></tr>
+      </table>
+    </div>
+    <div class="grow">
+      <p>Еталон: силова платформа и лабораторна кинематика, набор на Университета в Твенте (CC BY 4.0).</p>
+      <p class="muted">Всеки човек е проверен с модел, който не го е виждал. „Грешно“ = отместено с повече от два кадъра. Затова числата са за сравнение на спортиста със самия него, не за диагноза.</p>
+    </div>
+  </div>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">09</span>
+</section>
+
+<!-- 10 -->
+<section class="slide">
+  <p class="kicker">Техника с камерата</p>
+  <h1>20 упражнения; валидирани са само тези, които <em>минаха прага</em></h1>
+  <div class="grid3">
+    <div class="card"><div class="stat">21<small>/22</small></div><p style="margin-top:3mm">клякания с точен брой на отделени серии (12 души) → валидирано</p></div>
+    <div class="card"><div class="stat">9<small>/9</small></div><p style="margin-top:3mm">планка с точно време → валидирано</p></div>
+    <div class="card"><div class="stat">22→64<small>%</small></div><p style="margin-top:3mm">точен брой при напад от запис, след новото преброяване в края на серията (36 серии, 25 души)</p></div>
+  </div>
+  <p class="note">Прагът е зададен предварително: поне 12 серии от 4 души, 85 % точен брой, до едно излишно повторение на 10 серии. Останалите 18 упражнения са в „Експериментални“ и казват защо.</p>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">10</span>
+</section>
+
+<!-- 11 -->
+<section class="slide">
+  <p class="kicker">Качество</p>
+  <h1>Всяка промяна минава през автоматични тестове</h1>
+  <div class="grid3">
+    <div class="card"><div class="stat">706</div><p style="margin-top:3mm">минаващи теста на сървъра (pytest): права, роли, проверка на данните, атаки</p></div>
+    <div class="card"><div class="stat">105</div><p style="margin-top:3mm">теста на ядрото (JUnit): формули, броене, паритет телефон–видео</p></div>
+    <div class="card"><div class="stat">405</div><p style="margin-top:3mm">записа в Git; GitHub Actions пуска тестовете при всяко качване</p></div>
+  </div>
+  <p class="note">Плюс проверки на приложението на емулатор (вход, всички екрани, двата езика) и проверки на уеб панела с Playwright.</p>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">11</span>
+</section>
+
+<!-- 12 -->
 <section class="slide">
   <p class="kicker">Демо</p>
-  <h1>Един скок: от клипа до треньорския панел</h1>
-  <div style="display:flex; gap:10mm; align-items:flex-start; flex:1; min-height:0">
-    <div class="phone"><img src="img/app-editor.png" alt="Проверка на кадрите в приложението"></div>
-    <img class="shot" src="img/dash-charts.png" alt="Графики в панела" style="max-width:150mm">
-  </div>
-  <span class="num">10</span>
-</section>
-
-<section class="slide">
-  <p class="kicker">Точност</p>
-  <h1>Скокът: измерено срещу лаборатория, не обещано</h1>
-  <div class="cols" style="grid-template-columns: 1.35fr 1fr">
-    <table>
-      <tr><th>Девет души, 91 скока на изглед</th><th class="r">Отпред</th><th class="r">Отстрани</th></tr>
-      <tr><td>Верни числа без предупреждение</td><td class="r"><b>64</b></td><td class="r">58</td></tr>
-      <tr><td>Грешни числа без предупреждение</td><td class="r"><b>0</b></td><td class="r">2</td></tr>
-      <tr><td>С предупреждение → проверка на кадрите</td><td class="r">7</td><td class="r">0</td></tr>
-      <tr><td>Предложени кадри</td><td class="r">20</td><td class="r">25</td></tr>
-      <tr><td>Грешка в ъгъла (RMSE)</td><td class="r">17°</td><td class="r"><b>10°</b></td></tr>
-    </table>
-    <div>
-      <p>Еталон: силова платформа и лабораторна кинематика, набор на Университета в Твенте (CC BY 4.0).</p>
-      <p>Всеки човек е проверен с модел, който не го е виждал. „Грешно“ = отместено с повече от два кадъра.</p>
-      <p class="muted">Затова числата са за сравнение на спортиста със самия него, не за диагноза.</p>
-      <p style="font-size:14pt"><b>Техника:</b> клекове — 21 от 22 отделени серии точно (12 души); планк — време в 9 от 9. Другите 18 упражнения: „Експериментални“.</p>
+  <h1>Опитайте сега</h1>
+  <div class="row" style="align-items:center">
+    <div class="qr" style="width:62mm; height:62mm; padding:4mm"><img src="img/qr-talos.svg" alt="QR код"></div>
+    <div class="grow">
+      <p style="font-family:Mono, monospace; font-size:24pt; color:var(--accent)">talos.stormlabs.cloud</p>
+      <p>Тестови акаунти за всяка роля: администратор, треньор, спортист.</p>
+      <p class="muted">Android приложението и кодът: github.com/storm546/talos</p>
     </div>
   </div>
-  <span class="num">11</span>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">12</span>
 </section>
 
-<section class="slide">
-  <p class="kicker">Поверителност, сигурност, AI</p>
-  <h1>Само числа, и само за който има право</h1>
-  <div class="cols">
-    <ul>
-      <li>Видеото не се качва; всяко поле се проверява, непознато → 422</li>
-      <li>Пароли със scrypt и сол; токени, пазени хеширани</li>
-      <li>Чужд клуб → 404; съгласие преди първите данни</li>
-      <li>Дневник на действията; изтегляне и изтриване на собствените данни</li>
-    </ul>
-    <ul>
-      <li>Събитията на живо носят само вид и номер, без стойности</li>
-      <li>AI помощникът е на локален модел и действа с правата на потребителя</li>
-      <li>Нищо не се записва преди „Потвърдете“; правата се проверяват отново</li>
-      <li>Без свързан модел → 503, всичко друго работи</li>
-    </ul>
-  </div>
-  <span class="num">12</span>
-</section>
-
+<!-- 13 -->
 <section class="slide">
   <p class="kicker">Резултат и развитие</p>
   <h1>Работи от край до край днес</h1>
-  <div class="cols3">
-    <div class="card"><span class="big">600</span><p>преминали сървърни теста (1 пропуснат) · 23.11.2026 г.</p></div>
-    <div class="card"><span class="big">81</span><p>преминали теста на ядрото (1 пропуснат) · 22.11.2026 г.</p></div>
-    <div class="card"><span class="big">CI</span><p>двата набора при всяко качване в Git</p></div>
+  <div class="row">
+    <div class="grow">
+      <p><b>Готово:</b> скок, техника, хранене, тренировка, готовност, клуб и треньорски панел, публикувано онлайн.</p>
+      <p><b>Не е измерено:</b> скорост и батерия на реален телефон с изключен екран; истински клуб.</p>
+      <p><b>Следва:</b> още упражнения да минат прага с нови данни; изпитание с истински отбор; публикуване в Google Play.</p>
+    </div>
+    <div class="phones"><div class="phone s"><img src="img/scr-profile.png" alt="Профил"></div></div>
   </div>
-  <div class="cols" style="margin-top:5mm">
-    <div><h2>Не е измерено</h2><p style="font-size:15pt">Скорост и батерия на реален телефон, работа с изключен екран, истински клуб.</p></div>
-    <div><h2>Следва</h2><p style="font-size:15pt">Още инструменти с камерата (обхват на движение, баланс, спринт) — в разработка.</p></div>
-  </div>
-  <p class="note">talos.stormlabs.cloud · код: [АДРЕС НА ХРАНИЛИЩЕТО] · GPL-3.0</p>
-  <span class="num">13</span>
+  <img class="mark" src="../server/static/wordmark.svg" alt=""><span class="num">13</span>
+</section>
+
+<!-- 14 -->
+<section class="slide title" style="justify-content:center; align-items:flex-start">
+  <img class="word" src="../server/static/wordmark.svg" alt="Talos" style="margin-bottom:10mm">
+  <h1 style="max-width:none">Благодаря. <em>Въпроси?</em></h1>
+  <p class="lead">talos.stormlabs.cloud · github.com/storm546/talos · GPL-3.0</p>
 </section>
 
 </body>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<title>Talos — банер</title>
+<!-- README banner, 1600×640. Rendered to docs/img/banner.png by docs/banner.cjs; not part of the PDF build. -->
+<style>
+@font-face { font-family: "Grotesk"; src: url("fonts/inter-tight-cyrillic-wght-normal.woff2"); font-weight: 100 900;
+  unicode-range: U+0400-045F, U+0490-0491, U+2116; }
+@font-face { font-family: "Grotesk"; src: url("fonts/inter-tight-latin-wght-normal.woff2"); font-weight: 100 900; }
+@font-face { font-family: "Mono"; src: url("../server/static/fonts/jetbrainsmono_regular.woff2"); }
+html, body { margin: 0; }
+body { width: 1600px; height: 640px; background: #141619; color: #f4f1e9; font-family: "Grotesk", sans-serif; overflow: hidden; position: relative; }
+.word { position: absolute; left: 80px; top: 78px; height: 46px; filter: invert(1); }
+.kick { position: absolute; left: 80px; top: 176px; font-family: "Mono", monospace; font-size: 17px; letter-spacing: 3px; color: #ff965b; text-transform: uppercase; }
+h1 { position: absolute; left: 80px; top: 214px; width: 760px; margin: 0; font-size: 62px; line-height: 1.06; letter-spacing: -1.5px; }
+h1 em { font-style: normal; color: #ff965b; }
+p { position: absolute; left: 80px; top: 440px; width: 700px; margin: 0; font-size: 24px; line-height: 1.4; color: #b6b4ae; }
+.phones { position: absolute; right: 60px; top: 58px; display: flex; gap: 26px; }
+.phone { border: 6px solid #2c3035; border-radius: 30px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+.phone img { display: block; height: 560px; }
+.phone.low { margin-top: 70px; }
+</style>
+</head>
+<body>
+  <img class="word" src="../server/static/wordmark.svg" alt="Talos">
+  <div class="kick">Скок · техника · храна · тренировка</div>
+  <h1>Фитнес инструмент, който казва <em>колко може да греши</em></h1>
+  <p>Телефонът измерва на самото устройство, клубният сървър пази само числата.</p>
+  <div class="phones">
+    <div class="phone low"><img src="img/scr-jump-history.png" alt=""></div>
+    <div class="phone"><img src="img/scr-today.png" alt=""></div>
+  </div>
+</body>
+</html>

@@ -1,7 +1,7 @@
 // Renders the Bulgarian documents to print-ready A4 PDFs in docs/out/.
 // Appendix 1 of the tournament rules: A4, Times New Roman 12 pt, line spacing 1.5.
 // Usage: node docs/build.cjs [file.md|file.html ...]   (needs the npm packages `marked` and `playwright`)
-const { readFileSync, writeFileSync, mkdirSync, readdirSync } = require('node:fs');
+const { readFileSync, writeFileSync, mkdirSync, readdirSync, copyFileSync } = require('node:fs');
 const { join, basename } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { marked } = require('marked');
@@ -9,6 +9,8 @@ const { chromium } = require('playwright');
 
 const dir = __dirname;
 const out = join(dir, 'out');
+// The three jury documents are also kept at the repository root under their Bulgarian names (linked from README.md).
+const rootCopies = { dokumentacia: 'Talos-документация.pdf', slides: 'Talos-презентация.pdf', 'listovka-a4': 'Talos-диплянка.pdf' };
 mkdirSync(out, { recursive: true });
 // Markdown files get the shared print style; .html files (the flyer) carry their own layout.
 const files = process.argv.slice(2).length ? process.argv.slice(2)
@@ -48,6 +50,7 @@ try {
       await page.goto(pathToFileURL(html).href, { waitUntil: 'load' });
     }
     await page.pdf({ path: join(out, `${name}.pdf`), format: 'A4', preferCSSPageSize: true, printBackground: true });
+    if (rootCopies[name]) copyFileSync(join(out, `${name}.pdf`), join(dir, '..', rootCopies[name]));
     console.log(`${name}.pdf`);
   }
 } finally {
