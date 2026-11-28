@@ -219,3 +219,15 @@ def test_json_reply_ignores_reasoning_and_fences():
     assert fv.json_reply('<think>{"no": 1}</think>\n```json\n{"foods": []}\n```') == {"foods": []}
     with pytest.raises(ValueError):
         fv.json_reply("[]")
+
+
+def test_minors_meal_text_and_week_report_stay_off_an_external_model(api, auth, model, monkeypatch):
+    client, path = api
+    monkeypatch.setenv("JUMPSCAN_LLM_URL", "https://integrate.api.nvidia.com/v1")
+    with main.database(path) as db:
+        db.execute("UPDATE users SET under_18 = 1 WHERE id = ?", (user_id(path, "athlete1"),))
+        db.commit()
+    parsed = client.post("/api/me/nutrition/ai-parse", json={"text": "2 яйца"}, headers=auth("athlete1"))
+    assert parsed.status_code == 403 and "under 18" in parsed.json()["detail"]
+    week = client.get("/api/me/week", headers=auth("athlete1"))
+    assert week.status_code == 200 and week.json()["text"] is None

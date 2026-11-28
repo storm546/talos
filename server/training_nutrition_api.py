@@ -2000,6 +2000,9 @@ def install(app, h):
     def ai_parse(body: AiParse, user=Depends(current_user), db=Depends(get_db)):
         """Free text to a proposal of entries for /api/food-logs/batch; nothing is logged here."""
         require_role(user, "athlete")
+        h.assistant_api.count_request(db, user["id"])  # the assistant's shared rate limit
+        if user["under_18"] and h.assistant_api.model_is_external():
+            raise HTTPException(403, h.assistant_api.MINOR_CLOUD_DETAIL)
         url, model, headers = h.assistant_api.model_client()  # 503 when the local model is not configured
         if not app.state.heavy_slots.acquire(blocking=False):
             raise HTTPException(503, h.BUSY_DETAIL, headers=h.BUSY_HEADERS)

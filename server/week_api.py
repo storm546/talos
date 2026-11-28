@@ -18,7 +18,7 @@ from typing import Annotated, Literal
 from fastapi import Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict
 
-from . import readiness_api
+from . import assistant_api, readiness_api
 
 REASONS = ("ill", "aches", "tired", "busy")
 MODES = ("rest", "lighter")
@@ -227,6 +227,8 @@ def install(app, h):
         h.require_role(user, "athlete")
         from .today_api import Context  # today_api imports this module
         facts = week_facts(Context(app, user, db, datetime.now(timezone.utc).date()), parse_week(week))
+        if user["under_18"] and assistant_api.model_is_external():  # minors' data never goes to a cloud model
+            return {**facts, "text": None}
         key = hashlib.sha256(json.dumps([user["id"], language, facts], sort_keys=True).encode()).hexdigest()
         if key not in texts:  # phrased again only when the facts change; the cache stays small
             prompt = WEEK_PROMPT.format(language="in Bulgarian, addressing the athlete formally (Вие)"
