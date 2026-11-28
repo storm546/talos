@@ -202,8 +202,8 @@
     <string name="today_exercises_unit">exercises</string>
     <string name="today_briefing_by">Written by the language model from your findings</string>
     <string name="food_ring_of">%1$s of %2$s</string>
-    <string name="food_hero_left">left today</string>
-    <string name="food_hero_over">over today\'s target</string>
+    <string name="food_gauge_left">kcal left</string>
+    <string name="food_gauge_over">kcal over</string>
     <string name="food_left">%1$s left today</string>
     <string name="food_over">%1$s over the target</string>
 </resources>

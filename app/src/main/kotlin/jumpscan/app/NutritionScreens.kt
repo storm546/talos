@@ -126,17 +126,15 @@ internal fun MainActivity.iconButton(icon: String, description: String, parent: 
     parent.addView(this, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(4) })
 }
 
-/** One macro: name and "eaten / target" on a line, a thin bar in the macro's own colour underneath. */
-private fun MainActivity.macroBar(label: String, value: Double, aim: Double?, color: Int, unit: String, parent: LinearLayout) {
-    val line = row(parent, center = true).apply { setPadding(0, dp(8), 0, dp(4)) }
-    text(label, 14, getColor(R.color.ink), line).apply { setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
-    text(metricNumber(value, "kcal", locale) + (aim?.let { " / " + metricNumber(it, "kcal", locale) } ?: "") + " $unit", 14, parent = line)
-        .apply { setPadding(0, 0, 0, 0); instrumentType(numeric = true); layoutParams = LinearLayout.LayoutParams(-2, -2) }
-    parent.addView(android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-        max = 100; progress = aim?.let { (value / it).coerceIn(0.0, 1.0) * 100 }?.toInt() ?: 0
-        progressTintList = ColorStateList.valueOf(color); progressBackgroundTintList = ColorStateList.valueOf(getColor(R.color.hover))
-        importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    }, LinearLayout.LayoutParams(-1, dp(6)))
+/** One macro under the gauge: its colour dot and name, then "eaten / target". */
+private fun MainActivity.macroLegend(label: String, value: Double, aim: Double?, color: Int, parent: LinearLayout) {
+    val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = android.view.Gravity.CENTER_HORIZONTAL }
+    parent.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
+    text(label, 13, parent = cell).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, 0); maxLines = 1
+        setCompoundDrawablesRelativeWithIntrinsicBounds(null, shape(color, 2).apply { setSize(dp(20), dp(4)) }, null, null)
+        compoundDrawablePadding = dp(6) }
+    text(metricNumber(value, "kcal", locale) + (aim?.let { " / " + metricNumber(it, "kcal", locale) } ?: "") + " " + getString(R.string.unit_grams),
+        14, getColor(R.color.ink), cell).apply { gravity = Gravity.CENTER; instrumentType(numeric = true); setPadding(0, dp(2), 0, 0) }
 }
 
 private fun MainActivity.nutritionDay(day: String, message: String?, summary: JSONObject?, foods: List<JSONObject>,
@@ -148,19 +146,25 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
     val target = summary?.optJSONObject("target") ?: JSONObject()
     val goal = target.optDouble("kcal")
     val eaten = totals.optDouble("kcal", 0.0)
-    // The day at a glance (MacroFactor, Lose It): what is left in large type, then one coloured bar per macro.
+    // The day at a glance (MacroFactor, Lose It): a gauge with calories outside and the macros inside, counting up as it sweeps.
     val glance = card()
-    if (goal > 0) {
-        val left = goal - eaten
-        text(kcalText(abs(left)), 34, getColor(if (left >= 0) R.color.ink else R.color.warning), glance).apply {
-            instrumentType(display = true); setPadding(0, 0, 0, 0) }
-        text(getString(if (left >= 0) R.string.food_hero_left else R.string.food_hero_over), 13, parent = glance).setPadding(0, dp(2), 0, dp(4))
-        macroBar(getString(R.string.unit_kcal), eaten, goal, getColor(if (left >= 0) R.color.accent else R.color.warning), "", glance)
-    } else text(getString(R.string.nutr_no_targets), 13, parent = glance)
-    for ((key, label, color) in listOf(Triple("protein_g", R.string.macro_protein, R.color.accent),
-            Triple("carbs_g", R.string.macro_carbs, R.color.hero_good), Triple("fat_g", R.string.macro_fat, R.color.muted)))
-        macroBar(getString(label), totals.optDouble(key, 0.0), target.optDouble(key).takeIf { it > 0 }, getColor(color),
-            getString(R.string.unit_grams), glance)
+    val macros = listOf(Triple("protein_g", R.string.macro_protein, 0xFF98D7C8.toInt()),
+        Triple("carbs_g", R.string.macro_carbs, 0xFFF2C46D.toInt()), Triple("fat_g", R.string.macro_fat, 0xFFB9A6F0.toInt()))
+    val left = goal - eaten
+    val arcs = listOf((if (goal > 0) eaten / goal else null) to getColor(R.color.accent)) +
+        macros.map { (key, _, color) -> target.optDouble(key).takeIf { it > 0 }?.let { totals.optDouble(key, 0.0) / it } to color }
+    glance.addView(FuelGauge(this, arcs, goal > 0 && left < 0, if (goal > 0) abs(left) else eaten,
+        metricNumber(if (goal > 0) abs(left) else eaten, "kcal", locale),
+        if (goal > 0) getString(if (left >= 0) R.string.food_gauge_left else R.string.food_gauge_over)
+        else getString(R.string.unit_kcal)).apply {
+        contentDescription = if (goal > 0) getString(if (left >= 0) R.string.food_left else R.string.food_over, kcalText(abs(left))) else kcalText(eaten)
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+    }, LinearLayout.LayoutParams(-1, dp(210)))
+    if (goal > 0) text(getString(R.string.food_ring_of, kcalText(eaten), kcalText(goal)), 13, parent = glance).apply {
+        gravity = Gravity.CENTER; instrumentType(numeric = true); setPadding(0, 0, 0, dp(10)) }
+    else text(getString(R.string.nutr_no_targets), 13, parent = glance).gravity = Gravity.CENTER
+    val legend = row(glance)
+    for ((key, label, color) in macros) macroLegend(getString(label), totals.optDouble(key, 0.0), target.optDouble(key).takeIf { it > 0 }, color, legend)
     actionChips(UiTile(R.string.food_photo_short, "camera") { foodPhoto(day) }, UiTile(R.string.nutr_add, "plus") { foods(day) },
         UiTile(R.string.scan_short, "scan") { scanBarcode() }, UiTile(R.string.nutr_copy_day, "copy") { copyLogs(day, null) })
     section(R.string.meal_timeline).setPadding(0, dp(22), 0, dp(8))

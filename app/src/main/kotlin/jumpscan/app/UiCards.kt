@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.view.View
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.RippleDrawable
 import android.graphics.drawable.StateListDrawable
 import android.view.Gravity
@@ -38,11 +39,16 @@ internal fun Context.styleButton(button: Button, primary: Boolean, tone: ActionT
     }
     setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
         intArrayOf(getColor(R.color.muted), getColor(foreground))))
-    fun fill(color: Int) = shape(color, 10)
+    fun fill(color: Int) = shape(color, 12)
+    // Filled buttons get depth: lighter at the top, a faint light rim along the top edge (not flat colour).
+    fun raised(color: Int, border: Int? = null) = if (tone == ActionTone.TEXT) fill(color) else LayerDrawable(arrayOf(
+        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(lighter(color, .22f), color)).apply {
+            cornerRadius = px(12).toFloat(); border?.let { setStroke(px(2), it) } },
+        GradientDrawable().apply { cornerRadius = px(12).toFloat(); setStroke(px(1), Color.argb(46, 255, 255, 255)) }))
     val states = StateListDrawable().apply {
         addState(intArrayOf(-android.R.attr.state_enabled), fill(getColor(R.color.hover)))
-        addState(intArrayOf(android.R.attr.state_focused), shape(normal, 10, getColor(if (primary) R.color.ink else R.color.accent)))
-        addState(intArrayOf(), fill(normal))
+        addState(intArrayOf(android.R.attr.state_focused), raised(normal, getColor(if (primary) R.color.ink else R.color.accent)))
+        addState(intArrayOf(), raised(normal))
     }
     backgroundTintList = null
     background = RippleDrawable(ColorStateList.valueOf(getColor(R.color.accent_pressed)),
@@ -51,6 +57,10 @@ internal fun Context.styleButton(button: Button, primary: Boolean, tone: ActionT
     minHeight = resources.getDimensionPixelSize(R.dimen.touch_target)
     textSize = 15f
     stateListAnimator = null
+    if (tone == ActionTone.PRIMARY) { // a soft glow in the button's own colour
+        elevation = px(6).toFloat()
+        if (android.os.Build.VERSION.SDK_INT >= 28) { outlineSpotShadowColor = normal; outlineAmbientShadowColor = normal }
+    }
     pressFeedback()
 }
 

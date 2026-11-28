@@ -202,8 +202,8 @@
     <string name="today_exercises_unit">упр.</string>
     <string name="today_briefing_by">Написано от езиковия модел по Вашите изводи</string>
     <string name="food_ring_of">%1$s от %2$s</string>
-    <string name="food_hero_left">остават за днес</string>
-    <string name="food_hero_over">над целта за днес</string>
+    <string name="food_gauge_left">ккал остават</string>
+    <string name="food_gauge_over">ккал отгоре</string>
     <string name="food_left">Остават %1$s за днес</string>
     <string name="food_over">%1$s над целта</string>
 </resources>

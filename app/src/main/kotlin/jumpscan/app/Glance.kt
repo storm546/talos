@@ -22,7 +22,7 @@ import kotlin.math.exp
 // Today as an instrument panel (SPEC 10.9): a factor gauge with the vitals, three rings for the day's food and load,
 // then dense rows of number, sparkline and finding. Tapping anything explains its finding in a sheet.
 
-private fun View.sweepIn(onFrame: (Float) -> Unit) {
+internal fun View.sweepIn(onFrame: (Float) -> Unit) {
     if (!ValueAnimator.areAnimatorsEnabled()) { onFrame(1f); return }
     ValueAnimator.ofFloat(0f, 1f).apply {
         duration = 600; interpolator = settle
@@ -339,7 +339,7 @@ internal fun MainActivity.metricRows(keys: List<String>, data: JSONObject?, note
 internal fun MainActivity.actionChips(vararg entries: UiTile, parent: LinearLayout = page) {
     val scroll = android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; isHorizontalFadingEdgeEnabled = true; setFadingEdgeLength(dp(40)) }
     parent.addView(scroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
-    val line = LinearLayout(this)
+    val line = LinearLayout(this).apply { setPadding(dp(2), dp(4), dp(2), dp(10)) } // room for the glow
     scroll.addView(line)
     entries.forEachIndexed { index, tile ->
         val primary = index == 0
@@ -349,7 +349,10 @@ internal fun MainActivity.actionChips(vararg entries: UiTile, parent: LinearLayo
             gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), 0, dp(16), 0)
             compoundDrawablePadding = dp(8)
             setCompoundDrawablesRelativeWithIntrinsicBounds(lineIcon(tile.icon, ink).apply { setBounds(0, 0, dp(18), dp(18)) }, null, null, null)
-            background = shape(getColor(if (primary) R.color.accent else R.color.hover), 22)
+            background = getColor(if (primary) R.color.accent else R.color.hover).let { c ->
+                android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(lighter(c, .22f), c))
+                    .apply { cornerRadius = dp(22).toFloat(); setStroke(dp(1), Color.argb(40, 255, 255, 255)) } }
+            if (primary) { elevation = dp(4).toFloat(); if (android.os.Build.VERSION.SDK_INT >= 28) { outlineSpotShadowColor = getColor(R.color.accent); outlineAmbientShadowColor = getColor(R.color.accent) } }
             isClickable = true; isFocusable = true
             foreground = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(getColor(R.color.accent_pressed)), null, shape(Color.WHITE, 22))
             setOnClickListener { tile.action() }

@@ -119,7 +119,8 @@ private fun MainActivity.workoutChoices(templates: List<JSONObject>, plans: List
     // The gym streak from the last Today answer (Hevy and Strong keep the week's count on this tab).
     cachedToday()?.first?.optJSONObject("week")?.optJSONObject("consistency")?.optJSONObject("streak")?.let { streak ->
         val line = row(card(), center = true)
-        text(streak.getInt("weeks").toString(), 34, getColor(R.color.accent), line).apply { instrumentType(display = true); setPadding(0, 0, dp(14), 0); layoutParams = LinearLayout.LayoutParams(-2, -2) }
+        line.addView(StreakRing(this, streak.getInt("weeks"), streak.getInt("done"), streak.getInt("target")),
+            LinearLayout.LayoutParams(dp(76), dp(76)).apply { marginEnd = dp(16) })
         text(getString(R.string.workout_streak, streak.getInt("done"), streak.getInt("target")), 14, parent = line)
             .apply { setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
     }
