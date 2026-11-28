@@ -225,11 +225,9 @@ def week(t, data):
         text += t(f"; тренировка в {trained['done']} от {trained['days']} дни.", f"; trained on {trained['done']} of {trained['days']} days.")
     else:
         text += "."
-    tone = GOOD if checkin["done"] >= checkin["days"] * 0.8 else INFO
-    missed = checkin["days"] - checkin["done"]
-    title = (t("Всеки ден", "Every day") if missed == 0 else
-             t(f"Пропуснати {missed} дни", f"{missed} days missed") if missed > 1 else t("Пропуснат 1 ден", "1 day missed"))
-    return finding("week", tone, title, text)
+    done, target = c["streak"]["done"], c["streak"]["target"]  # the gym streak leads the row
+    return finding("week", GOOD if done >= target else INFO,
+                   t(f"{done} от {target} тренировки тази седмица", f"{done} of {target} training days this week"), text)
 
 
 RECORD_NAMES = {"jump_height": ("височина на скока", "jump height"), "flight_time": ("време на полета", "flight time"),
