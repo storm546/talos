@@ -2013,8 +2013,11 @@ def install(app, h):
         day, items = body.day or utc_today().isoformat(), []
         for food in parsed:
             like = "%" + food["name"].casefold().replace("\\", "").replace("%", "").replace("_", "") + "%"
-            local = db.execute(f"SELECT * FROM foods WHERE ({clause}) AND (casefold(name_en) LIKE ? OR casefold(name_bg) "
-                               "LIKE ?) ORDER BY length(name_en), id LIMIT 1", (*params, like, like)).fetchone()
+            tokens = fs.tokens_of(food["name"])  # "egg" must name "Egg, whole", not "Eggplant"
+            local = min((r for r in db.execute(
+                f"SELECT * FROM foods WHERE ({clause}) AND (casefold(name_en) LIKE ? OR casefold(name_bg) LIKE ?) LIMIT 50",
+                (*params, like, like)) if fs.matches([r["name_en"], r["name_bg"]], tokens)),
+                key=lambda r: (fs.name_rank([r["name_en"], r["name_bg"]], tokens), r["id"]), default=None)
             match = food_row(local) if local else next(iter(fs.catalog_search(food["name"], 1)), None)
             grams = round(food["grams"], 1)
             if match is None:  # no food matched: a quick add with the model's estimate

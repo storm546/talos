@@ -545,6 +545,10 @@ def test_ai_parse_proposes_and_logs_nothing_until_batch(api, auth, monkeypatch):
     logged = client.post("/api/food-logs/batch", json={"entries": proposal["entries"]}, headers=athlete)
     assert logged.status_code == 201 and count(path, "SELECT COUNT(*) FROM food_logs WHERE athlete_id = ?", a1) == before + 2
     assert client.post("/api/me/nutrition/ai-parse", json={"text": "oats"}, headers=auth("coach")).status_code == 403
+    mock_http(monkeypatch, lambda request: model_reply([
+        {"name": "egg", "grams": 100, "per100g": {"calories": 155, "protein": 13, "fat": 11, "carbs": 1}}]))
+    egg = client.post("/api/me/nutrition/ai-parse", json={"text": "2 яйца"}, headers=athlete).json()["items"][0]["match"]
+    assert egg and "plant" not in egg["name_en"].casefold(), egg
     for bad in ({"text": ""}, {"text": "x" * 1001}, {"text": "oats", "meal": "brunch"}, {"text": "oats", "extra": 1}):
         assert client.post("/api/me/nutrition/ai-parse", json=bad, headers=athlete).status_code == 422
     for reply in (httpx.Response(500), httpx.Response(200, json={"choices": [{"message": {"content": "not json"}}]}),
