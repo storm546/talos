@@ -23,7 +23,7 @@
     <string name="tool_diagnostics_note">Device runs and the guided test</string>
     <string name="tool_workout_note">Log sets with a rest timer</string>
     <string name="tool_plans">Plans</string>
-    <string name="tool_plans_note">Your coach\'s weekly plan</string>
+    <string name="tool_plans_note">What you train each day of the week</string>
     <string name="tool_calc_note">Plates, one-rep max, warm-up</string>
     <string name="tool_nutrition_note">Food diary and targets</string>
     <string name="tool_recipes_note">Your and the club\'s recipes</string>
@@ -37,6 +37,8 @@
     <string name="unit_kg">kg</string>
     <string name="workout_title">Workout</string>
     <string name="workout_default_title">Workout</string>
+    <string name="workout_start">Start</string>
+    <string name="workout_streak">weeks in a row · this week %1$d of %2$d training days</string>
     <string name="workout_empty">Empty workout</string>
     <string name="workout_empty_note">Add exercises as you go</string>
     <string name="workout_today_plan">Today\'s plan: %1$s</string>
@@ -200,6 +202,8 @@
     <string name="today_exercises_unit">exercises</string>
     <string name="today_briefing_by">Written by the language model from your findings</string>
     <string name="food_ring_of">%1$s of %2$s</string>
+    <string name="food_hero_left">left today</string>
+    <string name="food_hero_over">over today\'s target</string>
     <string name="food_left">%1$s left today</string>
     <string name="food_over">%1$s over the target</string>
 </resources>

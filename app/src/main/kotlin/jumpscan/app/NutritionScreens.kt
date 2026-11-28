@@ -89,8 +89,10 @@ internal fun MainActivity.nutritionHome(day: String = diaryDay, message: String?
             val batch = api.array("/api/food-logs?from=$day&to=$day&limit=100&offset=${foods.size}")
             foods.addAll(batch)
         } while (batch.size == 100)
-        summary to foods
-    }, { (summary, foods) -> nutritionDay(day, message, summary, foods) }, {
+        // Recent foods per meal for one-tap re-logging (Lose It, MacroFactor); optional, so failures leave them out.
+        val recent = meals.keys.associateWith { meal -> runCatching { api.array("/api/foods/recent?meal=$meal") }.getOrDefault(emptyList()) }
+        Triple(summary, foods, recent)
+    }, { (summary, foods, recent) -> nutritionDay(day, message, summary, foods, recent) }, {
         nutritionDay(day, listOfNotNull(message, it).joinToString("\n"), null, emptyList())
     })
 }
@@ -124,7 +126,21 @@ internal fun MainActivity.iconButton(icon: String, description: String, parent: 
     parent.addView(this, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(4) })
 }
 
-private fun MainActivity.nutritionDay(day: String, message: String?, summary: JSONObject?, foods: List<JSONObject>) {
+/** One macro: name and "eaten / target" on a line, a thin bar in the macro's own colour underneath. */
+private fun MainActivity.macroBar(label: String, value: Double, aim: Double?, color: Int, unit: String, parent: LinearLayout) {
+    val line = row(parent, center = true).apply { setPadding(0, dp(8), 0, dp(4)) }
+    text(label, 14, getColor(R.color.ink), line).apply { setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+    text(metricNumber(value, "kcal", locale) + (aim?.let { " / " + metricNumber(it, "kcal", locale) } ?: "") + " $unit", 14, parent = line)
+        .apply { setPadding(0, 0, 0, 0); instrumentType(numeric = true); layoutParams = LinearLayout.LayoutParams(-2, -2) }
+    parent.addView(android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+        max = 100; progress = aim?.let { (value / it).coerceIn(0.0, 1.0) * 100 }?.toInt() ?: 0
+        progressTintList = ColorStateList.valueOf(color); progressBackgroundTintList = ColorStateList.valueOf(getColor(R.color.hover))
+        importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }, LinearLayout.LayoutParams(-1, dp(6)))
+}
+
+private fun MainActivity.nutritionDay(day: String, message: String?, summary: JSONObject?, foods: List<JSONObject>,
+                                      recent: Map<String, List<JSONObject>> = emptyMap()) {
     layout(getString(R.string.nutrition_title), "nutrition")
     if (message != null) notice(message, caution = summary == null)
     dayStepper(day) { nutritionHome(it) }
@@ -132,22 +148,19 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
     val target = summary?.optJSONObject("target") ?: JSONObject()
     val goal = target.optDouble("kcal")
     val eaten = totals.optDouble("kcal", 0.0)
-    // The day at a glance (DESIGN.md): four rings against the targets, one line of what is left, then the actions.
-    val rings = LinearLayout(this).apply { isBaselineAligned = false; setPadding(0, dp(10), 0, 0) }
-    page.addView(rings, LinearLayout.LayoutParams(-1, -2))
-    for ((key, label) in listOf("kcal" to R.string.unit_kcal, "protein_g" to R.string.macro_protein, "carbs_g" to R.string.macro_carbs,
-            "fat_g" to R.string.macro_fat)) {
-        val value = totals.optDouble(key, 0.0); val aim = target.optDouble(key).takeIf { it > 0 }
-        val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
-        cell.addView(DayRing(this, aim?.let { value / it }, aim != null && key == "kcal" && value > aim * 1.1,
-            metricNumber(value, "kcal", locale), value), LinearLayout.LayoutParams(dp(68), dp(68)))
-        text(if (aim != null) getString(R.string.food_ring_of, getString(label).lowercase(locale), metricNumber(aim, "kcal", locale))
-            else getString(label), 11, parent = cell).apply { gravity = Gravity.CENTER; maxLines = 2; setPadding(0, dp(4), 0, 0) }
-        rings.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
-    }
-    if (goal > 0) text(getString(if (goal - eaten >= 0) R.string.food_left else R.string.food_over, kcalText(abs(goal - eaten))), 13,
-        getColor(if (goal - eaten >= 0) R.color.muted else R.color.warning)).apply { gravity = Gravity.CENTER; instrumentType(numeric = true); setPadding(0, dp(8), 0, 0) }
-    else text(getString(R.string.nutr_no_targets), 13).gravity = Gravity.CENTER
+    // The day at a glance (MacroFactor, Lose It): what is left in large type, then one coloured bar per macro.
+    val glance = card()
+    if (goal > 0) {
+        val left = goal - eaten
+        text(kcalText(abs(left)), 34, getColor(if (left >= 0) R.color.ink else R.color.warning), glance).apply {
+            instrumentType(display = true); setPadding(0, 0, 0, 0) }
+        text(getString(if (left >= 0) R.string.food_hero_left else R.string.food_hero_over), 13, parent = glance).setPadding(0, dp(2), 0, dp(4))
+        macroBar(getString(R.string.unit_kcal), eaten, goal, getColor(if (left >= 0) R.color.accent else R.color.warning), "", glance)
+    } else text(getString(R.string.nutr_no_targets), 13, parent = glance)
+    for ((key, label, color) in listOf(Triple("protein_g", R.string.macro_protein, R.color.accent),
+            Triple("carbs_g", R.string.macro_carbs, R.color.hero_good), Triple("fat_g", R.string.macro_fat, R.color.muted)))
+        macroBar(getString(label), totals.optDouble(key, 0.0), target.optDouble(key).takeIf { it > 0 }, getColor(color),
+            getString(R.string.unit_grams), glance)
     actionChips(UiTile(R.string.food_photo_short, "camera") { foodPhoto(day) }, UiTile(R.string.nutr_add, "plus") { foods(day) },
         UiTile(R.string.scan_short, "scan") { scanBarcode() }, UiTile(R.string.nutr_copy_day, "copy") { copyLogs(day, null) })
     section(R.string.meal_timeline).setPadding(0, dp(22), 0, dp(8))
@@ -166,6 +179,14 @@ private fun MainActivity.nutritionDay(day: String, message: String?, summary: JS
         }.apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, 0); textSize = 13f;
             (layoutParams as LinearLayout.LayoutParams).topMargin = 0 }
         for (log in items) logRow(day, log, entry)
+        val logged = items.map { it.optLong("food_id") }.toSet()
+        recent[meal].orEmpty().filter { it.optLong("id") !in logged }.take(3).forEach { food ->
+            val grams = food.optDouble("last_grams").takeIf { !food.isNull("last_grams") && it.isFinite() }
+            button("+ " + foodName(food) + (grams?.let { " · " + gramText(it) } ?: ""), parent = entry, look = ActionTone.TEXT) {
+                diaryMeal = meal; foodLog(day, food)
+            }.apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, 0); textSize = 13f; maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END; (layoutParams as LinearLayout.LayoutParams).topMargin = 0 }
+        }
     }
     if (foods.isNotEmpty()) text(getString(R.string.nutr_swipe_hint), 12).gravity = Gravity.CENTER
     if (summary != null) {

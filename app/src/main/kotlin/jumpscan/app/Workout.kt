@@ -116,37 +116,44 @@ private fun MainActivity.workoutChoices(templates: List<JSONObject>, plans: List
     layout(getString(R.string.tab_training), "gym")
     if (message != null) notice(message, caution = true)
     val today = LocalDate.now()
-    val starts = settingsGroup()
-    settingRow("plus", getString(R.string.workout_empty), getString(R.string.workout_empty_note), starts) {
-        beginWorkout(getString(R.string.workout_default_title), null, null, emptyList())
+    // The gym streak from the last Today answer (Hevy and Strong keep the week's count on this tab).
+    cachedToday()?.first?.optJSONObject("week")?.optJSONObject("consistency")?.optJSONObject("streak")?.let { streak ->
+        val line = row(card(), center = true)
+        text(streak.getInt("weeks").toString(), 34, getColor(R.color.accent), line).apply { instrumentType(display = true); setPadding(0, 0, dp(14), 0); layoutParams = LinearLayout.LayoutParams(-2, -2) }
+        text(getString(R.string.workout_streak, streak.getInt("done"), streak.getInt("target")), 14, parent = line)
+            .apply { setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
     }
-    divider(starts)
-    settingRow("index", getString(R.string.programs_title), getString(R.string.programs_note), starts) { programs() }
-    for (plan in plans) {
-        val items = planDays(plan, weekStart(today)).filter { it.first == today }.map { it.second }
-        if (items.isEmpty()) continue
-        divider(starts)
-        settingRow("index", getString(R.string.workout_today_plan, plan.getString("title")),
-            resources.getQuantityString(R.plurals.workout_exercises, items.size, items.size), starts) {
-            beginWorkout(plan.getString("title"), null, plan.getLong("id"), items)
-        }
+    // One obvious way to start (Hevy's "Start Empty Workout"); today's plan comes first when there is one.
+    val todayPlans = plans.mapNotNull { plan -> planDays(plan, weekStart(today)).filter { it.first == today }.map { it.second }
+        .takeIf { it.isNotEmpty() }?.let { plan to it } }
+    for ((plan, items) in todayPlans) startCard(getString(R.string.workout_today_plan, plan.getString("title")), items) {
+        beginWorkout(plan.getString("title"), null, plan.getLong("id"), items)
+    }
+    button(getString(R.string.workout_empty), primary = todayPlans.isEmpty(), look = if (todayPlans.isEmpty()) null else ActionTone.TONAL) {
+        beginWorkout(getString(R.string.workout_default_title), null, null, emptyList())
     }
     if (templates.isNotEmpty()) {
         eyebrow(getString(R.string.workout_templates))
-        val list = settingsGroup().apply { (layoutParams as LinearLayout.LayoutParams).topMargin = dp(4) }
-        templates.forEachIndexed { index, template ->
-            if (index > 0) divider(list)
+        for (template in templates) {
             val items = template.getJSONArray("items").objects()
-            val owner = getString(if (template.isNull("club_id")) R.string.workout_template_mine else R.string.workout_template_club)
-            settingRow("training", template.getString("title"),
-                resources.getQuantityString(R.plurals.workout_exercises, items.size, items.size) + " · " + owner, list) {
-                beginWorkout(template.getString("title"), template.getLong("id"), null, items)
-            }
+            startCard(template.getString("title"), items) { beginWorkout(template.getString("title"), template.getLong("id"), null, items) }
         }
     }
+    val more = settingsGroup()
+    settingRow("index", getString(R.string.programs_title), getString(R.string.programs_note), more) { programs() }
     askButton(getString(R.string.ask_training_draft))
     toolList(R.string.section_training_more, Tools.training)
     toolList(R.string.section_training_tools, Tools.trainingTools)
+}
+
+/** A routine card: its title, the exercises it holds, and its own Start button (Hevy routine cards). */
+private fun MainActivity.startCard(title: String, items: List<JSONObject>, start: () -> Unit) {
+    val panel = card()
+    text(title, 18, getColor(R.color.ink), panel).apply { instrumentType(display = true); setPadding(0, 0, 0, dp(2)) }
+    text(items.joinToString(" · ") { it.optString("exercise") }.ifBlank {
+        resources.getQuantityString(R.plurals.workout_exercises, items.size, items.size) }, 13, parent = panel)
+        .apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
+    button(getString(R.string.workout_start), parent = panel, look = ActionTone.TONAL) { start() }
 }
 
 private fun MainActivity.beginWorkout(title: String, templateId: Long?, planId: Long?, items: List<JSONObject>) {

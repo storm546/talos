@@ -23,7 +23,7 @@
     <string name="tool_diagnostics_note">Записи на устройството и водения тест</string>
     <string name="tool_workout_note">Серии с таймер за почивка</string>
     <string name="tool_plans">Планове</string>
-    <string name="tool_plans_note">Седмичният план от треньора</string>
+    <string name="tool_plans_note">Какво тренирате всеки ден от седмицата</string>
     <string name="tool_calc_note">Дискове, максимум, загрявка</string>
     <string name="tool_nutrition_note">Дневник на храненето и цели</string>
     <string name="tool_recipes_note">Вашите и клубните рецепти</string>
@@ -37,6 +37,8 @@
     <string name="unit_kg">кг</string>
     <string name="workout_title">Тренировка</string>
     <string name="workout_default_title">Тренировка</string>
+    <string name="workout_start">Започнете</string>
+    <string name="workout_streak">седмици поред · тази седмица %1$d от %2$d тренировки</string>
     <string name="workout_empty">Празна тренировка</string>
     <string name="workout_empty_note">Добавяте упражнения в движение</string>
     <string name="workout_today_plan">План за днес: %1$s</string>
@@ -200,6 +202,8 @@
     <string name="today_exercises_unit">упр.</string>
     <string name="today_briefing_by">Написано от езиковия модел по Вашите изводи</string>
     <string name="food_ring_of">%1$s от %2$s</string>
+    <string name="food_hero_left">остават за днес</string>
+    <string name="food_hero_over">над целта за днес</string>
     <string name="food_left">Остават %1$s за днес</string>
     <string name="food_over">%1$s над целта</string>
 </resources>
