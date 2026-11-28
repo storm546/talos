@@ -277,6 +277,12 @@ def seed_readiness(db, athlete_ids, today, now, new_athletes):
                 "INSERT OR IGNORE INTO checkins(athlete_id, day, sleep, fatigue, soreness, stress, mood, "
                 "training_minutes, rpe, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (athlete_id, day.isoformat(), *items, minutes, rpe, now_isos(day), now_isos(day)))
+            slept = db.execute("SELECT sleep FROM checkins WHERE athlete_id = ? AND day = ?",
+                               (athlete_id, day.isoformat())).fetchone()[0]
+            low_week = profile == "take_care" and days_ago < 6  # Today tells this athlete's mood shift
+            if days_ago % 2 or low_week:  # mood follows sleep on most days, so Today can show a personal pattern
+                db.execute("UPDATE checkins SET mood = ? WHERE athlete_id = ? AND day = ?",
+                           (max(1, slept - 2) if low_week else slept, athlete_id, day.isoformat()))
             resting, variability = hr + rng.gauss(0, 1.5), rmssd * rng.gauss(1, .07)
             bed = 23 * 60 + bed_shift + rng.randint(-25, 25)
             sleep_minutes = rng.randint(445, 505)
@@ -303,7 +309,7 @@ def seed_readiness(db, athlete_ids, today, now, new_athletes):
                            "VALUES (?, ?, 'match', 90, 9, 'manual', ?)", (athlete_id, day.isoformat(), now_isos(day)))
             # Readiness jumps on most mornings: 2-3 countermovement jumps, the best valid one counts.
             if (profile != "missing" or days_ago > 0) and (days_ago % 4 != 3 or days_ago == 0):
-                morning = rng.gauss(height, .9)
+                morning = rng.gauss(height + 1.2 * (slept - level), .9)  # a short night shows in the jump
                 if days_ago == 0:
                     morning = {"good": height + 2.6, "take_care": height - 3.2, "load": height - 3.0}.get(profile, height)
                 for trial in range(2 if days_ago % 2 else 3):

@@ -113,3 +113,26 @@ def test_briefing_phrases_only_findings_and_skips_minors_with_an_external_model(
         db.commit()
     minor = client.get("/api/me/briefing", params={"language": "bg"}, headers=headers).json()
     assert minor["text"] is None and minor["findings"] and len(sent) == 2
+
+
+def test_personal_pattern_needs_enough_days_and_a_gap_above_noise():
+    t = insights.Text("bg")
+    start = insights.date(2026, 11, 1)
+    days = [(start + insights.timedelta(days=n)).isoformat() for n in range(20)]
+    checkins = {d: {"sleep": 2 if n % 2 else 4, "mood": 3} for n, d in enumerate(days)}
+    linked = {d: 30.0 if n % 2 else 33.0 for n, d in enumerate(days)}
+    found = insights.patterns(t, checkins, linked, 1.0)
+    assert found["title"] == "Вашата закономерност" and "3,0 см по-нисък" in found["text"], found
+    noise = {d: 31.0 + (n % 3) * .3 for n, d in enumerate(days)}
+    assert insights.patterns(t, checkins, noise, 1.0) is None  # no link: nothing is claimed
+    few = {d: c for d, c in list(checkins.items())[:6]}
+    assert insights.patterns(t, few, linked, 1.0) is None  # under 4 days a side
+
+
+def test_mood_shift_compares_this_week_with_the_four_before():
+    t, today = insights.Text("en"), insights.date(2026, 11, 28)
+    def week(low):
+        return {(today - insights.timedelta(days=n)).isoformat(): {"mood": 2 if low and n < 7 else 4} for n in range(28)}
+    low = insights.mood_shift(t, week(True), today)
+    assert low["tone"] == "watch" and "averages 2.0 of 5, usually 4.0" in low["text"], low
+    assert insights.mood_shift(t, week(False), today) is None
